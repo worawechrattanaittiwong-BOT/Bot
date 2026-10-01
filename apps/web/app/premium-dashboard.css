@@ -5454,54 +5454,180 @@
 /* ===== /Control Center V58 · Bot Settings visual polish only ===== */
 
 /* ===== Control Center V59 · mobile authoritative alignment =====
-   premium-dashboard.css loads after globals.css. Keep this as the final owner
-   of AUTO control width and risk-row alignment on phones. */
+   Final mobile owner for Bot Settings. AUTO / MANUAL / RACE / FLIP LOCK /
+   ZERO GRID share the same right-edge control geometry. Risk rows keep their
+   proven switch + amount layout so the 10 / 25 / 10 fields remain unchanged. */
 @media(max-width:760px){
-  .cc-v19-settings-card .cc-bot-mode-auto{
-    --mobile-auto-control-width:66.666%;
-    --mobile-auto-control-height:36px;
-    --mobile-auto-control-font-size:11px;
+  .cc-v19-settings-card .cc-bot-v2-embedded{
+    --mobile-form-row-h:52px;
+    --mobile-form-control-width:66.666%;
+    --mobile-form-control-h:36px;
+    --mobile-form-control-font:12px;
   }
 
-  /* Keep every visible AUTO row on one vertical center line. */
-  .cc-v19-settings-card .cc-bot-mode-auto .cc-bot-v12-mode-select-wrap>label,
-  .cc-v19-settings-card .cc-bot-mode-auto .cc-bot-v2-fields>.cc-bot-v2-field,
-  .cc-v19-settings-card .cc-bot-mode-auto .cc-bot-v19-auto-profit-field{
-    align-items:center!important;
+  /* Standard rows: one label column, one control column, same vertical rhythm
+     in every mode. Explicit height/max-height here removes old 38/46px caps. */
+  .cc-v19-settings-card .cc-bot-v12-mode-select-wrap{
+    height:var(--mobile-form-row-h)!important;
+    min-height:var(--mobile-form-row-h)!important;
+    max-height:var(--mobile-form-row-h)!important;
   }
-
-  /* Trading mode, direction, max positions, lot and AUTO target keep the
-     existing right edge, but occupy only two-thirds of the control column. */
-  .cc-v19-settings-card .cc-bot-mode-auto .cc-bot-v19-two-thirds-control,
-  .cc-v19-settings-card .cc-bot-mode-auto .cc-bot-v19-auto-profit-field .money-input-shell{
+  .cc-v19-settings-card .cc-bot-v12-mode-select-wrap>label,
+  .cc-v19-settings-card .cc-bot-v2-main .cc-bot-v2-field:not(.cc-bot-manual-risk-add){
     box-sizing:border-box!important;
-    width:var(--mobile-auto-control-width)!important;
+    grid-template-columns:minmax(0,var(--settings-label)) minmax(0,1fr)!important;
+    gap:7px!important;
+    align-items:center!important;
+    height:var(--mobile-form-row-h)!important;
+    min-height:var(--mobile-form-row-h)!important;
+    max-height:var(--mobile-form-row-h)!important;
+    padding:7px 0!important;
+    overflow:visible!important;
+  }
+
+  /* Every normal control references the RIGHT side of the row, not the label.
+     Two-thirds matches the visual width of the money field inside the good
+     10 / 25 / 10 risk rows, so all modes share the same left/right edges. */
+  .cc-v19-settings-card .cc-bot-v12-mode-select-wrap>label>.cc-bot-v12-mode-select,
+  .cc-v19-settings-card .cc-bot-v2-main .cc-bot-v2-field>select.input,
+  .cc-v19-settings-card .cc-bot-v2-main .cc-bot-v2-field>.money-input-shell,
+  .cc-v19-settings-card .cc-bot-v2-main .cc-bot-v2-field>.number-input-shell,
+  .cc-v19-settings-card .cc-bot-v2-main .cc-bot-v2-field>.cc-bot-v2-readonly-control,
+  .cc-v19-settings-card .cc-bot-v2-main .cc-bot-v2-field>.cc-bot-v2-choice-row,
+  .cc-v19-settings-card .cc-bot-v2-toggle-row>.cc-bot-v2-control-cell,
+  .cc-v19-settings-card .cc-bot-manual-risk-add>.cc-bot-manual-risk-add-all{
+    box-sizing:border-box!important;
+    width:var(--mobile-form-control-width)!important;
     min-width:0!important;
-    max-width:var(--mobile-auto-control-width)!important;
-    height:var(--mobile-auto-control-height)!important;
-    min-height:var(--mobile-auto-control-height)!important;
-    max-height:var(--mobile-auto-control-height)!important;
+    max-width:var(--mobile-form-control-width)!important;
     justify-self:end!important;
     align-self:center!important;
     margin:0 0 0 auto!important;
   }
-  .cc-v19-settings-card .cc-bot-mode-auto .cc-bot-v19-two-thirds-control,
-  .cc-v19-settings-card .cc-bot-mode-auto .cc-bot-v19-auto-profit-field .money-prefix,
-  .cc-v19-settings-card .cc-bot-mode-auto .cc-bot-v19-auto-profit-field .money-input{
-    font-size:var(--mobile-auto-control-font-size)!important;
-    line-height:1.15!important;
+
+  .cc-v19-settings-card .cc-bot-v12-mode-select-wrap>label>.cc-bot-v12-mode-select,
+  .cc-v19-settings-card .cc-bot-v2-main .cc-bot-v2-field>select.input,
+  .cc-v19-settings-card .cc-bot-v2-main .cc-bot-v2-field>.money-input-shell,
+  .cc-v19-settings-card .cc-bot-v2-main .cc-bot-v2-field>.number-input-shell,
+  .cc-v19-settings-card .cc-bot-v2-main .cc-bot-v2-field>.cc-bot-v2-readonly-control{
+    height:var(--mobile-form-control-h)!important;
+    min-height:var(--mobile-form-control-h)!important;
+    max-height:var(--mobile-form-control-h)!important;
+    font-size:var(--mobile-form-control-font)!important;
+    border-radius:9px!important;
   }
-  .cc-v19-settings-card .cc-bot-mode-auto .cc-bot-v19-auto-profit-field .money-input{
+
+  .cc-v19-settings-card .cc-bot-v12-mode-select-wrap>label>.cc-bot-v12-mode-select,
+  .cc-v19-settings-card .cc-bot-v2-main .cc-bot-v2-field>select.input{
+    padding-left:10px!important;
+    padding-right:28px!important;
+  }
+
+  .cc-v19-settings-card .cc-bot-v2-main .cc-bot-v2-field>.money-input-shell,
+  .cc-v19-settings-card .cc-bot-v2-main .cc-bot-v2-field>.number-input-shell{
+    grid-template-columns:auto minmax(0,1fr) auto!important;
+  }
+  .cc-v19-settings-card .cc-bot-v2-main .cc-bot-v2-field>.money-input-shell .money-input,
+  .cc-v19-settings-card .cc-bot-v2-main .cc-bot-v2-field>.number-input-shell .money-input{
     height:34px!important;
     min-height:34px!important;
     max-height:34px!important;
     line-height:34px!important;
     padding-top:0!important;
     padding-bottom:0!important;
+    font-size:var(--mobile-form-control-font)!important;
   }
 
-  /* Risk rows get real top/bottom breathing room so the switch and amount
-     field sit in the middle instead of touching the separator line. */
+  /* Basket / per-position segmented buttons use the same narrow right-edge box. */
+  .cc-v19-settings-card .cc-bot-v2-main .cc-bot-v2-field>.cc-bot-v2-choice-row{
+    height:var(--mobile-form-control-h)!important;
+    min-height:var(--mobile-form-control-h)!important;
+    max-height:var(--mobile-form-control-h)!important;
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    gap:6px!important;
+  }
+  .cc-v19-settings-card .cc-bot-v2-main .cc-bot-v2-field>.cc-bot-v2-choice-row button{
+    box-sizing:border-box!important;
+    min-width:0!important;
+    height:var(--mobile-form-control-h)!important;
+    min-height:var(--mobile-form-control-h)!important;
+    max-height:var(--mobile-form-control-h)!important;
+    padding:3px 5px!important;
+    border-radius:9px!important;
+  }
+  .cc-v19-settings-card .cc-bot-v2-main .cc-bot-v2-field>.cc-bot-v2-choice-row button b{
+    font-size:11px!important;
+    white-space:nowrap!important;
+  }
+
+  /* Single-switch rows (ZERO GRID low-volatility) align to the same right box. */
+  .cc-v19-settings-card .cc-bot-v2-toggle-row>.cc-bot-v2-control-cell{
+    height:var(--mobile-form-control-h)!important;
+    min-height:var(--mobile-form-control-h)!important;
+    max-height:var(--mobile-form-control-h)!important;
+    display:flex!important;
+    align-items:center!important;
+    justify-content:center!important;
+  }
+
+  /* Compound standard row (MANUAL Stop Loss): keep the switch in the left third
+     of the control column and the amount in the same two-thirds slot as every
+     normal input. This preserves one visual right edge without squeezing text. */
+  .cc-v19-settings-card .cc-bot-v2-fields>.cc-bot-v2-field>.toggle-money-field{
+    box-sizing:border-box!important;
+    width:100%!important;
+    min-width:0!important;
+    max-width:100%!important;
+    height:var(--mobile-form-control-h)!important;
+    min-height:var(--mobile-form-control-h)!important;
+    max-height:var(--mobile-form-control-h)!important;
+    display:grid!important;
+    grid-template-columns:calc(33.334% - 7px) minmax(0,1fr)!important;
+    gap:7px!important;
+    align-items:center!important;
+    justify-self:end!important;
+    margin:0!important;
+  }
+  .cc-v19-settings-card .cc-bot-v2-fields>.cc-bot-v2-field>.toggle-money-field .toggle-setting-label{
+    position:static!important;
+    inset:auto!important;
+    width:100%!important;
+    min-width:0!important;
+    height:var(--mobile-form-control-h)!important;
+    min-height:var(--mobile-form-control-h)!important;
+    max-height:var(--mobile-form-control-h)!important;
+    margin:0!important;
+    padding:0!important;
+    display:flex!important;
+    align-items:center!important;
+    justify-content:center!important;
+  }
+  .cc-v19-settings-card .cc-bot-v2-fields>.cc-bot-v2-field>.toggle-money-field .toggle-setting-label .setting-toggle-text{
+    display:none!important;
+  }
+  .cc-v19-settings-card .cc-bot-v2-fields>.cc-bot-v2-field>.toggle-money-field .money-input-shell,
+  .cc-v19-settings-card .cc-bot-v2-fields>.cc-bot-v2-field>.toggle-money-field .number-input-shell{
+    box-sizing:border-box!important;
+    width:100%!important;
+    min-width:0!important;
+    height:var(--mobile-form-control-h)!important;
+    min-height:var(--mobile-form-control-h)!important;
+    max-height:var(--mobile-form-control-h)!important;
+    margin:0!important;
+  }
+
+  /* Keep the red mode-guide triangle centered between label and control. */
+  .cc-v19-settings-card .cc-mode-guide-alert{
+    left:calc(var(--settings-label) - 10px)!important;
+    right:auto!important;
+    top:17px!important;
+    width:20px!important;
+    height:18px!important;
+    filter:drop-shadow(0 0 5px rgba(239,51,78,.36))!important;
+  }
+
+  /* Risk rows are intentionally retained from the proven layout: these are the
+     reference 10 / 25 / 10 controls the rest of the form now aligns with. */
   .cc-v19-settings-card .cc-bot-v2-limit-grid>div:not(.cc-bot-manual-risk-add){
     box-sizing:border-box!important;
     align-items:center!important;
