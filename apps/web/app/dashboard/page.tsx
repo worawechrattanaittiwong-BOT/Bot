@@ -6318,7 +6318,7 @@ function BotSettingsModal(props:any) {
     FLIP_LOCK:{title:"FLIP LOCK",subtitle:"อ่านราคา MT5 โดยตรง · เมื่อกำไรบวกมากพอให้ Broker วาง SL ฝั่งกำไรได้ จะยก SL และไล่ตาม Tick โดยไม่รอราคา/คำสั่งจาก Server"},
     RACE:{title:"RACE",subtitle:"เพิ่มความถี่ในการเปิดสถานะเพื่อให้ครบจำนวนที่กำหนดเร็วขึ้น โดยแยกการบริหารรอบจากโหมดอัตโนมัติ"},
     ZERO_GRID:{title:"ZERO GRID",subtitle:"วางคำสั่ง BUY STOP และ SELL STOP แบบสมมาตร รองรับ 1–30 ระดับต่อฝั่ง"},
-    MANUAL:{title:"MANUAL",subtitle:"โหมดตั้งค่าด้วยตนเอง ใช้เป้ากำไรและ Stop ของ MANUAL เอง และไม่ส่ง Position ให้ AUTO V20 จัดการ"}
+    MANUAL:{title:"MANUAL",subtitle:"ใช้สมองเข้าเดียวกับ AUTO: Demand/Supply + Reaction + โครงสร้างตลาด แต่ Lot / จำนวนไม้ / Stop / Profit ใช้ค่าที่ผู้ใช้กำหนดเอง"}
   };
 
   const modeGuide:Record<string,{
@@ -6638,9 +6638,9 @@ function BotSettingsModal(props:any) {
                 <div className="cc-bot-v17-hidden-engine">{controlMode!=="ZERO_GRID"&&(controlMode==="FLIP_LOCK"
                   ? <div className="cc-bot-v2-engine-line"><ScenovaIcon name="trend" size={16}/><b>โครงสร้าง FLIP LOCK</b><span>1 Position เท่านั้น · ไม่มี Pending BUY/SELL STOP ล่วงหน้า · SL อ่านราคา MT5 โดยตรงและเริ่มล็อกกำไรทันทีที่ Broker อนุญาต · Server ควบคุมเฉพาะ Start/Stop/Settings</span></div>
                   : controlMode==="AUTO"
-                    ? <div className="cc-bot-v2-engine-line"><ScenovaIcon name="spark" size={16}/><b>AUTO Ownership</b><span>Vector Edge / V20 จัดการเฉพาะ Position ที่ติดแท็ก AUTO เท่านั้น · ไม่รับไม้ของโหมดอื่นมาจัดการต่อ</span></div>
+                    ? <div className="cc-bot-v2-engine-line"><ScenovaIcon name="spark" size={16}/><b>AUTO · Shared Zone Brain</b><span>Demand/Supply + Reaction เป็นแกนเข้าออเดอร์ร่วมกับ MANUAL · AUTO วาง SL/TP และจัดการ Position ของ AUTO เอง</span></div>
                     : controlMode==="MANUAL"
-                      ? <div className="cc-bot-v2-engine-line"><ScenovaIcon name="settings" size={16}/><b>MANUAL Ownership</b><span>ใช้เป้ากำไร / Stop / จำนวนไม้ของ MANUAL เอง · AUTO V20 จะไม่เข้ามาปิดหรือกลับทิศ Position นี้</span></div>
+                      ? <div className="cc-bot-v2-engine-line"><ScenovaIcon name="settings" size={16}/><b>MANUAL · Shared Zone Brain</b><span>ใช้สมองเข้าเดียวกับ AUTO แต่ Lot / จำนวนไม้ / Stop / Profit เป็นค่าของ MANUAL · AUTO V20 จะไม่เข้ามาแก้ Position นี้</span></div>
                       : <div className="cc-bot-v2-engine-line"><ScenovaIcon name="spark" size={16}/><b>การเพิ่มสถานะอัตโนมัติ</b><span>EA กระจายจังหวะเพิ่มสถานะตาม ATR และแรงเคลื่อนไหวของตลาด</span></div>)}</div>
               </section>
 
