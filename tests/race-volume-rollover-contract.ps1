@@ -38,7 +38,9 @@ $hardStopMultiplier = Block $ea 'double EffectiveHardStopMultiplier()'
 $send = Block $ea 'bool SendMarketOrder(int direction)'
 $onTick = Block $ea 'void OnTick()'
 
-Need $ea '#define RACE_VOLUME_WINDOW_SECONDS 60' 'RACE volume window must be exactly 60 seconds'
+Need $ea '#define RACE_VOLUME_WINDOW_SECONDS 30' 'RACE volume window must be exactly 30 seconds'
+Need $ea '#define RACE_SIGNAL_MAX_WAIT_SECONDS 60' 'RACE unresolved signal window must reset by 60 seconds'
+Need $ea '#define RACE_VOLUME_MIN_DOMINANCE 0.55' 'RACE 30-second flow must reject near-tie pressure'
 Need $ea 'void RaceSampleVolumePressure()' 'RACE volume sampler missing'
 Need $ea 'int RaceVolumeDirection()' 'RACE volume direction helper missing'
 Need $onTick 'RaceSampleVolumePressure();' 'RACE volume must be sampled on every tick'
@@ -50,32 +52,43 @@ if($raceSyncGate -lt 0 -or $dailyControl -lt 0 -or $raceManager -lt 0 -or
    $raceSyncGate -gt $dailyControl -or $raceSyncGate -gt $raceManager){
   throw 'RACE settings-sync guard must execute before daily money controls and RACE Basket management'
 }
-Need $analysis 'int volumeDirection=RaceVolumeDirection();' 'AUTO RACE primary direction must start from rolling 60-second volume'
+Need $analysis 'int volumeDirection=RaceVolumeDirection();' 'AUTO RACE primary direction must start from rolling 30-second volume'
 Need $analysis 'RaceZonePriorityActive(' 'AUTO RACE may protect an intact opposing Demand/Supply boundary'
-Need $analysis 'RaceV2DecisionDirection(' 'AUTO RACE must combine 60-second volume with RACE-local Flow/Structure/Leg context after zone handling'
-Need $analysis 'return decision==0 ? volumeDirection : decision;' 'AUTO RACE tie must fall back to the original 60-second volume side'
+Need $analysis 'RaceV2DecisionDirection(' 'AUTO RACE must combine 30-second volume with RACE-local Flow/Structure/Leg context after zone handling'
+Need $analysis 'return decision==0 ? volumeDirection : decision;' 'AUTO RACE tie may fall back to the qualified 30-second volume side'
 if($analysis.Contains('RaceM5CandleDirection()')){throw 'RACE entry must not use M5 candle direction'}
 if($analysis.Contains('g_trend') -or $analysis.Contains('g_ema')){throw 'RACE entry direction must not leak trend/EMA into the RACE VNext decision'}
 Need $ea '#include "include\\RaceFlowV2.mqh"' 'RACE Flow V2 module missing'
 Need $ea '#include "include\\RaceStructureV2.mqh"' 'RACE Structure V2 module missing'
 Need $ea '#include "include\\RaceLegPhaseV2.mqh"' 'RACE Leg Phase V2 module missing'
 Need $ea '#include "include\\RaceDecisionV2.mqh"' 'RACE Decision V2 module missing'
-Need $flow 'RaceVolumeDirection() == direction' 'RACE profit flow must follow 60-second volume side'
-Need $start 'RACE_VOLUME_WARMUP' 'RACE must wait for 60-second warmup before first AUTO entry'
-Need $manage 'RACE_CONFIGURED_LOSS_ONLY_V1' 'RACE configured-loss-only marker missing'
+Need $flow 'RaceVolumeDirection() == direction' 'RACE profit flow must follow qualified 30-second volume side'
+Need $start 'RACE_VOLUME_WARMUP' 'RACE must wait for the 30-second warmup before first AUTO entry'
+Need $start 'RACE_SIGNAL_MAX_WAIT_SECONDS' 'RACE start cycle must enforce the 60-second maximum signal wait'
+Need $start 'RACE_SIGNAL_TIMEOUT_RESET' 'RACE must skip and reset an unresolved 60-second signal window'
+Need $manage 'RACE_CONFIGURED_LOSS_ONLY_V1' 'RACE compatibility runtime marker missing'
 Need $manage 'volumeDirection != direction' 'RACE must detect a volume-side flip'
 Need $manage 'cycleProfit >= 0.0' 'ordinary RACE rollover must not close a negative net cycle'
 Need $manage 'cycleProfit < 0.0 && floatingProfit < 0.0' 'RACE negative-state classification must only run while the Basket is negative'
 Need $manage 'RaceV2LossState(' 'RACE must classify cost/noise, adverse watch and structure state before recovery'
+Need $manage 'RaceWrongDirectionConfirmed(' 'RACE negative Basket must pass the isolated confirmed soft-exit gate'
+Need $manage 'RaceCloseCycle(wrongDirectionReason)' 'RACE confirmed soft exit must close through the RACE-only cycle closer'
 Need $manage 'RACE_ADVERSE_WATCH' 'RACE must stop adding exposure while adverse evidence builds'
-Need $manage 'RACE_STRUCTURE_INVALID_HOLD' 'RACE structure invalidation must hold exposure instead of liquidating it'
-if($manage.Contains('g_raceLossState=="REVERSAL_EXIT"') -or $manage.Contains('RaceCloseCycle(wrongDirectionReason')){
-  throw 'RACE intelligence must not close a losing Basket in v1.0.100'
-}
-Need $wrong 'RaceResetExitCandidate();' 'RACE disabled soft-loss brain must clear stale exit candidates'
-Need $wrong 'return false;' 'RACE wrong-direction helper must never authorize a loss close'
-if($wrong.Contains('RaceVolumeSnapshotWindow(') -or $wrong.Contains('RACE_DISTANCE_ARMED')){
-  throw 'Obsolete intelligent RACE loss-close logic remains enabled'
+Need $manage 'RACE_STRUCTURE_INVALID_HOLD' 'RACE unconfirmed structure invalidation must remain a hold state'
+Need $manage 'RACE_ADD_WAIT_PROFIT' 'RACE must block additional fills while the open Basket is not profitable'
+Need $manage 'if(floatingProfit<=0.0)' 'RACE pyramid gate must forbid averaging down'
+Need $wrong 'RaceV2StructureBroken(direction)' 'RACE soft exit must require broken M5 structure'
+Need $wrong 'RaceVolumeDirection()' 'RACE soft exit must require the 30-second order-flow side'
+Need $wrong 'oppositeVolume' 'RACE soft exit must require opposite order flow'
+Need $wrong 'RACE_EXIT_CYCLE_GRACE_SECONDS' 'RACE soft exit must preserve a cycle grace period'
+Need $wrong 'RACE_EXIT_LAST_FILL_GRACE_SECONDS' 'RACE soft exit must preserve a last-fill grace period'
+Need $wrong 'g_raceExitCandidateSince' 'RACE soft exit must persist confirmation across ticks'
+Need $wrong 'RACE_EXIT_SEVERE_CONFIRM_SECONDS' 'RACE strong reversal must still require confirmation time'
+Need $wrong 'RACE_EXIT_CONFIRM_SECONDS' 'RACE normal structure+flow reversal must require confirmation time'
+Need $wrong 'RACE_SOFT_EXIT_STRONG_REVERSAL' 'RACE strong confirmed soft-exit reason missing'
+Need $wrong 'RACE_SOFT_EXIT_STRUCTURE_FLOW' 'RACE confirmed structure+flow soft-exit reason missing'
+if($wrong.Contains('RACE_DISTANCE_ARMED')){
+  throw 'Obsolete distance-only RACE loss-close logic must remain disabled'
 }
 if($raceLossV2.Contains('RaceWrongDirectionConfirmed(') -or $raceLossV2.Contains('"REVERSAL_EXIT"') -or $raceLossV2.Contains('"EXIT_CANDIDATE"')){
   throw 'RACE Loss V2 must classify/hold only and never emit a closing state'
@@ -140,4 +153,4 @@ if($eaVersionMatch.Groups[1].Value -ne $releaseVersionMatch.Groups[1].Value){
 }
 Need $release 'EA_RUNTIME_CONTRACT = "RACE_CONFIGURED_LOSS_ONLY_V1"' 'API runtime contract must match EA'
 
-Write-Host 'RACE 1.1.0 60-second flow + 1.20 ATR stop + configured-loss-only contract: PASS'
+Write-Host 'RACE 1.1.8 30-second flow + no averaging down + confirmed soft exit + 1.20 ATR hard stop: PASS'
