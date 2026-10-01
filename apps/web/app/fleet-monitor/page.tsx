@@ -323,7 +323,7 @@ export default function FleetMonitorPage() {
     return <main className={styles.loading}>{error || "ไม่พบข้อมูล Fleet Monitor"}</main>;
   }
 
-  const primaryCurrency = data.summary.currencyTotals[0] || null;
+  const primaryCurrency = [...data.summary.currencyTotals].sort((a,b)=>b.accounts-a.accounts)[0] || null;
 
   return (
     <div className={styles.shell}>
@@ -383,8 +383,8 @@ export default function FleetMonitorPage() {
           <div><span>Win Rate รวม</span><b>{percent(data.summary.winRate)}</b><small>{data.summary.totalClosedBaskets.toLocaleString("en-US")} baskets</small></div>
           <div><span>Max Drawdown สูงสุด</span><b className={styles.warn}>{percent(data.summary.highestMaxDrawdownPercent)}</b><small>จาก Trade Journal</small></div>
           <div><span>Open Positions</span><b>{data.summary.totalPositions}</b><small>{data.summary.totalPendingOrders} Pending</small></div>
-          <div><span>Balance หลัก</span><b>{primaryCurrency ? money(primaryCurrency.balance, primaryCurrency.currency) : "—"}</b><small>{data.summary.currencyTotals.length} currency</small></div>
-          <div><span>Net Profit หลัก</span><b className={num(primaryCurrency?.netProfit) >= 0 ? styles.good : styles.bad}>{primaryCurrency ? money(primaryCurrency.netProfit, primaryCurrency.currency, true) : "—"}</b><small>All-time journal</small></div>
+          <div><span>{primaryCurrency ? primaryCurrency.currency + " Balance" : "Balance"}</span><b>{primaryCurrency ? money(primaryCurrency.balance, primaryCurrency.currency) : "—"}</b><small>{data.summary.currencyTotals.length} currency · ไม่รวมข้ามสกุล</small></div>
+          <div><span>{primaryCurrency ? primaryCurrency.currency + " Net Profit" : "Net Profit"}</span><b className={num(primaryCurrency?.netProfit) >= 0 ? styles.good : styles.bad}>{primaryCurrency ? money(primaryCurrency.netProfit, primaryCurrency.currency, true) : "—"}</b><small>All-time journal · แยกตามสกุล</small></div>
         </section>
 
         <section className={styles.currencyStrip}>
@@ -402,7 +402,7 @@ export default function FleetMonitorPage() {
 
         <section className={styles.toolbar}>
           <label className={styles.searchBox}>
-            <ScenovaIcon name="search" size={15}/>
+            <ScenovaIcon name="report" size={15}/>
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
@@ -494,7 +494,7 @@ export default function FleetMonitorPage() {
                 <footer className={styles.cardFoot}>
                   <div>
                     <span>{slot.runtime.symbol || "No Symbol"}</span>
-                    <b>{String(slot.runtime.engineMode || "—").replaceAll("_", " ")}</b>
+                    <b>{String(slot.runtime.engineMode || "—").replace(/_/g, " ")}</b>
                   </div>
                   <div>
                     <span>EA / Runtime</span>
