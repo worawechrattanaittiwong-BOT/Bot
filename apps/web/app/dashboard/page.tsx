@@ -6321,50 +6321,104 @@ function BotSettingsModal(props:any) {
   const modeGuide:Record<string,{
     title:string;
     icon:string;
+    systemType:string;
+    sizing:string;
+    exitStyle:string;
     workflow:string;
     good:string;
     caution:string;
     remember:string;
+    capital:{
+      minimum:string;
+      balanced:string;
+      comfortable:string;
+      note:string;
+    };
   }> = {
     AUTO:{
       title:"AUTO",
       icon:"brain",
+      systemType:"Adaptive Directional · ไม่ใช่ Martingale",
+      sizing:"Fixed Lot ต่อไม้ · เพิ่ม Position ตามเงื่อนไข ไม่ทบ Lot",
+      exitStyle:"Basket / AUTO Exit Logic · ไม่ใช่ Trailing Stop แบบ FLIP",
       workflow:"บอทดูภาพรวมก่อนว่าตอนนี้ฝั่ง BUY หรือ SELL ได้เปรียบกว่า ถ้ายังไม่ชัดก็รอ ไม่จำเป็นต้องมีออเดอร์ตลอดเวลา",
       good:"เทรนด์เริ่มชัด มีแรงไปต่อ หรือมีจังหวะย่อแล้วกลับไปทางเดิม",
       caution:"ตลาดมั่ว ๆ ขึ้นทีลงที เปลี่ยนหน้าบ่อย เพราะทิศทางตลาดอาจสลับเร็ว",
-      remember:"AUTO = ให้บอทเลือกเกมให้"
+      remember:"AUTO = ให้บอทเลือกเกมให้",
+      capital:{
+        minimum:"100 USD",
+        balanced:"300 USD",
+        comfortable:"500+ USD",
+        note:"อ้างอิง Lot ต่ำประมาณ 0.01–0.02 และจำนวนไม้ไม่สูง หากเพิ่ม Lot หรือจำนวนไม้ ควรเพิ่มทุนสำรองตามสัดส่วน"
+      }
     },
     RACE:{
       title:"RACE",
       icon:"status",
+      systemType:"Momentum / Fast Entry · ไม่ใช่ Martingale",
+      sizing:"Fixed Lot ต่อไม้ · เร่งเติมจำนวนไม้ตาม Momentum",
+      exitStyle:"Basket / Per-position Target + RACE Stop Logic",
       workflow:"RACE เน้นจับว่าตอนนี้ฝั่งไหนกำลังคุมตลาด ถ้าแรงซื้อชัดก็หาจังหวะ BUY ถ้าแรงขายชัดก็หาจังหวะ SELL เน้นตอบสนองไวกว่า AUTO",
       good:"ช่วงที่ราคาวิ่ง มี Momentum ชัด และฝั่งหนึ่งคุมเกมต่อเนื่อง",
       caution:"ตลาดสะบัดแรง สลับ BUY/SELL ไปมา หรือวิ่งแรงแต่กลับตัวบ่อย เพราะแรงที่เห็นอาจเปลี่ยนฝั่งเร็ว",
-      remember:"RACE = ตามฝั่งที่กำลังคุมเกม"
+      remember:"RACE = ตามฝั่งที่กำลังคุมเกม",
+      capital:{
+        minimum:"10 USD",
+        balanced:"50 USD",
+        comfortable:"100+ USD",
+        note:"ขั้นต่ำเหมาะกับ Lot ต่ำสุดและจำนวนไม้จำกัด ระดับ 100 USD ขึ้นไปมี buffer ให้การเปิดหลายไม้และความผันผวนมากกว่า"
+      }
     },
     FLIP_LOCK:{
       title:"FLIP LOCK",
       icon:"trend",
+      systemType:"Single Position + Trailing Stop · ไม่ใช่ Martingale",
+      sizing:"1 Position · Lot คงที่ตามค่าที่ตั้ง",
+      exitStyle:"Broker SL + Trailing ตาม Tick เมื่อ Broker อนุญาต",
       workflow:"เปิดทีละฝั่ง พอราคาไปถูกทางและเริ่มมีกำไร ระบบจะค่อย ๆ ขยับจุดป้องกันกำไรตามราคา พอรอบจบก็ดูตลาดใหม่แล้วเลือกฝั่งต่อ",
       good:"ตลาดที่เดินเป็นทาง วิ่งยาว มีระยะให้กำไรโต",
       caution:"Sideway แคบ ๆ สะบัดกลับไปกลับมาบ่อย เพราะอาจปิดแล้วเข้าใหม่หลายรอบ กำไรต่อไม้สั้นและต้นทุนเกิดบ่อย",
-      remember:"FLIP LOCK = ได้ทางแล้วลากกำไรไปให้สุด"
+      remember:"FLIP LOCK = 1 Position แล้วใช้ Trailing ปกป้องกำไร",
+      capital:{
+        minimum:"50 USD",
+        balanced:"150 USD",
+        comfortable:"300+ USD",
+        note:"เพราะถือครั้งละ 1 Position ความเสี่ยงจากจำนวนไม้ต่ำกว่าโหมดหลายไม้ แต่ทุนต้องยังรองรับ Lot, spread, stop distance และความผันผวนของ Symbol"
+      }
     },
     ZERO_GRID:{
       title:"ZERO GRID",
       icon:"layers",
+      systemType:"Hedging Grid + Progressive Lot · ไม่ใช่ Classic Martingale",
+      sizing:"Normal Grid เพิ่ม Lot แบบเชิงเส้นตามระดับ (Base Lot × Level) · Low-vol ใช้ Lot คงที่",
+      exitStyle:"Net Basket Target · ปิดผลรวมของรอบเมื่อถึงกำไรสุทธิ",
       workflow:"ระบบวางระดับรอทั้งข้างบนและข้างล่าง พอราคาวิ่งไปทางไหน ไม้ฝั่งนั้นจะถูกเปิดตามระดับไปเรื่อย ๆ แล้วดูผลรวมของทั้งชุดเพื่อปิดรอบ",
       good:"ตลาดที่มีแรงจริงและเดินไปทางเดียวต่อเนื่อง ยิ่งราคาไปต่อ ไม้ก่อนหน้าก็มีพื้นที่ทำกำไรมากขึ้น",
-      caution:"Sideway ที่วิ่งขึ้นลงผ่านหลายระดับ เพราะอาจเปิดทั้ง BUY และ SELL ค้างคนละฝั่ง ไม้เริ่มเยอะ และยอดลบรวมอาจโตขึ้นก่อนตลาดเลือกทางจริง",
-      remember:"ZERO GRID = ชอบตลาดวิ่ง ไม่ชอบตลาดยึกยักอยู่ที่เดิม"
+      caution:"Sideway ที่วิ่งขึ้นลงผ่านหลายระดับ เพราะอาจเปิดทั้ง BUY และ SELL ค้างคนละฝั่ง จำนวนไม้และ Lot รวมอาจเพิ่มเร็ว จึงต้องมีเงินสำรองมากกว่าโหมดอื่น",
+      remember:"ZERO GRID = Grid แบบเพิ่ม Lot ตามระดับ ต้องเผื่อทุนสูง",
+      capital:{
+        minimum:"500 USD",
+        balanced:"1,000 USD",
+        comfortable:"2,000+ USD",
+        note:"อ้างอิง Base Lot ต่ำและจำนวนระดับไม่สูง หากใช้หลายระดับต่อฝั่งหรือเพิ่ม Base Lot เงินทุนที่เหมาะสมต้องเพิ่มขึ้นตาม Exposure รวม"
+      }
     },
     MANUAL:{
       title:"MANUAL",
       icon:"settings",
+      systemType:"User-defined / Fixed Sizing · ไม่มี Martingale อัตโนมัติ",
+      sizing:"Lot และจำนวนไม้ตามค่าที่ผู้ใช้กำหนด",
+      exitStyle:"Basket / Per-position Target + Optional Broker Stop Loss",
       workflow:"คุณเป็นคนกำหนดแผน เช่น ทิศทาง Lot จำนวนไม้ เป้ากำไร และจุดตัดขาดทุน แล้วบอททำงานตามค่าที่ตั้ง ถ้าเลือกทิศทางอัตโนมัติ บอทยังช่วยเลือกฝั่งจากตลาดได้",
       good:"ตอนที่คุณมีมุมมองชัดอยู่แล้วว่าอยากเล่นฝั่งไหน หรืออยากคุมแผนและความเสี่ยงด้วยตัวเอง",
       caution:"ตลาดเปลี่ยนหน้าไปจากตอนที่ตั้งค่าไว้ เช่น จากนิ่งกลายเป็นวิ่งแรง แต่ยังใช้ Lot จำนวนไม้ หรือจุดตัดขาดทุนแบบเดิม",
-      remember:"MANUAL = คุณวางแผน บอทเป็นคนลงมือ"
+      remember:"MANUAL = คุณกำหนดระบบเอง บอททำตามแผน",
+      capital:{
+        minimum:"10 USD",
+        balanced:"100 USD",
+        comfortable:"300+ USD",
+        note:"ตัวเลขนี้อิงแผนเบาและ Lot ต่ำสุดเท่านั้น เพราะ MANUAL เปิดให้คุณกำหนด Lot/จำนวนไม้เอง จึงไม่มีทุนขั้นต่ำเดียวที่เหมาะกับทุกแผน"
+      }
     }
   };
 
@@ -6712,6 +6766,12 @@ function BotSettingsModal(props:any) {
           </nav>
 
           <div className="cc-mode-guide-content">
+            <section className="cc-mode-guide-system" aria-label="โครงสร้างกลยุทธ์">
+              <div><small>ระบบหลัก</small><b>{activeModeGuide.systemType}</b></div>
+              <div><small>Lot / การเพิ่มไม้</small><b>{activeModeGuide.sizing}</b></div>
+              <div><small>การออก / ป้องกันกำไร</small><b>{activeModeGuide.exitStyle}</b></div>
+            </section>
+
             <article className="cc-mode-guide-block cc-mode-guide-workflow">
               <span className="cc-mode-guide-block-icon">01</span>
               <div><small>แนวทางการทำงาน</small><p>{activeModeGuide.workflow}</p></div>
@@ -6724,6 +6784,20 @@ function BotSettingsModal(props:any) {
               <span className="cc-mode-guide-block-icon">03</span>
               <div><small>ตลาดที่ต้องระวัง</small><p>{activeModeGuide.caution}</p></div>
             </article>
+
+            <section className="cc-mode-guide-capital" aria-label="เงินทุนอ้างอิง">
+              <header>
+                <div><small>CAPITAL GUIDE</small><b>เงินทุนอ้างอิงสำหรับโหมดนี้</b></div>
+                <span>USD · อิง Lot ต่ำ / ค่าเริ่มต้น</span>
+              </header>
+              <div className="cc-mode-guide-capital-tiers">
+                <div className="minimum"><small>ขั้นต่ำ</small><strong>{activeModeGuide.capital.minimum}</strong><span>เริ่มใช้งานแบบจำกัดความเสี่ยง</span></div>
+                <div className="balanced"><small>กำลังดี</small><strong>{activeModeGuide.capital.balanced}</strong><span>มี buffer สำหรับการแกว่งของราคา</span></div>
+                <div className="comfortable"><small>เหมาะสม</small><strong>{activeModeGuide.capital.comfortable}</strong><span>เผื่อ Exposure และ Drawdown ได้มากกว่า</span></div>
+              </div>
+              <p>{activeModeGuide.capital.note}</p>
+            </section>
+
             <div className="cc-mode-guide-remember">
               <span>จำง่าย ๆ</span>
               <b>{activeModeGuide.remember}</b>
@@ -6731,7 +6805,7 @@ function BotSettingsModal(props:any) {
           </div>
 
           <footer className="cc-mode-guide-footer">
-            <span>คำอธิบายนี้สรุปพฤติกรรมของแต่ละโหมดให้อ่านง่าย ก่อนเลือกใช้งานจริง</span>
+            <span>ตัวเลขทุนเป็นกรอบอ้างอิงเพื่อเปรียบเทียบโหมด ไม่ใช่เงิน Margin ขั้นต่ำหรือการรับประกันผลลัพธ์จริง · Lot, Leverage, Symbol, Spread และจำนวนไม้มีผลต่อเงินทุนที่ต้องใช้</span>
             <button type="button" onClick={()=>setModeGuideOpen(false)}>เข้าใจแล้ว</button>
           </footer>
         </section>
