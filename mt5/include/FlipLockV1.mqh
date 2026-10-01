@@ -1,12 +1,12 @@
 #ifndef SCENOVA_FLIP_LOCK_V1_MQH
 #define SCENOVA_FLIP_LOCK_V1_MQH
 
-// FLIP LOCK 1.1.0 - M1 pending-baton engine.
+// FLIP LOCK 1.1.1 - M1 pending-baton engine.
 // One live FLIP position is paired with one opposite STOP pending order.
 // The pending trigger follows favorable M1 price movement and becomes the next
 // side when price reverses through it. Every new leg uses the configured Lot;
 // there is no martingale, multiplier or progressive volume sizing.
-#define FLIP_LOCK_V1_VERSION "1.1.0"
+#define FLIP_LOCK_V1_VERSION "1.1.1"
 #define FLIP_LOCK_PENDING_COMMENT "SCNFlipLock"
 #define FLIP_LOCK_LIVE_COMMENT "SCNFlipLockLive"
 #define FLIP_LOCK_UNARMED_RESTART_COOLDOWN_SECONDS 5
@@ -78,7 +78,7 @@ double FlipLockBrokerMinDistancePoints()
 
 double FlipLockAtrPoints()
 {
-   // 1.1.0 is intentionally M1-only. No M5/H1/macro fallback is allowed.
+   // 1.1.1 is intentionally M1-only. No M5/H1/macro fallback is allowed.
    return AverageTrueRangePoints(PERIOD_M1,MathMax(5,g_atrPeriod));
 }
 
