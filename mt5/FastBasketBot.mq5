@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.1.7"
-#define SCENOVA_EA_VERSION "1.1.7"
-#define SCENOVA_PRODUCT_VERSION "1.1.7"
+#property version   "1.1.8"
+#define SCENOVA_EA_VERSION "1.1.8"
+#define SCENOVA_PRODUCT_VERSION "1.1.8"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_CONFIGURED_LOSS_ONLY_V1"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -181,13 +181,15 @@ input double          InpRacePerPositionProfitMoney = 0.50;
 #define AUTO_V21_EXIT_LAST_FILL_GRACE_SECONDS 15
 #define AUTO_V21_EXIT_CONFIRM_SECONDS 10
 #define AUTO_V21_EXIT_SEVERE_CONFIRM_SECONDS 6
-#define RACE_VOLUME_WINDOW_SECONDS 60
+#define RACE_VOLUME_WINDOW_SECONDS 30
+#define RACE_SIGNAL_MAX_WAIT_SECONDS 60
+#define RACE_VOLUME_MIN_DOMINANCE 0.55
 #define RACE_HARD_STOP_ATR_MULTIPLIER 1.20
 #define RACE_VOLUME_HISTORY_SECONDS 60
-#define RACE_EXIT_CYCLE_GRACE_SECONDS 20
-#define RACE_EXIT_LAST_FILL_GRACE_SECONDS 15
-#define RACE_EXIT_CONFIRM_SECONDS 20
-#define RACE_EXIT_SEVERE_CONFIRM_SECONDS 12
+#define RACE_EXIT_CYCLE_GRACE_SECONDS 15
+#define RACE_EXIT_LAST_FILL_GRACE_SECONDS 10
+#define RACE_EXIT_CONFIRM_SECONDS 8
+#define RACE_EXIT_SEVERE_CONFIRM_SECONDS 5
 // ZERO GRID is isolated from AUTO/RACE and requires an MT5 Hedging account.
 #define ZERO_GRID_MAX_LEVELS 30
 #define ZERO_GRID_DEFAULT_LEVELS 3
@@ -396,12 +398,12 @@ bool   g_raceCloseAllProfitEnabled = true;
 double g_raceCloseAllProfitMoney = 0.50;
 string g_raceProfitTargetMode = "BASKET";
 double g_racePerPositionProfitMoney = 0.50;
-// RACE uses a rolling 60-second order-flow window as the primary side signal.
+// RACE uses a rolling 30-second order-flow window as the primary side signal.
 // Exchange/deal-side flags are used when the broker publishes them; quote-only
-// symbols fall back to uptick/downtick tick-volume counts. Intact Demand/Supply
-// zones may override only at the boundary; a live ATR-buffer break releases the
-// 60-second flow to continue through the broken zone. Trend/EMA/timeframes stay
-// excluded from RACE side selection.
+// symbols fall back to uptick/downtick tick-volume counts. A modest 55%
+// dominance floor avoids acting on near-ties without turning RACE into a slow
+// confidence-gated system. Intact Demand/Supply zones may still override only
+// at the boundary. Trend/EMA/timeframes stay excluded from RACE side selection.
 datetime g_raceVolumeBucketSecond[RACE_VOLUME_HISTORY_SECONDS];
 double   g_raceVolumeBucketBuy[RACE_VOLUME_HISTORY_SECONDS];
 double   g_raceVolumeBucketSell[RACE_VOLUME_HISTORY_SECONDS];
@@ -3469,12 +3471,20 @@ int RaceVolumeDirection()
 {
    if(!RaceVolumeWindowReady())
       return 0;
+
    double buyPressure=0.0;
    double sellPressure=0.0;
    int samples=0;
    RaceVolumeSnapshot(buyPressure,sellPressure,samples);
-   if(samples<=0 || MathAbs(buyPressure-sellPressure)<=0.00000001)
+
+   double totalPressure=buyPressure+sellPressure;
+   if(samples<=0 || totalPressure<=0.00000001)
       return 0;
+
+   double leadingPressure=MathMax(buyPressure,sellPressure);
+   if(leadingPressure/totalPressure<RACE_VOLUME_MIN_DOMINANCE)
+      return 0;
+
    return buyPressure>sellPressure ? 1 : -1;
 }
 
@@ -3716,7 +3726,7 @@ bool RaceAntiChaseBlocked(int direction,string &reasonOut)
 int RaceAnalysisDirection(double momentum)
 {
    // Explicit customer direction remains authoritative. AUTO RACE keeps the
-   // rolling 60-second pressure as its primary signal, then combines only
+   // rolling 30-second pressure as its primary signal, then combines only
    // RACE-local candle flow, structure, leg phase and rejection context.
    if(g_entryMode == ENTRY_BUY_ONLY) return 1;
    if(g_entryMode == ENTRY_SELL_ONLY) return -1;
@@ -3796,17 +3806,89 @@ bool RaceWrongDirectionConfirmed(
    string &reasonOut
 )
 {
-   // RACE v1.0.100 does not liquidate a losing Basket from flow, momentum,
-   // candle reversal or structure intelligence. Loss exits are owned only by
-   // the broker SL and explicit configured money limits such as Max Basket Loss.
-   reasonOut = "NONE";
-   RaceResetExitCandidate();
-   return false;
+   reasonOut="NONE";
+   if(direction==0)
+   {
+      RaceResetExitCandidate();
+      return false;
+   }
+
+   datetime now=TimeCurrent();
+   if(g_raceCycleStartedAt<=0 ||
+      now-g_raceCycleStartedAt<RACE_EXIT_CYCLE_GRACE_SECONDS)
+   {
+      RaceResetExitCandidate();
+      return false;
+   }
+
+   if(g_raceLastFillAt>0 &&
+      now-g_raceLastFillAt<RACE_EXIT_LAST_FILL_GRACE_SECONDS)
+   {
+      RaceResetExitCandidate();
+      return false;
+   }
+
+   // Do not confuse spread/cost noise with a failed trade. RACE only starts a
+   // soft-loss confirmation after the move is beyond its live exposure noise.
+   RaceV1UpdateExposureTelemetry(direction,0.0);
+   double adversePoints=RaceV1AdversePoints(direction);
+   double noiseFloor=MathMax(
+      g_raceExposureNoisePoints,
+      MathMax(0.0,CurrentSpreadPoints())*2.0
+   );
+   if(adversePoints<=noiseFloor)
+   {
+      RaceResetExitCandidate();
+      return false;
+   }
+
+   // A soft exit requires BOTH a broken M5 structure and the 30-second order
+   // flow to have flipped. Either signal by itself is observation-only.
+   int rawVolumeDirection=RaceVolumeDirection();
+   bool oppositeVolume=rawVolumeDirection!=0 && rawVolumeDirection==-direction;
+   bool structureBroken=RaceV2StructureBroken(direction);
+   if(!oppositeVolume || !structureBroken)
+   {
+      RaceResetExitCandidate();
+      return false;
+   }
+
+   int decision=RaceAnalysisDirection(momentum);
+   bool severe=decision!=0 && decision==-direction;
+   int confirmSeconds=severe
+      ? RACE_EXIT_SEVERE_CONFIRM_SECONDS
+      : RACE_EXIT_CONFIRM_SECONDS;
+
+   if(g_raceExitCandidateSince<=0)
+   {
+      g_raceExitCandidateSince=now;
+      g_raceExitCandidatePeakAdverse=adversePoints;
+      reasonOut=severe
+         ? "RACE_SOFT_EXIT_STRONG_CONFIRM"
+         : "RACE_SOFT_EXIT_CONFIRM";
+      return false;
+   }
+
+   if(adversePoints>g_raceExitCandidatePeakAdverse)
+      g_raceExitCandidatePeakAdverse=adversePoints;
+
+   if(now-g_raceExitCandidateSince<confirmSeconds)
+   {
+      reasonOut=severe
+         ? "RACE_SOFT_EXIT_STRONG_CONFIRM"
+         : "RACE_SOFT_EXIT_CONFIRM";
+      return false;
+   }
+
+   reasonOut=severe
+      ? "RACE_SOFT_EXIT_STRONG_REVERSAL"
+      : "RACE_SOFT_EXIT_STRUCTURE_FLOW";
+   return true;
 }
 
 bool RaceFlowStillRunning(int direction, double momentum)
 {
-   // RACE profit-run continuation follows the same 60-second volume majority
+   // RACE profit-run continuation follows the same 30-second volume majority
    // used for entry. Trend, EMA and candle direction do not participate.
    return RaceVolumeDirection() == direction;
 }
@@ -4212,7 +4294,7 @@ bool ProcessRaceFill(int direction)
       projectedLossLimit > 0.0 &&
       g_raceExposureNoiseMoney > projectedLossLimit * 0.80;
 
-   g_entryModel = "RACE_VOLUME_60S";
+   g_entryModel = "RACE_VOLUME_30S";
    g_entryTrigger = direction > 0 ? "RACE_VOLUME_BUY" : "RACE_VOLUME_SELL";
    g_entryQuality = "RACE";
    g_entryQualityScore = 0.0;
@@ -4269,11 +4351,25 @@ bool StartRaceCycle(double momentum)
 
    ResetRaceRuntime();
 
-   // Preserve the original 60-second warm-up. Do not rebuild market structure
-   // until RACE is actually ready to choose a side.
+   // RACE warms up for 30 seconds and never lets one unresolved signal window
+   // wait beyond 60 seconds. A timeout skips the window and starts a fresh one;
+   // it never forces an entry just to meet the timing limit.
+   datetime now=TimeCurrent();
+   int signalElapsed=g_raceVolumeWarmupStartedAt>0
+      ? (int)(now-g_raceVolumeWarmupStartedAt)
+      : 0;
+
    if(!RaceVolumeWindowReady())
    {
-      g_executionStatus = "RACE_VOLUME_WARMUP";
+      if(g_raceVolumeWarmupStartedAt>0 &&
+         signalElapsed>=RACE_SIGNAL_MAX_WAIT_SECONDS)
+      {
+         RaceResetVolumeWindow(now);
+         g_executionStatus="RACE_SIGNAL_TIMEOUT_RESET";
+         return false;
+      }
+
+      g_executionStatus="RACE_VOLUME_WARMUP";
       return false;
    }
 
@@ -4281,10 +4377,18 @@ bool StartRaceCycle(double momentum)
    // context is second-cached, so this adds no new waiting timer.
    RefreshMarketContext(false);
 
-   int direction = RaceAnalysisDirection(momentum);
-   if(direction == 0)
+   int direction=RaceAnalysisDirection(momentum);
+   if(direction==0)
    {
-      g_executionStatus = "RACE_VOLUME_BALANCED";
+      if(g_raceVolumeWarmupStartedAt>0 &&
+         signalElapsed>=RACE_SIGNAL_MAX_WAIT_SECONDS)
+      {
+         RaceResetVolumeWindow(now);
+         g_executionStatus="RACE_SIGNAL_TIMEOUT_RESET";
+         return false;
+      }
+
+      g_executionStatus="RACE_VOLUME_BALANCED";
       return false;
    }
 
@@ -4346,10 +4450,10 @@ bool ManageRaceBasket(double momentum)
       return true;
    }
 
-   // RACE_CONFIGURED_LOSS_ONLY_V1:
-   // Intelligence may classify an adverse move and pause additional fills, but
-   // it never liquidates a losing RACE Basket. Broker SL and configured money
-   // limits remain the only loss-closing mechanisms.
+   // RACE loss management remains isolated from every other mode. Broker SL
+   // and configured money limits stay authoritative hard boundaries; RACE may
+   // additionally soft-exit only after M5 structure is broken AND 30-second
+   // order flow has flipped for a confirmed period.
    RaceV1UpdateExposureTelemetry(direction,0.0);
    g_raceExposureRiskMismatch =
       lossLimit > 0.0 &&
@@ -4366,6 +4470,17 @@ bool ManageRaceBasket(double momentum)
          floatingProfit,
          wrongDirectionReason
       );
+
+      if(RaceWrongDirectionConfirmed(
+         direction,
+         momentum,
+         filling,
+         wrongDirectionReason
+      ))
+      {
+         RaceCloseCycle(wrongDirectionReason);
+         return true;
+      }
 
       if(g_raceLossState=="STRUCTURE_INVALID")
       {
@@ -4433,9 +4548,9 @@ bool ManageRaceBasket(double momentum)
    }
 
 
-   // Direction still comes from the rolling 60-second BUY/SELL pressure
-   // window. A pressure flip never adds on the stale side. A negative cycle
-   // waits for the configured SL / Max Basket Loss instead of a brain cut.
+   // Direction still comes from the rolling 30-second BUY/SELL pressure
+   // window. A pressure flip never adds on the stale side. Negative baskets
+   // may soft-exit only through the confirmed structure+flow rule above.
    int volumeDirection = RaceAnalysisDirection(momentum);
    if(volumeDirection != 0 && volumeDirection != direction)
    {
@@ -4455,17 +4570,26 @@ bool ManageRaceBasket(double momentum)
    // block an already-profitable ticket from being banked first.
    if(filling)
    {
-      if(volumeDirection == 0)
+      if(volumeDirection==0)
       {
-         g_raceState = "VOLUME_WAIT";
-         g_executionStatus = RaceVolumeWindowReady()
+         g_raceState="VOLUME_WAIT";
+         g_executionStatus=RaceVolumeWindowReady()
             ? "RACE_VOLUME_BALANCED"
             : "RACE_VOLUME_WARMUP";
          return true;
       }
-      if(floatingProfit < 0.0)
-         g_raceRecoveryWatch = true;
-      g_raceState = "FILLING";
+
+      // Never average down in RACE. Additional positions are pyramid fills and
+      // are allowed only after the already-open Basket is in positive floating
+      // P/L. The first entry keeps its normal M5 structure/ATR room to breathe.
+      if(floatingProfit<=0.0)
+      {
+         g_raceState="ADD_WAIT_PROFIT";
+         g_executionStatus="RACE_ADD_WAIT_PROFIT";
+         return true;
+      }
+
+      g_raceState="FILLING";
       RefreshMarketContext(false);
       ProcessRaceFill(direction);
       return true;
