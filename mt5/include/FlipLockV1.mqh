@@ -28,7 +28,7 @@ int g_flipLockPendingDirection=0;
 double g_flipLockPendingTriggerPrice=0.0;
 ulong g_flipLockCostPositionId=0;
 double g_flipLockCostPositionVolume=0.0;
-double g_flipLockTransitionCostReserveMoney=0.0;
+double g_flipLockSideCommissionPerLot=0.0;
 
 bool FlipLockModeEnabled()
 {
@@ -64,7 +64,7 @@ void FlipLockResetTracking(const bool resetCounter)
    g_flipLockPendingTriggerPrice=0.0;
    g_flipLockCostPositionId=0;
    g_flipLockCostPositionVolume=0.0;
-   g_flipLockTransitionCostReserveMoney=0.0;
+   g_flipLockSideCommissionPerLot=0.0;
    g_flipLockReason="IDLE";
    if(resetCounter) g_flipLockFlipCount=0;
 }
@@ -117,63 +117,68 @@ double FlipLockTransitionCostReserve(
       return FLIP_LOCK_NET_PROFIT_BUFFER_MONEY;
 
    ulong positionId=(ulong)PositionGetInteger(POSITION_IDENTIFIER);
-   if(positionId>0 &&
-      g_flipLockCostPositionId==positionId &&
-      MathAbs(g_flipLockCostPositionVolume-positionVolume)<0.0000001)
-      return g_flipLockTransitionCostReserveMoney;
 
-   double entryCost=0.0;
-   double entryVolume=0.0;
-   if(positionId>0 && HistorySelectByPosition(positionId))
+   // Entry commission is stable for a live leg, so cache only that historical
+   // lookup. Spread and swap stay dynamic and are recalculated every tick after
+   // the +0.50 arm threshold.
+   if(positionId==0 ||
+      g_flipLockCostPositionId!=positionId ||
+      MathAbs(g_flipLockCostPositionVolume-positionVolume)>=0.0000001)
    {
-      int totalDeals=HistoryDealsTotal();
-      for(int i=0;i<totalDeals;i++)
+      double entryCost=0.0;
+      double entryVolume=0.0;
+      if(positionId>0 && HistorySelectByPosition(positionId))
       {
-         ulong deal=HistoryDealGetTicket(i);
-         if(deal==0) continue;
-         if(HistoryDealGetString(deal,DEAL_SYMBOL)!=_Symbol) continue;
-         if(HistoryDealGetInteger(deal,DEAL_MAGIC)!=InpMagic) continue;
+         int totalDeals=HistoryDealsTotal();
+         for(int i=0;i<totalDeals;i++)
+         {
+            ulong deal=HistoryDealGetTicket(i);
+            if(deal==0) continue;
+            if(HistoryDealGetString(deal,DEAL_SYMBOL)!=_Symbol) continue;
+            if(HistoryDealGetInteger(deal,DEAL_MAGIC)!=InpMagic) continue;
 
-         long entry=HistoryDealGetInteger(deal,DEAL_ENTRY);
-         if(entry!=DEAL_ENTRY_IN && entry!=DEAL_ENTRY_INOUT) continue;
+            long entry=HistoryDealGetInteger(deal,DEAL_ENTRY);
+            if(entry!=DEAL_ENTRY_IN && entry!=DEAL_ENTRY_INOUT) continue;
 
-         double dealVolume=HistoryDealGetDouble(deal,DEAL_VOLUME);
-         if(dealVolume<=0.0) continue;
-         entryVolume+=dealVolume;
-         entryCost+=MathAbs(HistoryDealGetDouble(deal,DEAL_COMMISSION));
-         entryCost+=MathAbs(HistoryDealGetDouble(deal,DEAL_FEE));
+            double dealVolume=HistoryDealGetDouble(deal,DEAL_VOLUME);
+            if(dealVolume<=0.0) continue;
+            entryVolume+=dealVolume;
+            entryCost+=MathAbs(HistoryDealGetDouble(deal,DEAL_COMMISSION));
+            entryCost+=MathAbs(HistoryDealGetDouble(deal,DEAL_FEE));
+         }
       }
+
+      g_flipLockCostPositionId=positionId;
+      g_flipLockCostPositionVolume=positionVolume;
+      g_flipLockSideCommissionPerLot=
+         entryVolume>0.0 ? entryCost/entryVolume : 0.0;
    }
 
-   double perLotSideCommission=
-      entryVolume>0.0 ? entryCost/entryVolume : 0.0;
-   double currentEntryCommission=perLotSideCommission*positionVolume;
-   double estimatedCloseCommission=perLotSideCommission*positionVolume;
-   double estimatedNextEntryCommission=perLotSideCommission*positionVolume;
+   double currentEntryCommission=
+      g_flipLockSideCommissionPerLot*positionVolume;
+   double estimatedCloseCommission=
+      g_flipLockSideCommissionPerLot*positionVolume;
+   double estimatedNextEntryCommission=
+      g_flipLockSideCommissionPerLot*positionVolume;
    double nextLegSpreadReserve=CurrentSpreadCost(positionVolume);
    double negativeSwapReserve=MathMax(
       0.0,
       -PositionGetDouble(POSITION_SWAP)
    );
 
-   // Reserve the costs already paid on this leg plus the costs that can arrive
-   // when the opposite pending order hands control to the next FLIP leg.
-   // Spread of the current leg is already reflected in POSITION_PROFIT.
-   double reserve=
+   // Reserve the costs already paid on this leg plus the likely costs of the
+   // FLIP handoff. Current-leg spread is already inside POSITION_PROFIT.
+   // A small positive buffer protects against tick rounding; slippage/gaps can
+   // still make the final realized amount differ from the estimate.
+   return MathMax(
+      FLIP_LOCK_NET_PROFIT_BUFFER_MONEY,
       currentEntryCommission+
       estimatedCloseCommission+
       estimatedNextEntryCommission+
       nextLegSpreadReserve+
       negativeSwapReserve+
-      FLIP_LOCK_NET_PROFIT_BUFFER_MONEY;
-
-   g_flipLockCostPositionId=positionId;
-   g_flipLockCostPositionVolume=positionVolume;
-   g_flipLockTransitionCostReserveMoney=MathMax(
-      FLIP_LOCK_NET_PROFIT_BUFFER_MONEY,
-      reserve
+      FLIP_LOCK_NET_PROFIT_BUFFER_MONEY
    );
-   return g_flipLockTransitionCostReserveMoney;
 }
 
 double FlipLockBreakEvenTriggerPrice(
@@ -970,7 +975,7 @@ void FlipLockManage()
       g_flipLockLastStopSyncMs=0;
       g_flipLockCostPositionId=0;
       g_flipLockCostPositionVolume=0.0;
-      g_flipLockTransitionCostReserveMoney=0.0;
+      g_flipLockSideCommissionPerLot=0.0;
    }
 
    if(direction>0)
