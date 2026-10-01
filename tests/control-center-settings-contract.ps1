@@ -191,9 +191,14 @@ Need $css '--desktop-form-control-width:66.666%' 'Desktop Bot Settings must shar
 Need $css '--desktop-form-control-h:34px' 'Desktop standard controls must share one canonical height'
 Need $css '.cc-v19-settings-card .cc-bot-v2-main .cc-bot-v2-field>.cc-bot-v2-choice-row,' 'Desktop RACE/MANUAL segmented controls must use the shared right-column owner'
 Need $css '.cc-v19-settings-card .cc-bot-v2-toggle-row>.cc-bot-v2-control-cell,' 'Desktop ZERO GRID toggle must use the shared right-column owner'
-Need $css 'Risk rows follow the same desktop row rhythm as the MANUAL profit target:' 'Current desktop risk-row rhythm marker missing'
+Need $css 'Risk rows use the exact MANUAL standard-row geometry.' 'Desktop risk rows must use the MANUAL row geometry at the original CSS owner'
+Need $css 'height:38px!important;' 'Desktop risk row height must match the MANUAL 38px row'
+Need $css 'padding:2px!important;' 'Desktop risk row padding must match the MANUAL row'
+Need $css 'Risk rows follow the same desktop row rhythm as the MANUAL profit target:' 'Current desktop risk-row control-height marker missing'
 Need $css '.cc-v19-settings-card .cc-bot-v2-limit-grid .money-input-shell,' 'Desktop risk amount fields must use the shared control-height owner'
 Need $css 'height:var(--desktop-form-control-h)!important;' 'Desktop risk amount fields must match the canonical 34px desktop control height'
+if($css.Contains('Give the risk controls real vertical breathing room')) { throw 'Obsolete 44px / 6px desktop risk-row owner must not return' }
+if($css.Contains('Risk money box breathing room only')) { throw 'Obsolete risk-field margin shim must not return' }
 if($css.Contains('grid-auto-rows:52px!important;')) { throw 'Old 52px desktop risk-row owner must not return; risk rows now follow the MANUAL profit-target rhythm' }
 Need $css 'Control Center V59 · mobile authoritative alignment' 'Current mobile authoritative alignment layer missing'
 Need $css '--mobile-form-control-width:66.666%' 'All mobile modes must share the same right-edge control width'
