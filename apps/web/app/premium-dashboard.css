@@ -5389,9 +5389,13 @@
 
 
 /* ===== Control Center V58 · Bot Settings visual polish only ===== */
-/* Scope strictly to the embedded Bot Settings card. No trading logic or other cards. */
+/* Desktop authoritative owner: AUTO / MANUAL / RACE / FLIP LOCK / ZERO GRID
+   share one right-edge control geometry. Mobile remains owned by V59. */
 @media(min-width:761px){
   .cc-v19-settings-card .cc-bot-v2-embedded{
+    --desktop-form-control-width:66.666%;
+    --desktop-form-control-h:34px;
+    --desktop-form-control-radius:9px;
     border-color:rgba(112,91,224,.72)!important;
     background:
       radial-gradient(560px 220px at 10% 0,rgba(104,78,224,.18),transparent 62%),
@@ -5409,6 +5413,120 @@
     border-bottom-color:rgba(104,89,187,.34)!important;
   }
 
+  /* One professional desktop grid. The label column keeps its established
+     responsive width; every ordinary control is measured from the RIGHT side. */
+  .cc-v19-settings-card .cc-bot-v12-mode-select-wrap>label,
+  .cc-v19-settings-card .cc-bot-v2-main .cc-bot-v2-field:not(.cc-bot-manual-risk-add){
+    grid-template-columns:minmax(0,var(--settings-label)) minmax(0,1fr)!important;
+    align-items:center!important;
+    gap:14px!important;
+    overflow:visible!important;
+  }
+
+  .cc-v19-settings-card .cc-bot-v12-mode-select-wrap>label>.cc-bot-v12-mode-select,
+  .cc-v19-settings-card .cc-bot-v2-main .cc-bot-v2-field>select.input,
+  .cc-v19-settings-card .cc-bot-v2-main .cc-bot-v2-field>.money-input-shell,
+  .cc-v19-settings-card .cc-bot-v2-main .cc-bot-v2-field>.number-input-shell,
+  .cc-v19-settings-card .cc-bot-v2-main .cc-bot-v2-field>.cc-bot-v2-readonly-control,
+  .cc-v19-settings-card .cc-bot-v2-main .cc-bot-v2-field>.cc-bot-v2-choice-row,
+  .cc-v19-settings-card .cc-bot-v2-toggle-row>.cc-bot-v2-control-cell,
+  .cc-v19-settings-card .cc-bot-manual-risk-add>.cc-bot-manual-risk-add-all{
+    box-sizing:border-box!important;
+    width:var(--desktop-form-control-width)!important;
+    min-width:0!important;
+    max-width:var(--desktop-form-control-width)!important;
+    justify-self:end!important;
+    align-self:center!important;
+    margin:0 0 0 auto!important;
+  }
+
+  /* Standard controls share one height/radius and one right edge. */
+  .cc-v19-settings-card .cc-bot-v12-mode-select-wrap>label>.cc-bot-v12-mode-select,
+  .cc-v19-settings-card .cc-bot-v2-main .cc-bot-v2-field>select.input,
+  .cc-v19-settings-card .cc-bot-v2-main .cc-bot-v2-field>.money-input-shell,
+  .cc-v19-settings-card .cc-bot-v2-main .cc-bot-v2-field>.number-input-shell,
+  .cc-v19-settings-card .cc-bot-v2-main .cc-bot-v2-field>.cc-bot-v2-readonly-control{
+    height:var(--desktop-form-control-h)!important;
+    min-height:var(--desktop-form-control-h)!important;
+    max-height:var(--desktop-form-control-h)!important;
+    border-radius:var(--desktop-form-control-radius)!important;
+  }
+
+  .cc-v19-settings-card .cc-bot-v2-main .cc-bot-v2-field>.money-input-shell .money-input,
+  .cc-v19-settings-card .cc-bot-v2-main .cc-bot-v2-field>.number-input-shell .money-input{
+    height:32px!important;
+    min-height:32px!important;
+    max-height:32px!important;
+    line-height:32px!important;
+    padding-top:0!important;
+    padding-bottom:0!important;
+  }
+
+  /* RACE / MANUAL profit mode is one control, not two oversized cards. */
+  .cc-v19-settings-card .cc-bot-v2-main .cc-bot-v2-field>.cc-bot-v2-choice-row{
+    height:var(--desktop-form-control-h)!important;
+    min-height:var(--desktop-form-control-h)!important;
+    max-height:var(--desktop-form-control-h)!important;
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    gap:6px!important;
+    padding:0!important;
+  }
+  .cc-v19-settings-card .cc-bot-v2-main .cc-bot-v2-field>.cc-bot-v2-choice-row>button{
+    box-sizing:border-box!important;
+    width:100%!important;
+    min-width:0!important;
+    height:var(--desktop-form-control-h)!important;
+    min-height:var(--desktop-form-control-h)!important;
+    max-height:var(--desktop-form-control-h)!important;
+    padding:3px 8px!important;
+    border-radius:var(--desktop-form-control-radius)!important;
+  }
+
+  /* ZERO GRID low-volatility switch occupies the same right-side footprint. */
+  .cc-v19-settings-card .cc-bot-v2-toggle-row>.cc-bot-v2-control-cell{
+    height:var(--desktop-form-control-h)!important;
+    min-height:var(--desktop-form-control-h)!important;
+    max-height:var(--desktop-form-control-h)!important;
+    display:flex!important;
+    align-items:center!important;
+    justify-content:center!important;
+  }
+
+  /* MANUAL Stop Loss is the only compound standard row. Keep the whole control
+     column available so switch + amount remain readable, while the amount box
+     ends on the exact same right edge as every other desktop control. */
+  .cc-v19-settings-card .cc-bot-v2-fields>.cc-bot-v2-field>.toggle-money-field{
+    box-sizing:border-box!important;
+    width:100%!important;
+    min-width:0!important;
+    max-width:100%!important;
+    height:var(--desktop-form-control-h)!important;
+    min-height:var(--desktop-form-control-h)!important;
+    max-height:var(--desktop-form-control-h)!important;
+    grid-template-columns:calc(33.334% - 9px) minmax(0,1fr)!important;
+    gap:9px!important;
+    align-items:center!important;
+    justify-self:end!important;
+    margin:0!important;
+  }
+  .cc-v19-settings-card .cc-bot-v2-fields>.cc-bot-v2-field>.toggle-money-field .toggle-setting-label{
+    width:100%!important;
+    min-width:0!important;
+    height:var(--desktop-form-control-h)!important;
+    min-height:var(--desktop-form-control-h)!important;
+    max-height:var(--desktop-form-control-h)!important;
+    justify-content:center!important;
+  }
+  .cc-v19-settings-card .cc-bot-v2-fields>.cc-bot-v2-field>.toggle-money-field .money-input-shell,
+  .cc-v19-settings-card .cc-bot-v2-fields>.cc-bot-v2-field>.toggle-money-field .number-input-shell{
+    width:100%!important;
+    min-width:0!important;
+    height:var(--desktop-form-control-h)!important;
+    min-height:var(--desktop-form-control-h)!important;
+    max-height:var(--desktop-form-control-h)!important;
+    margin:0!important;
+  }
+
   /* Rated modes: gold text + stars only. No green recommendation fill. */
   .cc-v19-settings-card .cc-bot-v12-mode-select.is-rated-mode{
     background:linear-gradient(145deg,#171637,#0b1220)!important;
@@ -5423,8 +5541,19 @@
     font-weight:900!important;
   }
 
-  /* Spend the existing lower free space on the 3 risk rows.
-     Keep the parent card height unchanged, but add real separation between 10/25/10. */
+  /* Keep the red guide triangle centered in the visual gap instead of letting
+     it crowd either the Thai label or the mode selector. */
+  .cc-v19-settings-card .cc-mode-guide-alert{
+    left:calc(var(--settings-label) - 24px)!important;
+    right:auto!important;
+    top:11px!important;
+    width:22px!important;
+    height:20px!important;
+    filter:drop-shadow(0 0 6px rgba(239,51,78,.34))!important;
+  }
+
+  /* The 10 / 25 / 10 risk controls are the desktop reference styling the user
+     already approved. Preserve their sizing and breathing room. */
   .cc-v19-settings-card .cc-bot-v2-limit-grid{
     grid-auto-rows:52px!important;
     gap:10px!important;
