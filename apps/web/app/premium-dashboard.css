@@ -5217,9 +5217,9 @@
   /* Keep the RACE guide triangle inside the label column instead of letting
      it sit on top of the right-side control. */
   .cc-v19-settings-card .cc-mode-guide-alert{
-    left:calc(var(--settings-label) - 23px)!important;
+    left:calc(var(--settings-label) - 12px)!important;
     right:auto!important;
-    top:9px!important;
+    top:17px!important;
     width:20px!important;
     height:18px!important;
     filter:drop-shadow(0 0 5px rgba(239,51,78,.36))!important;
@@ -5458,7 +5458,9 @@
    of AUTO control width and risk-row alignment on phones. */
 @media(max-width:760px){
   .cc-v19-settings-card .cc-bot-mode-auto{
-    --mobile-auto-control-width:min(100%,288px);
+    --mobile-auto-control-width:66.666%;
+    --mobile-auto-control-height:36px;
+    --mobile-auto-control-font-size:11px;
   }
 
   /* Keep every visible AUTO row on one vertical center line. */
@@ -5468,26 +5470,34 @@
     align-items:center!important;
   }
 
-  /* Trading mode, direction, max positions, lot and AUTO target share one
-     right edge and one control height instead of using mixed 2/3 widths. */
+  /* Trading mode, direction, max positions, lot and AUTO target keep the
+     existing right edge, but occupy only two-thirds of the control column. */
   .cc-v19-settings-card .cc-bot-mode-auto .cc-bot-v19-two-thirds-control,
   .cc-v19-settings-card .cc-bot-mode-auto .cc-bot-v19-auto-profit-field .money-input-shell{
     box-sizing:border-box!important;
     width:var(--mobile-auto-control-width)!important;
     min-width:0!important;
     max-width:var(--mobile-auto-control-width)!important;
-    height:40px!important;
-    min-height:40px!important;
-    max-height:40px!important;
+    height:var(--mobile-auto-control-height)!important;
+    min-height:var(--mobile-auto-control-height)!important;
+    max-height:var(--mobile-auto-control-height)!important;
     justify-self:end!important;
     align-self:center!important;
     margin:0 0 0 auto!important;
   }
+  .cc-v19-settings-card .cc-bot-mode-auto .cc-bot-v19-two-thirds-control,
+  .cc-v19-settings-card .cc-bot-mode-auto .cc-bot-v19-auto-profit-field .money-prefix,
   .cc-v19-settings-card .cc-bot-mode-auto .cc-bot-v19-auto-profit-field .money-input{
-    height:38px!important;
-    min-height:38px!important;
-    max-height:38px!important;
-    line-height:38px!important;
+    font-size:var(--mobile-auto-control-font-size)!important;
+    line-height:1.15!important;
+  }
+  .cc-v19-settings-card .cc-bot-mode-auto .cc-bot-v19-auto-profit-field .money-input{
+    height:34px!important;
+    min-height:34px!important;
+    max-height:34px!important;
+    line-height:34px!important;
+    padding-top:0!important;
+    padding-bottom:0!important;
   }
 
   /* Risk rows get real top/bottom breathing room so the switch and amount
