@@ -26,8 +26,9 @@ At the beginning of each cycle, record the market center and construct a symmetr
 Defaults:
 
 - Inter-level Grid Step: `3.00`
+- Selectable Grid Step values: `0.50`, `1.00`, `2.00`, `3.00`
 - Levels per side: `30`
-- Base lot: `0.03` unless configured otherwise
+- Base lot: locked at `0.03`
 - Lot progression: `BaseLot × Level`
   - L1 = `0.03`
   - L2 = `0.06`
@@ -56,16 +57,6 @@ Therefore:
 - `SellLevelN = SellLevel1 - GridStep × (N - 1)`
 
 All prices must be normalized to the symbol tick size and broker stop-distance rules.
-
-### Low-volatility profile
-
-When **กริดตลาดความผันผวนต่ำ** is enabled:
-
-- First pending offset from the captured cycle center: `2.00`
-- Inter-level spacing: `1.00` price unit
-- Example center `4000.00`: BUY STOP `4002.00, 4003.00, 4004.00, ...`; SELL STOP `3998.00, 3997.00, 3996.00, ...`
-- Lot remains fixed at `0.03` on every low-volatility level.
-- Broker minimum stop distance remains authoritative if it requires a wider first pending price.
 
 ## Pending placement order
 

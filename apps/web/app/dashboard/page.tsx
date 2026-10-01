@@ -230,7 +230,6 @@ const defaultSettings = {
   raceCloseAllProfitMoney: 0.5,
   racePerPositionProfitMoney: 0.5,
   zeroGridStepPrice: 3,
-  zeroGridLowVolatilityEnabled: false,
   zeroGridLevelsPerSide: 10,
   zeroGridBaseLot: 0.03,
   zeroGridMinNetProfitMoney: 0.5,
@@ -394,8 +393,8 @@ export default function DashboardPage() {
           if (storedSettings.flipLockDailyProfitTargetMoney === undefined) nextSettings.flipLockDailyProfitTargetMoney = Number(storedSettings.standardDailyProfitTargetMoney ?? legacyDailyProfit);
         }
         if (loadedControlMode === "ZERO_GRID") {
-          nextSettings.zeroGridStepPrice = Number(nextSettings.zeroGridStepPrice) === 2 ? 2 : 3;
-          if (typeof nextSettings.zeroGridLowVolatilityEnabled !== "boolean") nextSettings.zeroGridLowVolatilityEnabled = false;
+          const loadedZeroStep = Number(nextSettings.zeroGridStepPrice);
+          nextSettings.zeroGridStepPrice = [0.5,1,2,3].includes(loadedZeroStep) ? loadedZeroStep : 3;
           nextSettings.zeroGridLevelsPerSide = Math.max(1, Math.min(30, Number(nextSettings.zeroGridLevelsPerSide) || 10));
           nextSettings.zeroGridBaseLot = 0.03;
           if (!Number.isFinite(Number(nextSettings.zeroGridMinNetProfitMoney)) || Number(nextSettings.zeroGridMinNetProfitMoney) <= 0.01) nextSettings.zeroGridMinNetProfitMoney = 0.5;
@@ -3560,7 +3559,10 @@ export default function DashboardPage() {
       if (requestedControlMode === "ZERO_GRID") {
         payload.controlMode = "ZERO_GRID";
         payload.engineMode = "ZERO_GRID";
+        const zeroGridStepPrice = Number(payload.zeroGridStepPrice);
+        payload.zeroGridStepPrice = [0.5,1,2,3].includes(zeroGridStepPrice) ? zeroGridStepPrice : 3;
         payload.zeroGridBaseLot = 0.03;
+        delete payload.zeroGridLowVolatilityEnabled;
       } else if (requestedControlMode === "RACE") {
         payload.controlMode = "RACE";
         payload.engineMode = "RACE";
@@ -6453,8 +6455,8 @@ function BotSettingsModal(props:any) {
     if (mode === "ZERO_GRID") {
       props.onEdit?.("engineMode","ZERO_GRID");
       props.onEdit?.("profitTargetMode","OFF");
-      props.onEdit?.("zeroGridStepPrice",Number(props.settings?.zeroGridStepPrice) === 2 ? 2 : 3);
-      if (typeof props.settings?.zeroGridLowVolatilityEnabled !== "boolean") props.onEdit?.("zeroGridLowVolatilityEnabled",false);
+      const zeroGridStepPrice = Number(props.settings?.zeroGridStepPrice);
+      props.onEdit?.("zeroGridStepPrice",[0.5,1,2,3].includes(zeroGridStepPrice) ? zeroGridStepPrice : 3);
       props.onEdit?.("zeroGridLevelsPerSide",Math.max(1,Math.min(30,Number(props.settings?.zeroGridLevelsPerSide)||10)));
       props.onEdit?.("zeroGridBaseLot",0.03);
       if (!Number.isFinite(Number(props.settings?.zeroGridMinNetProfitMoney)) || Number(props.settings?.zeroGridMinNetProfitMoney) <= 0.01) props.onEdit?.("zeroGridMinNetProfitMoney",0.5);
@@ -6530,7 +6532,8 @@ function BotSettingsModal(props:any) {
         ? "M5 ATR × 1.20"
         : "ATR × 2.00";
   const selectedZeroLevels = Math.max(1,Math.min(30,Number(props.settings?.zeroGridLevelsPerSide)||10));
-  const zeroGridLowVolatilityEnabled = props.settings?.zeroGridLowVolatilityEnabled === true;
+  const rawZeroGridStep = Number(props.settings?.zeroGridStepPrice);
+  const selectedZeroGridStep = [0.5,1,2,3].includes(rawZeroGridStep) ? rawZeroGridStep : 3;
   const appliedZeroLevels = Number(props.metrics?.zeroGridConfiguredLevelsPerSide);
   const zeroGridSettingsSynced =
     controlMode === "ZERO_GRID" &&
@@ -6620,17 +6623,11 @@ function BotSettingsModal(props:any) {
             <main className="cc-bot-v2-main">
               <section className="cc-bot-v2-panel">
                 <div className="cc-bot-v2-section-title compact"><span>02</span><div><b>การเปิดออเดอร์</b></div></div>
-                {controlMode==="ZERO_GRID"&&<div className="cc-bot-v2-field cc-bot-v2-toggle-row">
-                  <span><ScenovaIcon name="layers" size={17}/>กริดตลาดความผันผวนต่ำ</span>
-                  <div className="cc-bot-v2-control-cell"><SwitchSetting checked={zeroGridLowVolatilityEnabled} onChange={(value:boolean)=>props.onEdit?.("zeroGridLowVolatilityEnabled",value)} onLabel="เปิด" offLabel="ปิด"/></div>
-                </div>}
                 <div className="cc-bot-v2-fields">
                   {controlMode==="ZERO_GRID" ? <>
-                    {zeroGridLowVolatilityEnabled
-                      ? <div className="cc-bot-v2-field"><span><ScenovaIcon name="layers" size={17}/>ระยะห่างกริด</span><div className="cc-bot-v2-readonly-control"><b>1.00 · เริ่ม 2.00</b></div></div>
-                      : <label className="cc-bot-v2-field"><span><ScenovaIcon name="layers" size={17}/>ระยะห่างกริด</span><select className="input" value={String(Number(props.settings.zeroGridStepPrice) === 2 ? 2 : 3)} onChange={e=>props.onEdit?.("zeroGridStepPrice",e.target.value)}><option value="2">2.00</option><option value="3">3.00</option></select></label>}
+                    <label className="cc-bot-v2-field"><span><ScenovaIcon name="layers" size={17}/>ระยะห่างกริด</span><select className="input" value={String(selectedZeroGridStep)} onChange={e=>props.onEdit?.("zeroGridStepPrice",Number(e.target.value))}><option value="0.5">0.50</option><option value="1">1.00</option><option value="2">2.00</option><option value="3">3.00</option></select></label>
                     <label className="cc-bot-v2-field"><span><ScenovaIcon name="layers" size={17}/>จำนวนคำสั่งรอต่อฝั่ง</span><select className="input" value={String(Math.max(1,Math.min(30,Number(props.settings.zeroGridLevelsPerSide)||10)))} onChange={e=>props.onEdit?.("zeroGridLevelsPerSide",Number(e.target.value))}>{Array.from({length:30},(_,i)=>i+1).map(value=><option key={value} value={value}>{value} ระดับต่อฝั่ง</option>)}</select></label>
-                    <div className="cc-bot-v2-field"><span><ScenovaIcon name="lot" size={17}/>{zeroGridLowVolatilityEnabled?"Lot คงที่ต่อระดับ":"Lot เริ่มต้น"}</span><div className="cc-bot-v2-readonly-control"><b>0.03 Lot</b></div></div>
+                    <div className="cc-bot-v2-field"><span><ScenovaIcon name="lot" size={17}/>Lot เริ่มต้น</span><div className="cc-bot-v2-readonly-control"><b>0.03 Lot</b></div></div>
                     <label className="cc-bot-v2-field"><span><ScenovaIcon name="profit" size={17}/>เป้ากำไรสุทธิ</span><MoneyInput value={props.settings.zeroGridMinNetProfitMoney || 0.5} currency={accountCurrency} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.("zeroGridMinNetProfitMoney",v)}/></label>
                   </> : <>
                     <label className="cc-bot-v2-field"><span><ScenovaIcon name="trend" size={17}/>ทิศทาง</span><select className="input cc-bot-v19-two-thirds-control" value={entryMode} onChange={e=>props.onEdit?.("entryMode",e.target.value)}><option value="AUTO_MOMENTUM">อัตโนมัติ</option><option value="BUY_ONLY">BUY</option><option value="SELL_ONLY">SELL</option></select></label>
@@ -6700,10 +6697,10 @@ function BotSettingsModal(props:any) {
               <div className="cc-bot-v2-summary-head"><span><ScenovaIcon name="status" size={19}/></span><div><small>แผนที่จะบันทึก</small><b>{modeCopy[controlMode].title}</b></div><i/></div>
               {controlMode==="ZERO_GRID" ? <dl>
                 <div><dt>คู่เทรด</dt><dd>{props.symbol || "—"}</dd></div>
-                <div><dt>รูปแบบกริด</dt><dd>{zeroGridLowVolatilityEnabled?"ตลาดความผันผวนต่ำ":"กริดมาตรฐาน"}</dd></div>
+                <div><dt>รูปแบบกริด</dt><dd>กริดมาตรฐาน</dd></div>
                 <div><dt>คำสั่งรอ</dt><dd>{Math.max(1,Math.min(30,Number(props.settings.zeroGridLevelsPerSide)||10))} BUY + {Math.max(1,Math.min(30,Number(props.settings.zeroGridLevelsPerSide)||10))} SELL</dd></div>
-                <div><dt>ระยะห่างกริด</dt><dd>{zeroGridLowVolatilityEnabled?"1.00 · เริ่ม 2.00":(Number(props.settings.zeroGridStepPrice) === 2 ? "2.00" : "3.00")}</dd></div>
-                <div><dt>{zeroGridLowVolatilityEnabled?"Lot คงที่":"Lot เริ่มต้น"}</dt><dd>0.03 Lot</dd></div>
+                <div><dt>ระยะห่างกริด</dt><dd>{selectedZeroGridStep.toFixed(2)}</dd></div>
+                <div><dt>Lot เริ่มต้น</dt><dd>0.03 Lot</dd></div>
                 <div><dt>เป้ากำไรสุทธิ</dt><dd>{formatAccountMoney(props.settings.zeroGridMinNetProfitMoney||0.5,accountCurrency)} · ถึงแล้วปิดทันที</dd></div>
               </dl> : (
               <dl>

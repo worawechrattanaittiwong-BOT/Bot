@@ -3206,12 +3206,11 @@ export class BotController {
     numberSetting("maxOrdersPerMinute", 1, 5000, true);
     if (body.zeroGridStepPrice !== undefined) {
       const zeroGridStepPrice = Number(body.zeroGridStepPrice);
-      if (zeroGridStepPrice !== 2 && zeroGridStepPrice !== 3) {
-        throw new BadRequestException("ZERO GRID Step ต้องเป็น 2.00 หรือ 3.00 เท่านั้น");
+      if (![0.5, 1, 2, 3].includes(zeroGridStepPrice)) {
+        throw new BadRequestException("ZERO GRID Step ต้องเป็น 0.50, 1.00, 2.00 หรือ 3.00 เท่านั้น");
       }
       clean.zeroGridStepPrice = zeroGridStepPrice;
     }
-    booleanSetting("zeroGridLowVolatilityEnabled");
     numberSetting("zeroGridLevelsPerSide", 1, 30, true);
     numberSetting("zeroGridBaseLot", 0.01, 100);
     clean.zeroGridBaseLot = 0.03;
@@ -3457,8 +3456,8 @@ export class BotController {
       );
     }
     if (zeroGridSelected) {
-      clean.zeroGridStepPrice = clean.zeroGridStepPrice === 2 ? 2 : 3;
-      if (body.zeroGridLowVolatilityEnabled === undefined) clean.zeroGridLowVolatilityEnabled = false;
+      const zeroGridStepPrice = Number(clean.zeroGridStepPrice);
+      clean.zeroGridStepPrice = [0.5, 1, 2, 3].includes(zeroGridStepPrice) ? zeroGridStepPrice : 3;
       clean.zeroGridBaseLot = 0.03;
       if (body.zeroGridMinNetProfitMoney === undefined) clean.zeroGridMinNetProfitMoney = 0.5;
       // ZERO closes exactly at zeroGridMinNetProfitMoney. Keep legacy reserve

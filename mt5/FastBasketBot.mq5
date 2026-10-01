@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.1.4"
-#define SCENOVA_EA_VERSION "1.1.4"
-#define SCENOVA_PRODUCT_VERSION "1.1.4"
+#property version   "1.1.5"
+#define SCENOVA_EA_VERSION "1.1.5"
+#define SCENOVA_PRODUCT_VERSION "1.1.5"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_CONFIGURED_LOSS_ONLY_V1"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -197,7 +197,6 @@ input double          InpRacePerPositionProfitMoney = 0.50;
 #define ZERO_GRID_PENDING_REQUEST_GUARD_MS 10000
 #define ZERO_GRID_FLAT_CONFIRM_MS 1500
 input double          InpZeroGridStepPrice     = 3.0;
-input bool            InpZeroGridLowVolatilityEnabled = false;
 input int             InpZeroGridLevelsPerSide = ZERO_GRID_DEFAULT_LEVELS;
 input double          InpZeroGridBaseLot       = ZERO_GRID_LOCKED_BASE_LOT; // compatibility input; runtime is locked to 0.03
 input double          InpZeroGridMinNetProfitMoney = 0.50;
@@ -337,7 +336,6 @@ string g_controlMode = "LEGACY";
 // Never allow AUTO/legacy entry before the Server has delivered a real mode.
 bool   g_settingsSynchronized = false;
 double g_zeroGridStepPrice = 3.0;
-bool   g_zeroGridLowVolatilityEnabled = false;
 int    g_zeroGridLevelsPerSide = ZERO_GRID_DEFAULT_LEVELS;
 double g_zeroGridBaseLot = ZERO_GRID_LOCKED_BASE_LOT;
 double g_zeroGridMinNetProfitMoney = 0.50;
@@ -1716,8 +1714,7 @@ int OnInit()
    StringToUpper(g_engineMode);
    if(g_engineMode != "RACE" && g_engineMode != "ZERO_GRID")
       g_engineMode = "AUTO";
-   g_zeroGridStepPrice = MathAbs(InpZeroGridStepPrice-2.0)<0.000001 ? 2.0 : 3.0;
-   g_zeroGridLowVolatilityEnabled = InpZeroGridLowVolatilityEnabled;
+   g_zeroGridStepPrice = ZeroGridAllowedStep(InpZeroGridStepPrice);
    g_zeroGridLevelsPerSide = (int)MathMax(1.0,MathMin((double)ZERO_GRID_MAX_LEVELS,(double)InpZeroGridLevelsPerSide));
    g_zeroGridBaseLot = ZERO_GRID_LOCKED_BASE_LOT;
    g_zeroGridMinNetProfitMoney = MathMax(0.01, InpZeroGridMinNetProfitMoney);
@@ -2051,7 +2048,10 @@ bool ZeroGridModeEnabled()
 
 double ZeroGridAllowedStep(double requested)
 {
-   return MathAbs(requested-2.0)<0.000001 ? 2.0 : 3.0;
+   if(MathAbs(requested-0.5)<0.000001) return 0.5;
+   if(MathAbs(requested-1.0)<0.000001) return 1.0;
+   if(MathAbs(requested-2.0)<0.000001) return 2.0;
+   return 3.0;
 }
 
 bool ZeroGridAccountIsHedging()
@@ -2390,7 +2390,7 @@ double ZeroGridEffectiveStepPrice()
    double tick=ZeroGridTickSize();
    double source=g_zeroGridCycleStepPrice>0.0
       ? g_zeroGridCycleStepPrice
-      : (g_zeroGridLowVolatilityEnabled ? ZERO_GRID_LOW_VOL_STEP_PRICE : g_zeroGridStepPrice);
+      : g_zeroGridStepPrice;
    double requested=MathMax(source,tick);
    double units=MathCeil((requested/tick)-1e-10);
    return NormalizeDouble(units*tick,_Digits);
@@ -2410,9 +2410,9 @@ double ZeroGridEffectiveBaseLot()
 
 bool ZeroGridEffectiveLowVolatilityEnabled()
 {
-   if(g_zeroGridCycleLowVolatility >= 0)
-      return g_zeroGridCycleLowVolatility == 1;
-   return g_zeroGridLowVolatilityEnabled;
+   // Migration-only compatibility for a cycle that was already active on 1.1.4.
+   // New cycles from 1.1.5 never enable this path.
+   return g_zeroGridCycleLowVolatility == 1;
 }
 
 double ZeroGridEffectiveLevelLot(int level)
@@ -2426,9 +2426,10 @@ double ZeroGridEffectiveLevelLot(int level)
 
 double ZeroGridEntryGapPrice()
 {
-   // Normal ZERO: first trigger sits 3.00 price units from the live quote.
-   // Low-volatility starts 2.00 price units from the captured center, then
-   // spaces each following pending level by exactly 1.00 price unit.
+   // Standard ZERO: first trigger sits 3.00 price units from the live quote.
+   // The selected 0.50 / 1.00 / 2.00 / 3.00 step controls spacing BETWEEN
+   // successive levels. The alternate branch below is migration-only for a
+   // cycle that was already active before the 1.1.5 upgrade.
    double tick=ZeroGridTickSize();
    double preferredGap=ZeroGridEffectiveLowVolatilityEnabled() ? ZERO_GRID_LOW_VOL_FIRST_GAP : 3.0;
    double brokerSafeGap=ZeroGridMinPendingDistancePrice()+tick*2.0;
@@ -2448,14 +2449,11 @@ bool ZeroGridRequestedConfigChanged()
 {
    if(g_zeroGridCycleStartedAt<=0) return false;
    double tick=ZeroGridTickSize();
-   double requestedSource=g_zeroGridLowVolatilityEnabled ? ZERO_GRID_LOW_VOL_STEP_PRICE : g_zeroGridStepPrice;
-   double requestedStep=MathMax(requestedSource,tick);
+   double requestedStep=MathMax(g_zeroGridStepPrice,tick);
    requestedStep=NormalizeDouble(MathCeil((requestedStep/tick)-1e-10)*tick,_Digits);
    int requestedLevels=(int)MathMax(1.0,MathMin((double)ZERO_GRID_MAX_LEVELS,(double)g_zeroGridLevelsPerSide));
    double requestedLot=MathMax(0.0001,g_zeroGridBaseLot);
-   bool requestedLowVolatility=g_zeroGridLowVolatilityEnabled;
-   return requestedLowVolatility!=ZeroGridEffectiveLowVolatilityEnabled() ||
-          MathAbs(requestedStep-ZeroGridEffectiveStepPrice())>tick*0.5 ||
+   return MathAbs(requestedStep-ZeroGridEffectiveStepPrice())>tick*0.5 ||
           requestedLevels!=ZeroGridEffectiveLevelsPerSide() ||
           MathAbs(requestedLot-ZeroGridEffectiveBaseLot())>0.0000001;
 }
@@ -2509,8 +2507,8 @@ double ZeroGridPendingAnchorPrice(bool buySide)
       ? (buySide ? g_zeroGridCenter+gap : g_zeroGridCenter-gap)
       : (buySide ? live.ask+gap : live.bid-gap);
 
-   // Normal ZERO uses the live quote +/- first gap. Low-volatility preserves
-   // its existing compact center-based geometry.
+   // Standard ZERO uses the live quote +/- first gap. A legacy 1.1.4 cycle
+   // preserves its existing center-based geometry until that cycle closes.
    double brokerSafe=ZeroGridMinPendingDistancePrice()+ZeroGridTickSize();
    double legal=buySide ? live.ask+brokerSafe : live.bid-brokerSafe;
    if(buySide && raw<legal) raw=legal;
@@ -3124,8 +3122,8 @@ bool StartZeroGridCycle()
       g_zeroGridClosing=false;
       g_zeroGridLastExitBurstMs=0;
       g_zeroGridFlatObservedMs=0;
-      g_zeroGridCycleLowVolatility=g_zeroGridLowVolatilityEnabled ? 1 : 0;
-      g_zeroGridCycleStepPrice=MathMax(ZeroGridTickSize(),g_zeroGridLowVolatilityEnabled ? ZERO_GRID_LOW_VOL_STEP_PRICE : ZeroGridAllowedStep(g_zeroGridStepPrice));
+      g_zeroGridCycleLowVolatility=0;
+      g_zeroGridCycleStepPrice=MathMax(ZeroGridTickSize(),ZeroGridAllowedStep(g_zeroGridStepPrice));
       g_zeroGridCycleLevelsPerSide=(int)MathMax(1.0,MathMin((double)ZERO_GRID_MAX_LEVELS,(double)g_zeroGridLevelsPerSide));
       g_zeroGridCycleBaseLot=ZERO_GRID_LOCKED_BASE_LOT;
       g_orderWindowStart=TimeCurrent();
@@ -7817,7 +7815,6 @@ void ApplySettings(string json)
    g_raceCloseAllProfitEnabled = g_raceProfitTargetMode == "BASKET";
 
    g_zeroGridStepPrice = ZeroGridAllowedStep(JsonNumber(json, "zeroGridStepPrice", g_zeroGridStepPrice));
-   g_zeroGridLowVolatilityEnabled = JsonBool(json, "zeroGridLowVolatilityEnabled", g_zeroGridLowVolatilityEnabled);
    g_zeroGridLevelsPerSide = (int)MathMax(1.0,MathMin((double)ZERO_GRID_MAX_LEVELS,MathRound(JsonNumber(json, "zeroGridLevelsPerSide", g_zeroGridLevelsPerSide))));
    g_zeroGridBaseLot = ZERO_GRID_LOCKED_BASE_LOT;
    g_zeroGridMinNetProfitMoney = MathMax(0.01, JsonNumber(json, "zeroGridMinNetProfitMoney", g_zeroGridMinNetProfitMoney));
