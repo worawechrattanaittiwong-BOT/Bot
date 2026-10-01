@@ -107,7 +107,7 @@ Need $harvest 'g_racePerPositionProfitMoney' 'RACE per-position exit must use th
 Need $harvest 'targetComparableProfit + 0.00000001 < perPositionTarget' 'RACE must wait until each ticket/unit reaches its money target'
 Need $harvest 'baseVolume / positionVolume' 'Netting RACE must compare profit proportionally per configured-Lot unit'
 Need $ea 'RACE_DIRECTION_LOCK' 'RACE must keep mixed BUY/SELL baskets blocked'
-Need $raceAtr 'AverageTrueRangePoints(PERIOD_M5, g_atrPeriod)' 'RACE 1.1.0 stop must use M5 ATR for a closer scalp stop'
+Need $raceAtr 'AverageTrueRangePoints(PERIOD_M5,g_atrPeriod)' 'RACE 1.1.9 automatic stop must use M5 ATR'
 Need $raceStop 'RaceV2StructureInvalidPrice(direction)' 'RACE stop must use M5 structure as the primary invalidation reference'
 Need $raceStop 'double minDistancePoints' 'RACE stop must keep a minimum anti-noise distance'
 Need $raceStop 'double maxDistancePoints' 'RACE stop must keep an automatic maximum safety distance'
