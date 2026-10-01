@@ -3214,6 +3214,7 @@ export class BotController {
     booleanSetting("zeroGridLowVolatilityEnabled");
     numberSetting("zeroGridLevelsPerSide", 1, 30, true);
     numberSetting("zeroGridBaseLot", 0.01, 100);
+    clean.zeroGridBaseLot = 0.03;
     numberSetting("zeroGridMinNetProfitMoney", 0.01, maxAccountMoney);
     numberSetting("zeroGridCloseReserveMoney", 0, maxAccountMoney);
     booleanSetting("raceCloseAllProfitEnabled");
@@ -3458,7 +3459,7 @@ export class BotController {
     if (zeroGridSelected) {
       clean.zeroGridStepPrice = clean.zeroGridStepPrice === 2 ? 2 : 3;
       if (body.zeroGridLowVolatilityEnabled === undefined) clean.zeroGridLowVolatilityEnabled = false;
-      if (body.zeroGridBaseLot === undefined) clean.zeroGridBaseLot = 0.01;
+      clean.zeroGridBaseLot = 0.03;
       if (body.zeroGridMinNetProfitMoney === undefined) clean.zeroGridMinNetProfitMoney = 0.5;
       // ZERO closes exactly at zeroGridMinNetProfitMoney. Keep legacy reserve
       // field normalized to zero so old clients cannot add a hidden buffer.

@@ -232,7 +232,7 @@ const defaultSettings = {
   zeroGridStepPrice: 3,
   zeroGridLowVolatilityEnabled: false,
   zeroGridLevelsPerSide: 10,
-  zeroGridBaseLot: 0.01,
+  zeroGridBaseLot: 0.03,
   zeroGridMinNetProfitMoney: 0.5,
   zeroGridCloseReserveMoney: 0,
   entryMode: "AUTO_MOMENTUM"
@@ -397,7 +397,7 @@ export default function DashboardPage() {
           nextSettings.zeroGridStepPrice = Number(nextSettings.zeroGridStepPrice) === 2 ? 2 : 3;
           if (typeof nextSettings.zeroGridLowVolatilityEnabled !== "boolean") nextSettings.zeroGridLowVolatilityEnabled = false;
           nextSettings.zeroGridLevelsPerSide = Math.max(1, Math.min(30, Number(nextSettings.zeroGridLevelsPerSide) || 10));
-          if (!Number.isFinite(Number(nextSettings.zeroGridBaseLot)) || Number(nextSettings.zeroGridBaseLot) <= 0) nextSettings.zeroGridBaseLot = 0.01;
+          nextSettings.zeroGridBaseLot = 0.03;
           if (!Number.isFinite(Number(nextSettings.zeroGridMinNetProfitMoney)) || Number(nextSettings.zeroGridMinNetProfitMoney) <= 0.01) nextSettings.zeroGridMinNetProfitMoney = 0.5;
           nextSettings.zeroGridCloseReserveMoney = 0;
         }
@@ -3560,6 +3560,7 @@ export default function DashboardPage() {
       if (requestedControlMode === "ZERO_GRID") {
         payload.controlMode = "ZERO_GRID";
         payload.engineMode = "ZERO_GRID";
+        payload.zeroGridBaseLot = 0.03;
       } else if (requestedControlMode === "RACE") {
         payload.controlMode = "RACE";
         payload.engineMode = "RACE";
@@ -6280,7 +6281,7 @@ function BotSettingsModal(props:any) {
   };
   const activeSizingProfile = sizingProfiles[controlMode];
   const activeLot = controlMode === "ZERO_GRID"
-    ? Number(props.settings?.zeroGridBaseLot || 0.01)
+    ? 0.03
     : Math.max(0.01, Number(props.settings?.[activeSizingProfile?.lot] ?? props.settings?.lot ?? 0.01));
   const activeMaxPositions = controlMode === "FLIP_LOCK"
     ? 1
@@ -6455,7 +6456,7 @@ function BotSettingsModal(props:any) {
       props.onEdit?.("zeroGridStepPrice",Number(props.settings?.zeroGridStepPrice) === 2 ? 2 : 3);
       if (typeof props.settings?.zeroGridLowVolatilityEnabled !== "boolean") props.onEdit?.("zeroGridLowVolatilityEnabled",false);
       props.onEdit?.("zeroGridLevelsPerSide",Math.max(1,Math.min(30,Number(props.settings?.zeroGridLevelsPerSide)||10)));
-      if (!Number.isFinite(Number(props.settings?.zeroGridBaseLot)) || Number(props.settings?.zeroGridBaseLot) <= 0) props.onEdit?.("zeroGridBaseLot",0.01);
+      props.onEdit?.("zeroGridBaseLot",0.03);
       if (!Number.isFinite(Number(props.settings?.zeroGridMinNetProfitMoney)) || Number(props.settings?.zeroGridMinNetProfitMoney) <= 0.01) props.onEdit?.("zeroGridMinNetProfitMoney",0.5);
       props.onEdit?.("zeroGridCloseReserveMoney",0);
       return;
@@ -6629,7 +6630,7 @@ function BotSettingsModal(props:any) {
                       ? <div className="cc-bot-v2-field"><span><ScenovaIcon name="layers" size={17}/>ระยะห่างกริด</span><div className="cc-bot-v2-readonly-control"><b>0.30</b></div></div>
                       : <label className="cc-bot-v2-field"><span><ScenovaIcon name="layers" size={17}/>ระยะห่างกริด</span><select className="input" value={String(Number(props.settings.zeroGridStepPrice) === 2 ? 2 : 3)} onChange={e=>props.onEdit?.("zeroGridStepPrice",e.target.value)}><option value="2">2.00</option><option value="3">3.00</option></select></label>}
                     <label className="cc-bot-v2-field"><span><ScenovaIcon name="layers" size={17}/>จำนวนคำสั่งรอต่อฝั่ง</span><select className="input" value={String(Math.max(1,Math.min(30,Number(props.settings.zeroGridLevelsPerSide)||10)))} onChange={e=>props.onEdit?.("zeroGridLevelsPerSide",Number(e.target.value))}>{Array.from({length:30},(_,i)=>i+1).map(value=><option key={value} value={value}>{value} ระดับต่อฝั่ง</option>)}</select></label>
-                    <label className="cc-bot-v2-field"><span><ScenovaIcon name="lot" size={17}/>{zeroGridLowVolatilityEnabled?"Lot คงที่ต่อระดับ":"Lot เริ่มต้น"}</span><NumberInput value={props.settings.zeroGridBaseLot || 0.01} suffix="Lot" onCommit={(v:string)=>props.onEdit?.("zeroGridBaseLot",v)}/></label>
+                    <div className="cc-bot-v2-field"><span><ScenovaIcon name="lot" size={17}/>{zeroGridLowVolatilityEnabled?"Lot คงที่ต่อระดับ":"Lot เริ่มต้น"}</span><div className="cc-bot-v2-readonly-control"><b>0.03 Lot</b></div></div>
                     <label className="cc-bot-v2-field"><span><ScenovaIcon name="profit" size={17}/>เป้ากำไรสุทธิ</span><MoneyInput value={props.settings.zeroGridMinNetProfitMoney || 0.5} currency={accountCurrency} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.("zeroGridMinNetProfitMoney",v)}/></label>
                   </> : <>
                     <label className="cc-bot-v2-field"><span><ScenovaIcon name="trend" size={17}/>ทิศทาง</span><select className="input cc-bot-v19-two-thirds-control" value={entryMode} onChange={e=>props.onEdit?.("entryMode",e.target.value)}><option value="AUTO_MOMENTUM">อัตโนมัติ</option><option value="BUY_ONLY">BUY</option><option value="SELL_ONLY">SELL</option></select></label>
@@ -6702,7 +6703,7 @@ function BotSettingsModal(props:any) {
                 <div><dt>รูปแบบกริด</dt><dd>{zeroGridLowVolatilityEnabled?"ตลาดความผันผวนต่ำ":"กริดมาตรฐาน"}</dd></div>
                 <div><dt>คำสั่งรอ</dt><dd>{Math.max(1,Math.min(30,Number(props.settings.zeroGridLevelsPerSide)||10))} BUY + {Math.max(1,Math.min(30,Number(props.settings.zeroGridLevelsPerSide)||10))} SELL</dd></div>
                 <div><dt>ระยะห่างกริด</dt><dd>{zeroGridLowVolatilityEnabled?"0.30":(Number(props.settings.zeroGridStepPrice) === 2 ? "2.00" : "3.00")}</dd></div>
-                <div><dt>{zeroGridLowVolatilityEnabled?"Lot คงที่":"Lot เริ่มต้น"}</dt><dd>{Number(props.settings.zeroGridBaseLot||0.01).toFixed(2)} Lot</dd></div>
+                <div><dt>{zeroGridLowVolatilityEnabled?"Lot คงที่":"Lot เริ่มต้น"}</dt><dd>0.03 Lot</dd></div>
                 <div><dt>เป้ากำไรสุทธิ</dt><dd>{formatAccountMoney(props.settings.zeroGridMinNetProfitMoney||0.5,accountCurrency)} · ถึงแล้วปิดทันที</dd></div>
               </dl> : (
               <dl>

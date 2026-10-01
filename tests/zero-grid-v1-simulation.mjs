@@ -16,7 +16,8 @@ export function buildPendingPlan({ bid, ask, step = 3, baseLot = 0.03, levelsPer
   const orders = [];
   for (let level = 1; level <= levelsPerSide; level += 1) {
     const offset = effectiveStep * (level - 1);
-    const lot = lowVolatility ? baseLot : baseLot * level;
+    const lockedBaseLot = 0.03;
+    const lot = lowVolatility ? lockedBaseLot : lockedBaseLot * level;
     orders.push({ type: "BUY_STOP", level, lot, price: buyAnchor + offset });
     orders.push({ type: "SELL_STOP", level, lot, price: sellAnchor - offset });
   }
@@ -47,8 +48,8 @@ export function buildPendingPlan({ bid, ask, step = 3, baseLot = 0.03, levelsPer
   const sells = orders.filter((o) => o.type === "SELL_STOP");
   assert.deepEqual(buys.map((o) => Number(o.price.toFixed(2))), [4000.10, 4000.40, 4000.70]);
   assert.deepEqual(sells.map((o) => Number(o.price.toFixed(2))), [3999.90, 3999.60, 3999.30]);
-  assert.deepEqual(buys.map((o) => Number(o.lot.toFixed(2))), [0.01, 0.01, 0.01]);
-  assert.deepEqual(sells.map((o) => Number(o.lot.toFixed(2))), [0.01, 0.01, 0.01]);
+  assert.deepEqual(buys.map((o) => Number(o.lot.toFixed(2))), [0.03, 0.03, 0.03]);
+  assert.deepEqual(sells.map((o) => Number(o.lot.toFixed(2))), [0.03, 0.03, 0.03]);
 }
 
 {
@@ -108,3 +109,12 @@ assert.match(ea, /bool safeStopDrain\s*=\s*[\s\S]*g_state==STATE_SAFE_STOP[\s\S]
 assert.match(ea, /pending=ZeroGridPendingCount\(\);[\s\S]*if\(positions<=0 && pending<=0\)/, "ZERO Safe Stop must not mark the cycle flat while pending orders still belong to it");
 assert.match(ea, /for\(int level=1;level<=levels;level\+\+\)/, "flat ZERO must validate every configured level pair");
 console.log("ZERO GRID standard + low-volatility geometry, paired staging and real-net regression passed");
+
+assert.match(ea, /#define ZERO_GRID_LOCKED_BASE_LOT 0\.03/, "ZERO base lot must be hard-locked to 0.03");
+assert.match(ea, /#define ZERO_GRID_PENDING_REQUEST_GUARD_MS 10000/, "ZERO async duplicate guard must cover delayed broker acknowledgements");
+assert.match(ea, /#define ZERO_GRID_FLAT_CONFIRM_MS 1500/, "ZERO must require a stable flat window before rearm");
+assert.match(ea, /bool ZeroGridFlatConfirmedForReset\(\)/, "ZERO stable-flat confirmation helper must exist");
+assert.match(ea, /ZERO_GRID_EXISTING_CYCLE_GUARD/, "ZERO must hard-block a fresh cycle while old ZERO exposure still exists");
+assert.match(ea, /ZERO_GRID_WAIT_FLAT_CONFIRM/, "ZERO must wait through transient async flat snapshots");
+assert.match(web, /zeroGridBaseLot: 0\.03/, "ZERO UI default lot must be 0.03");
+assert.match(web, /<b>0\.03 Lot<\/b>/, "ZERO UI lot must be read-only at 0.03");

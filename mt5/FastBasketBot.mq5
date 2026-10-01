@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.1.2"
-#define SCENOVA_EA_VERSION "1.1.2"
-#define SCENOVA_PRODUCT_VERSION "1.1.2"
+#property version   "1.1.3"
+#define SCENOVA_EA_VERSION "1.1.3"
+#define SCENOVA_PRODUCT_VERSION "1.1.3"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_CONFIGURED_LOSS_ONLY_V1"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -191,10 +191,13 @@ input double          InpRacePerPositionProfitMoney = 0.50;
 // ZERO GRID is isolated from AUTO/RACE and requires an MT5 Hedging account.
 #define ZERO_GRID_MAX_LEVELS 30
 #define ZERO_GRID_DEFAULT_LEVELS 3
+#define ZERO_GRID_LOCKED_BASE_LOT 0.03
+#define ZERO_GRID_PENDING_REQUEST_GUARD_MS 10000
+#define ZERO_GRID_FLAT_CONFIRM_MS 1500
 input double          InpZeroGridStepPrice     = 3.0;
 input bool            InpZeroGridLowVolatilityEnabled = false;
 input int             InpZeroGridLevelsPerSide = ZERO_GRID_DEFAULT_LEVELS;
-input double          InpZeroGridBaseLot       = 0.01;
+input double          InpZeroGridBaseLot       = ZERO_GRID_LOCKED_BASE_LOT; // compatibility input; runtime is locked to 0.03
 input double          InpZeroGridMinNetProfitMoney = 0.50;
 input double          InpZeroGridCloseReserveMoney = 0.20;
 
@@ -334,7 +337,7 @@ bool   g_settingsSynchronized = false;
 double g_zeroGridStepPrice = 3.0;
 bool   g_zeroGridLowVolatilityEnabled = false;
 int    g_zeroGridLevelsPerSide = ZERO_GRID_DEFAULT_LEVELS;
-double g_zeroGridBaseLot = 0.01;
+double g_zeroGridBaseLot = ZERO_GRID_LOCKED_BASE_LOT;
 double g_zeroGridMinNetProfitMoney = 0.50;
 double g_zeroGridCloseReserveMoney = 0.20;
 double g_zeroGridCenter = 0.0;
@@ -342,6 +345,7 @@ double g_zeroGridStartEquity = 0.0;
 datetime g_zeroGridCycleStartedAt = 0;
 bool   g_zeroGridClosing = false;
 ulong  g_zeroGridLastExitBurstMs = 0;
+ulong  g_zeroGridFlatObservedMs = 0;
 ulong  g_zeroGridPendingBuyRequestMs[ZERO_GRID_MAX_LEVELS+1];
 ulong  g_zeroGridPendingSellRequestMs[ZERO_GRID_MAX_LEVELS+1];
 // V3 locks geometry for the lifetime of one cycle. Web setting changes are
@@ -1713,7 +1717,7 @@ int OnInit()
    g_zeroGridStepPrice = MathAbs(InpZeroGridStepPrice-2.0)<0.000001 ? 2.0 : 3.0;
    g_zeroGridLowVolatilityEnabled = InpZeroGridLowVolatilityEnabled;
    g_zeroGridLevelsPerSide = (int)MathMax(1.0,MathMin((double)ZERO_GRID_MAX_LEVELS,(double)InpZeroGridLevelsPerSide));
-   g_zeroGridBaseLot = MathMax(0.01, InpZeroGridBaseLot);
+   g_zeroGridBaseLot = ZERO_GRID_LOCKED_BASE_LOT;
    g_zeroGridMinNetProfitMoney = MathMax(0.01, InpZeroGridMinNetProfitMoney);
    g_zeroGridCloseReserveMoney = MathMax(0.0, InpZeroGridCloseReserveMoney);
    g_adaptiveEngine = InpAdaptiveEngine;
@@ -2144,6 +2148,7 @@ void ResetZeroGridCycleState()
    g_zeroGridCycleStartedAt=0;
    g_zeroGridClosing=false;
    g_zeroGridLastExitBurstMs=0;
+   g_zeroGridFlatObservedMs=0;
    ArrayInitialize(g_zeroGridPendingBuyRequestMs,0);
    ArrayInitialize(g_zeroGridPendingSellRequestMs,0);
    g_zeroGridCycleStepPrice=0.0;
@@ -2197,6 +2202,25 @@ int ZeroGridPendingCount()
       if(IsZeroGridComment(OrderGetString(ORDER_COMMENT))) count++;
    }
    return count;
+}
+
+bool ZeroGridFlatConfirmedForReset()
+{
+   int positions=ZeroGridPositionCount();
+   int pending=ZeroGridPendingCount();
+   if(positions>0 || pending>0)
+   {
+      g_zeroGridFlatObservedMs=0;
+      return false;
+   }
+
+   ulong nowMs=GetTickCount64();
+   if(g_zeroGridFlatObservedMs==0 || nowMs<g_zeroGridFlatObservedMs)
+   {
+      g_zeroGridFlatObservedMs=nowMs;
+      return false;
+   }
+   return nowMs-g_zeroGridFlatObservedMs>=ZERO_GRID_FLAT_CONFIRM_MS;
 }
 
 int ZeroGridForeignPositionCount()
@@ -2568,7 +2592,7 @@ bool ZeroGridPendingRequestInFlight(bool buySide,int level)
       return false;
    }
    ulong nowMs=GetTickCount64();
-   if(nowMs>=sentAt && nowMs-sentAt<1500)
+   if(nowMs>=sentAt && nowMs-sentAt<ZERO_GRID_PENDING_REQUEST_GUARD_MS)
       return true;
    if(buySide) g_zeroGridPendingBuyRequestMs[level]=0;
    else g_zeroGridPendingSellRequestMs[level]=0;
@@ -3059,6 +3083,17 @@ bool StartZeroGridCycle()
    }
 
    LoadZeroGridCycleState();
+   int ownedPositions=ZeroGridPositionCount();
+   int ownedPending=ZeroGridPendingCount();
+   if(g_zeroGridCenter<=0.0 && (ownedPositions>0 || ownedPending>0))
+   {
+      // Never create a second ZERO cycle while MT5 still exposes any order or
+      // position owned by the previous cycle. This also covers the async window
+      // where persisted center state is missing/stale after a restart.
+      g_zeroGridFlatObservedMs=0;
+      g_executionStatus="ZERO_GRID_EXISTING_CYCLE_GUARD";
+      return true;
+   }
    if(g_zeroGridCenter<=0.0 && ZeroGridForeignPositionCount()>0)
    {
       g_executionStatus="ZERO_GRID_FOREIGN_POSITION_BLOCK";
@@ -3085,10 +3120,11 @@ bool StartZeroGridCycle()
       g_zeroGridCycleStartedAt=TimeCurrent();
       g_zeroGridClosing=false;
       g_zeroGridLastExitBurstMs=0;
+      g_zeroGridFlatObservedMs=0;
       g_zeroGridCycleLowVolatility=g_zeroGridLowVolatilityEnabled ? 1 : 0;
       g_zeroGridCycleStepPrice=MathMax(ZeroGridTickSize(),g_zeroGridLowVolatilityEnabled ? 0.30 : ZeroGridAllowedStep(g_zeroGridStepPrice));
       g_zeroGridCycleLevelsPerSide=(int)MathMax(1.0,MathMin((double)ZERO_GRID_MAX_LEVELS,(double)g_zeroGridLevelsPerSide));
-      g_zeroGridCycleBaseLot=MathMax(0.01,g_zeroGridBaseLot);
+      g_zeroGridCycleBaseLot=ZERO_GRID_LOCKED_BASE_LOT;
       g_orderWindowStart=TimeCurrent();
       g_ordersInWindow=0;
       SaveZeroGridCycleState();
@@ -3112,7 +3148,7 @@ bool ManageZeroGrid()
    if(g_zeroGridClosing)
    {
       ZeroGridClosePositions();
-      if(ZeroGridPositionCount()==0 && ZeroGridPendingCount()==0)
+      if(ZeroGridFlatConfirmedForReset())
       {
          ResetZeroGridCycleState();
          if(ZeroGridModeEnabled() && g_state==STATE_RUNNING && g_access &&
@@ -3123,6 +3159,8 @@ bool ManageZeroGrid()
          }
          g_executionStatus="ZERO_GRID_STOPPED_FLAT";
       }
+      else if(ZeroGridPositionCount()==0 && ZeroGridPendingCount()==0)
+         g_executionStatus="ZERO_GRID_WAIT_FLAT_CONFIRM";
       return true;
    }
 
@@ -3144,6 +3182,11 @@ bool ManageZeroGrid()
       pending=ZeroGridPendingCount();
       if(positions<=0 && pending<=0)
       {
+         if(!ZeroGridFlatConfirmedForReset())
+         {
+            g_executionStatus="ZERO_GRID_WAIT_FLAT_CONFIRM";
+            return true;
+         }
          ResetZeroGridCycleState();
          g_executionStatus="ZERO_GRID_STOPPED_FLAT";
          return true;
@@ -3178,13 +3221,22 @@ bool ManageZeroGrid()
       return true;
    }
 
-   // Fresh runtime or a fully empty cycle: start/recenter immediately.
-   if(g_zeroGridCenter<=0.0 || (positions==0 && pending==0))
+   // A genuinely fresh runtime may start immediately. An already-active cycle
+   // must remain continuously flat before its state is reset/rearmed; async STOP
+   // fills can briefly make OrdersTotal/PositionsTotal both read zero.
+   if(g_zeroGridCenter<=0.0)
+      return StartZeroGridCycle();
+   if(positions==0 && pending==0)
    {
-      if(positions==0 && pending==0 && g_zeroGridCenter>0.0)
-         ResetZeroGridCycleState();
+      if(!ZeroGridFlatConfirmedForReset())
+      {
+         g_executionStatus="ZERO_GRID_WAIT_FLAT_CONFIRM";
+         return true;
+      }
+      ResetZeroGridCycleState();
       return StartZeroGridCycle();
    }
+   g_zeroGridFlatObservedMs=0;
 
    // The only trading decision inside ZERO: close the ZERO cycle when its own
    // configured real net-profit target is reached. No market opinion is used.
@@ -3194,12 +3246,14 @@ bool ManageZeroGrid()
       SaveZeroGridCycleState();
       g_executionStatus="ZERO_GRID_CLOSING_PROFIT";
       ZeroGridClosePositions();
-      if(ZeroGridPositionCount()==0 && ZeroGridPendingCount()==0)
+      if(ZeroGridFlatConfirmedForReset())
       {
          ResetZeroGridCycleState();
          g_executionStatus="ZERO_GRID_REARMING";
          return StartZeroGridCycle();
       }
+      if(ZeroGridPositionCount()==0 && ZeroGridPendingCount()==0)
+         g_executionStatus="ZERO_GRID_WAIT_FLAT_CONFIRM";
       return true;
    }
 
@@ -4511,12 +4565,11 @@ bool FastProfitClosePriority()
    if(g_zeroGridClosing)
    {
       ZeroGridClosePositions();
-      if(ZeroGridPositionCount()==0 && ZeroGridPendingCount()==0)
+      if(ZeroGridFlatConfirmedForReset())
       {
-         // Async ZERO exits can deliver DEAL_ADD before MT5 removes the final
-         // position from PositionsTotal(), so the transaction callback may miss
-         // the exact flat moment. Finalize the active Basket here, where flat is
-         // confirmed, before resetting the ZERO cycle.
+         // Async order/deal visibility can briefly report an empty snapshot.
+         // Finalize/reset only after the ZERO-owned account view stayed flat for
+         // the confirmation window, so a second cycle can never overlap the first.
          FinalizeBasketJournal();
          ResetZeroGridCycleState();
          g_executionStatus=
@@ -4525,6 +4578,8 @@ bool FastProfitClosePriority()
             : "ZERO_GRID_STOPPED_FLAT";
          return false;
       }
+      if(ZeroGridPositionCount()==0 && ZeroGridPendingCount()==0)
+         g_executionStatus="ZERO_GRID_WAIT_FLAT_CONFIRM";
       return true;
    }
 
@@ -7761,7 +7816,7 @@ void ApplySettings(string json)
    g_zeroGridStepPrice = ZeroGridAllowedStep(JsonNumber(json, "zeroGridStepPrice", g_zeroGridStepPrice));
    g_zeroGridLowVolatilityEnabled = JsonBool(json, "zeroGridLowVolatilityEnabled", g_zeroGridLowVolatilityEnabled);
    g_zeroGridLevelsPerSide = (int)MathMax(1.0,MathMin((double)ZERO_GRID_MAX_LEVELS,MathRound(JsonNumber(json, "zeroGridLevelsPerSide", g_zeroGridLevelsPerSide))));
-   g_zeroGridBaseLot = MathMax(0.01, JsonNumber(json, "zeroGridBaseLot", g_zeroGridBaseLot));
+   g_zeroGridBaseLot = ZERO_GRID_LOCKED_BASE_LOT;
    g_zeroGridMinNetProfitMoney = MathMax(0.01, JsonNumber(json, "zeroGridMinNetProfitMoney", g_zeroGridMinNetProfitMoney));
    g_zeroGridCloseReserveMoney = MathMax(0.0, JsonNumber(json, "zeroGridCloseReserveMoney", g_zeroGridCloseReserveMoney));
 
