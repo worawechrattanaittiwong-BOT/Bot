@@ -163,6 +163,20 @@ if($page.Contains('Low Volatility</small>')) { throw 'ZERO GRID embedded control
 if($page.Contains('เลือกได้ 1–30 ระดับต่อฝั่ง · รอ EA Sync หลังบันทึก')) { throw 'ZERO GRID level helper copy must be removed' }
 if($page.Contains('ใช้ Lot เท่ากันทุกระดับ')) { throw 'ZERO GRID lot helper copy must be removed' }
 
+Need $page 'TRADING MODE GUIDE' 'Trading mode guide modal missing'
+Need $page 'Adaptive Directional · ไม่ใช่ Martingale' 'AUTO guide must disclose its non-Martingale strategy type'
+Need $page 'Momentum / Fast Entry · ไม่ใช่ Martingale' 'RACE guide must disclose its non-Martingale strategy type'
+Need $page 'Single Position + Trailing Stop · ไม่ใช่ Martingale' 'FLIP LOCK guide must disclose trailing and non-Martingale behavior'
+Need $page 'Hedging Grid + Progressive Lot · ไม่ใช่ Classic Martingale' 'ZERO GRID guide must disclose progressive-grid behavior'
+Need $page 'Normal Grid เพิ่ม Lot แบบเชิงเส้นตามระดับ (Base Lot × Level)' 'ZERO GRID guide must explain linear level sizing'
+Need $page 'minimum:"500 USD"' 'ZERO GRID capital guide must keep the requested 500 USD reference minimum'
+Need $page 'minimum:"10 USD"' 'Capital guide must include the requested 10 USD low-capital reference where configured'
+Need $page 'comfortable:"100+ USD"' 'RACE capital guide must include the requested 100 USD suitable reference'
+Need $page 'cc-mode-guide-capital-tiers' 'Trading mode guide capital tiers missing'
+Need $css '.cc-mode-guide-system{' 'Trading mode strategy summary styling missing'
+Need $css '.cc-mode-guide-capital{' 'Trading mode capital guide styling missing'
+Need $css '.cc-mode-guide-capital-tiers{' 'Trading mode capital tiers styling missing'
+
 # Final CSS owner contract: verify only the currently authoritative layout layers.
 Need $css 'Control Center V55 · mobile readable Bot Settings height' 'Current mobile readable settings layer missing'
 Need $css 'Control Center V56 · desktop three-card breathing room' 'Current desktop three-card layout layer missing'
