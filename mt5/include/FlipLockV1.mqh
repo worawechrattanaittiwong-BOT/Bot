@@ -12,7 +12,7 @@
 #define FLIP_LOCK_UNARMED_RESTART_COOLDOWN_SECONDS 5
 #define FLIP_LOCK_PENDING_SYNC_MIN_MS 120
 #define FLIP_LOCK_PROFIT_TIGHTEN_ARM_MONEY 0.50
-#define FLIP_LOCK_PROFIT_LOCK_MONEY 0.30
+#define FLIP_LOCK_NET_PROFIT_BUFFER_MONEY 0.05
 
 int g_flipLockDirection=0;
 double g_flipLockPeakPrice=0.0;
@@ -26,6 +26,9 @@ string g_flipLockReason="IDLE";
 ulong g_flipLockLastStopSyncMs=0;
 int g_flipLockPendingDirection=0;
 double g_flipLockPendingTriggerPrice=0.0;
+ulong g_flipLockCostPositionId=0;
+double g_flipLockCostPositionVolume=0.0;
+double g_flipLockTransitionCostReserveMoney=0.0;
 
 bool FlipLockModeEnabled()
 {
@@ -59,6 +62,9 @@ void FlipLockResetTracking(const bool resetCounter)
    g_flipLockLastStopSyncMs=0;
    g_flipLockPendingDirection=0;
    g_flipLockPendingTriggerPrice=0.0;
+   g_flipLockCostPositionId=0;
+   g_flipLockCostPositionVolume=0.0;
+   g_flipLockTransitionCostReserveMoney=0.0;
    g_flipLockReason="IDLE";
    if(resetCounter) g_flipLockFlipCount=0;
 }
@@ -100,18 +106,89 @@ double FlipLockTrailDistancePoints()
    );
 }
 
-double FlipLockProfitLockTriggerPrice(
+double FlipLockTransitionCostReserve(
+   const ulong positionTicket,
+   const double positionVolume
+)
+{
+   if(positionTicket==0 || positionVolume<=0.0)
+      return FLIP_LOCK_NET_PROFIT_BUFFER_MONEY;
+   if(!PositionSelectByTicket(positionTicket))
+      return FLIP_LOCK_NET_PROFIT_BUFFER_MONEY;
+
+   ulong positionId=(ulong)PositionGetInteger(POSITION_IDENTIFIER);
+   if(positionId>0 &&
+      g_flipLockCostPositionId==positionId &&
+      MathAbs(g_flipLockCostPositionVolume-positionVolume)<0.0000001)
+      return g_flipLockTransitionCostReserveMoney;
+
+   double entryCost=0.0;
+   double entryVolume=0.0;
+   if(positionId>0 && HistorySelectByPosition(positionId))
+   {
+      int totalDeals=HistoryDealsTotal();
+      for(int i=0;i<totalDeals;i++)
+      {
+         ulong deal=HistoryDealGetTicket(i);
+         if(deal==0) continue;
+         if(HistoryDealGetString(deal,DEAL_SYMBOL)!=_Symbol) continue;
+         if(HistoryDealGetInteger(deal,DEAL_MAGIC)!=InpMagic) continue;
+
+         long entry=HistoryDealGetInteger(deal,DEAL_ENTRY);
+         if(entry!=DEAL_ENTRY_IN && entry!=DEAL_ENTRY_INOUT) continue;
+
+         double dealVolume=HistoryDealGetDouble(deal,DEAL_VOLUME);
+         if(dealVolume<=0.0) continue;
+         entryVolume+=dealVolume;
+         entryCost+=MathAbs(HistoryDealGetDouble(deal,DEAL_COMMISSION));
+         entryCost+=MathAbs(HistoryDealGetDouble(deal,DEAL_FEE));
+      }
+   }
+
+   double perLotSideCommission=
+      entryVolume>0.0 ? entryCost/entryVolume : 0.0;
+   double currentEntryCommission=perLotSideCommission*positionVolume;
+   double estimatedCloseCommission=perLotSideCommission*positionVolume;
+   double estimatedNextEntryCommission=perLotSideCommission*positionVolume;
+   double nextLegSpreadReserve=CurrentSpreadCost(positionVolume);
+   double negativeSwapReserve=MathMax(
+      0.0,
+      -PositionGetDouble(POSITION_SWAP)
+   );
+
+   // Reserve the costs already paid on this leg plus the costs that can arrive
+   // when the opposite pending order hands control to the next FLIP leg.
+   // Spread of the current leg is already reflected in POSITION_PROFIT.
+   double reserve=
+      currentEntryCommission+
+      estimatedCloseCommission+
+      estimatedNextEntryCommission+
+      nextLegSpreadReserve+
+      negativeSwapReserve+
+      FLIP_LOCK_NET_PROFIT_BUFFER_MONEY;
+
+   g_flipLockCostPositionId=positionId;
+   g_flipLockCostPositionVolume=positionVolume;
+   g_flipLockTransitionCostReserveMoney=MathMax(
+      FLIP_LOCK_NET_PROFIT_BUFFER_MONEY,
+      reserve
+   );
+   return g_flipLockTransitionCostReserveMoney;
+}
+
+double FlipLockBreakEvenTriggerPrice(
+   const ulong positionTicket,
    const int direction,
    const double positionVolume,
    const MqlTick &tick
 )
 {
-   if(direction==0 || positionVolume<=0.0)
+   if(positionTicket==0 || direction==0 || positionVolume<=0.0)
+      return 0.0;
+   if(!PositionSelectByTicket(positionTicket))
       return 0.0;
 
-   // Do not tighten the baton while the live FLIP leg is flat or losing.
-   // Once displayed floating profit reaches +0.50 account currency, move the
-   // opposite STOP toward a price that still leaves about +0.30 if triggered.
+   // Before +0.50 floating profit, FLIP behaves exactly as before.
    double liveProfit=PositionGetDouble(POSITION_PROFIT);
    if(liveProfit<FLIP_LOCK_PROFIT_TIGHTEN_ARM_MONEY)
       return 0.0;
@@ -124,7 +201,10 @@ double FlipLockProfitLockTriggerPrice(
       (direction<0 && currentPrice>=openPrice))
       return 0.0;
 
+   double requiredGrossProfit=
+      FlipLockTransitionCostReserve(positionTicket,positionVolume);
    ENUM_ORDER_TYPE liveType=direction>0 ? ORDER_TYPE_BUY : ORDER_TYPE_SELL;
+
    double currentCalculatedProfit=0.0;
    if(!OrderCalcProfit(
          liveType,
@@ -134,12 +214,11 @@ double FlipLockProfitLockTriggerPrice(
          currentPrice,
          currentCalculatedProfit
       ) ||
-      currentCalculatedProfit<FLIP_LOCK_PROFIT_LOCK_MONEY)
+      currentCalculatedProfit<requiredGrossProfit)
       return 0.0;
 
-   // Solve the executable price that corresponds to +0.30 account currency.
-   // Profit is monotonic between entry and the current favorable price, so a
-   // short binary search works across symbols without hard-coding tick value.
+   // Solve the first executable price whose gross P/L covers known entry costs,
+   // estimated close/next-entry commission, next-leg spread and a small buffer.
    double low=0.0;
    double high=1.0;
    for(int i=0;i<28;i++)
@@ -157,7 +236,7 @@ double FlipLockProfitLockTriggerPrice(
          ))
          return 0.0;
 
-      if(testProfit<FLIP_LOCK_PROFIT_LOCK_MONEY)
+      if(testProfit<requiredGrossProfit)
          low=mid;
       else
          high=mid;
@@ -165,9 +244,7 @@ double FlipLockProfitLockTriggerPrice(
 
    double lockPrice=openPrice+(currentPrice-openPrice)*high;
 
-   // Round toward MORE protected profit first: BUY locks round upward, SELL
-   // locks round downward. Normal pending-price rounding does the opposite
-   // because it is designed only to preserve distance from market.
+   // Round toward MORE protected profit first.
    double tickSize=SymbolTickSizeNow();
    double units=lockPrice/tickSize;
    units=direction>0
@@ -180,9 +257,8 @@ double FlipLockProfitLockTriggerPrice(
 
    double brokerMinimum=FlipLockBrokerMinDistancePoints()*_Point;
 
-   // Pending STOP still has to respect the broker's live minimum distance.
-   // If the legal broker boundary would reduce protection below +0.30, keep
-   // the wider ATR baton until price moves far enough to protect the target.
+   // Respect broker stop/freeze distance. If the legal boundary cannot yet
+   // cover all reserved costs, keep the original ATR baton until it can.
    if(direction>0)
    {
       double maxLegal=NormalizeTargetPriceToTick(
@@ -212,7 +288,7 @@ double FlipLockProfitLockTriggerPrice(
          lockPrice,
          lockedCalculatedProfit
       ) ||
-      lockedCalculatedProfit+0.0001<FLIP_LOCK_PROFIT_LOCK_MONEY)
+      lockedCalculatedProfit+0.0001<requiredGrossProfit)
       return 0.0;
 
    return lockPrice;
@@ -514,6 +590,7 @@ bool FlipLockOpenStarter(const int forcedDirection=0)
 }
 
 double FlipLockCandidateTrigger(
+   const ulong positionTicket,
    const int direction,
    const double positionVolume,
    const MqlTick &tick
@@ -528,13 +605,20 @@ double FlipLockCandidateTrigger(
       : tick.ask+distancePoints*_Point;
    candidate=NormalizeTargetPriceToTick(candidate,-direction);
 
-   // Losing/flat legs keep the wider ATR baton. After +0.50 floating profit,
-   // tighten only if the broker can legally protect roughly +0.30.
-   double profitLock=FlipLockProfitLockTriggerPrice(direction,positionVolume,tick);
-   if(profitLock>0.0)
+   // Flat/losing legs keep the original ATR/spread baton. After +0.50 floating
+   // profit, add a cost-aware break-even floor. As price keeps running, the
+   // normal ATR candidate naturally overtakes this floor and resumes the
+   // original trailing distance; the trigger is still never allowed to loosen.
+   double breakEvenLock=FlipLockBreakEvenTriggerPrice(
+      positionTicket,
+      direction,
+      positionVolume,
+      tick
+   );
+   if(breakEvenLock>0.0)
       candidate=direction>0
-         ? MathMax(candidate,profitLock)
-         : MathMin(candidate,profitLock);
+         ? MathMax(candidate,breakEvenLock)
+         : MathMin(candidate,breakEvenLock);
 
    return NormalizeTargetPriceToTick(candidate,-direction);
 }
@@ -558,7 +642,12 @@ bool FlipLockSyncBaton(
    if(!PositionSelectByTicket(positionTicket)) return false;
 
    int pendingDirection=-direction;
-   double candidate=FlipLockCandidateTrigger(direction,positionVolume,tick);
+   double candidate=FlipLockCandidateTrigger(
+      positionTicket,
+      direction,
+      positionVolume,
+      tick
+   );
    if(candidate<=0.0 || !FlipLockTriggerIsLegal(direction,candidate,tick))
    {
       g_flipLockReason="WAIT_M1_PENDING_DISTANCE";
@@ -879,6 +968,9 @@ void FlipLockManage()
       g_flipLockPendingTriggerPrice=0.0;
       g_flipLockArmed=false;
       g_flipLockLastStopSyncMs=0;
+      g_flipLockCostPositionId=0;
+      g_flipLockCostPositionVolume=0.0;
+      g_flipLockTransitionCostReserveMoney=0.0;
    }
 
    if(direction>0)
