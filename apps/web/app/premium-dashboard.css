@@ -239,7 +239,7 @@
 .cc-bot-v2-embedded.is-locked .cc-bot-v2-body{position:relative}
 .cc-bot-v2-embedded.is-locked .cc-bot-v2-body input,
 .cc-bot-v2-embedded.is-locked .cc-bot-v2-body select,
-.cc-bot-v2-embedded.is-locked .cc-bot-v2-body button{pointer-events:none!important}
+.cc-bot-v2-embedded.is-locked .cc-bot-v2-body button:not(.cc-mode-guide-alert){pointer-events:none!important}
 
 
 
@@ -5664,32 +5664,28 @@
     filter:drop-shadow(0 0 6px rgba(239,51,78,.34))!important;
   }
 
-  /* The 10 / 25 / 10 risk controls are the desktop reference styling the user
-     already approved. Preserve their sizing and breathing room. */
+  /* Risk rows follow the same desktop row rhythm as the MANUAL profit target:
+     no extra row gap and the same 34px control height, so the amount fields
+     stay vertically centered and clear of the divider in AUTO / RACE / FLIP LOCK. */
   .cc-v19-settings-card .cc-bot-v2-limit-grid{
-    grid-auto-rows:52px!important;
-    gap:10px!important;
-    row-gap:10px!important;
-  }
-  .cc-v19-settings-card .cc-bot-v2-limit-grid>div{
-    block-size:52px!important;
-    height:52px!important;
-    min-height:52px!important;
-    max-height:52px!important;
-    padding:6px 2px!important;
+    gap:0!important;
+    row-gap:0!important;
   }
   .cc-v19-settings-card .cc-bot-v2-limit-grid .money-input-shell,
   .cc-v19-settings-card .cc-bot-v2-limit-grid .number-input-shell{
-    height:42px!important;
-    min-height:42px!important;
-    max-height:42px!important;
+    height:var(--desktop-form-control-h)!important;
+    min-height:var(--desktop-form-control-h)!important;
+    max-height:var(--desktop-form-control-h)!important;
     margin:0!important;
   }
   .cc-v19-settings-card .cc-bot-v2-limit-grid .money-input-shell .input,
   .cc-v19-settings-card .cc-bot-v2-limit-grid .number-input-shell .input{
-    height:40px!important;
-    min-height:40px!important;
-    max-height:40px!important;
+    height:32px!important;
+    min-height:32px!important;
+    max-height:32px!important;
+    line-height:32px!important;
+    padding-top:0!important;
+    padding-bottom:0!important;
   }
 }
 /* ===== /Control Center V58 · Bot Settings visual polish only ===== */
