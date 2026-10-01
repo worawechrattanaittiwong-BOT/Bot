@@ -91,3 +91,13 @@ foreach ($required in @(
 }
 
 Write-Host 'Trading Fleet Monitor read-only scope + UI contract PASS'
+
+
+if ($web.Contains('<ScenovaBrand className={styles.mobileLogo}/>')) {
+  throw 'Fleet Monitor must not render a duplicate mobile brand beside the shared mobile top bar'
+}
+if (-not $css.Contains('.mobileHead{') -or -not $css.Contains('display:block;') -or -not $css.Contains('min-height:58px;')) {
+  throw 'Fleet Monitor must reserve exactly one shared mobile top bar row'
+}
+
+Write-Host 'Fleet Monitor mobile header overlap contract PASS'
