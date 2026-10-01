@@ -4395,7 +4395,17 @@ bool StartRaceCycle(double momentum)
    g_burstActive = false;
    g_burstNeedsRearm = false;
    g_burstTargetPositions = 0;
-   return ProcessRaceFill(direction);
+
+   bool started=ProcessRaceFill(direction);
+   if(!started &&
+      BasketPositionCount()==0 &&
+      g_raceVolumeWarmupStartedAt>0 &&
+      signalElapsed>=RACE_SIGNAL_MAX_WAIT_SECONDS)
+   {
+      RaceResetVolumeWindow(now);
+      g_executionStatus="RACE_SIGNAL_TIMEOUT_RESET";
+   }
+   return started;
 }
 
 bool ManageRaceBasket(double momentum)
