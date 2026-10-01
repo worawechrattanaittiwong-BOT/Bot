@@ -228,7 +228,7 @@ double FlipLockMinimumNetProfitStopPrice(
    double floorPrice=direction>0
       ? openPrice+requiredTicks*tickSize
       : openPrice-requiredTicks*tickSize;
-   return NormalizeStopPriceToTick(floorPrice,direction);
+   return NormalizeTargetPriceToTick(floorPrice,direction);
 }
 
 bool FlipLockProfitLockReady(
