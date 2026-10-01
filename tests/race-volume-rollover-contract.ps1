@@ -19,6 +19,8 @@ function Need([string]$text,[string]$needle,[string]$message) {
 
 $ea = Read-Text 'mt5/FastBasketBot.mq5'
 $raceLossV2 = Read-Text 'mt5/include/RaceLossV2.mqh'
+# Ignore explanatory // comments when checking forbidden executable calls.
+$raceLossV2Code = $raceLossV2 -replace '(?m)//[^\r\n]*', ''
 $raceReentryV1 = Read-Text 'mt5/include/RaceReentryV1.mqh'
 $raceNewsV1 = Read-Text 'mt5/include/RaceNewsV1.mqh'
 $raceTelemetryV1 = Read-Text 'mt5/include/RaceTelemetryV1.mqh'
@@ -94,10 +96,10 @@ Need $wrong 'RACE_SOFT_EXIT_STRUCTURE_FLOW' 'RACE confirmed structure+flow soft-
 if($wrong.Contains('RACE_DISTANCE_ARMED')){
   throw 'Obsolete distance-only RACE loss-close logic must remain disabled'
 }
-if($raceLossV2.Contains('RaceWrongDirectionConfirmed(') -or $raceLossV2.Contains('"REVERSAL_EXIT"') -or $raceLossV2.Contains('"EXIT_CANDIDATE"')){
+if($raceLossV2Code.Contains('RaceWrongDirectionConfirmed(') -or $raceLossV2Code.Contains('"REVERSAL_EXIT"') -or $raceLossV2Code.Contains('"EXIT_CANDIDATE"')){
   throw 'RACE Loss V2 must classify/hold only and never emit a closing state'
 }
-if($raceLossV2.Contains('RaceResetExitCandidate()')){
+if($raceLossV2Code.Contains('RaceResetExitCandidate()')){
   throw 'RACE Loss V2 classifier must not reset the 5-8 second soft-exit confirmation clock'
 }
 Need $raceLossV2 'RACE_STRUCTURE_INVALID' 'RACE Loss V2 structure hold state missing'
