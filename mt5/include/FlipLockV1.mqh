@@ -164,17 +164,42 @@ double FlipLockProfitLockTriggerPrice(
    }
 
    double lockPrice=openPrice+(currentPrice-openPrice)*high;
+
+   // Round toward MORE protected profit first: BUY locks round upward, SELL
+   // locks round downward. Normal pending-price rounding does the opposite
+   // because it is designed only to preserve distance from market.
+   double tickSize=SymbolTickSizeNow();
+   double units=lockPrice/tickSize;
+   units=direction>0
+      ? MathCeil(units-1e-10)
+      : MathFloor(units+1e-10);
+   lockPrice=NormalizeDouble(
+      units*tickSize,
+      (int)SymbolInfoInteger(_Symbol,SYMBOL_DIGITS)
+   );
+
    double brokerMinimum=FlipLockBrokerMinDistancePoints()*_Point;
 
    // Pending STOP still has to respect the broker's live minimum distance.
-   // If +0.30 cannot be protected legally yet, keep the normal ATR baton until
-   // price moves far enough instead of claiming a lock that is not achievable.
+   // If the legal broker boundary would reduce protection below +0.30, keep
+   // the wider ATR baton until price moves far enough to protect the target.
    if(direction>0)
-      lockPrice=MathMin(lockPrice,tick.bid-brokerMinimum);
+   {
+      double maxLegal=NormalizeTargetPriceToTick(
+         tick.bid-brokerMinimum,
+         -1
+      );
+      lockPrice=MathMin(lockPrice,maxLegal);
+   }
    else
-      lockPrice=MathMax(lockPrice,tick.ask+brokerMinimum);
+   {
+      double minLegal=NormalizeTargetPriceToTick(
+         tick.ask+brokerMinimum,
+         1
+      );
+      lockPrice=MathMax(lockPrice,minLegal);
+   }
 
-   lockPrice=NormalizeTargetPriceToTick(lockPrice,-direction);
    if(lockPrice<=0.0)
       return 0.0;
 
