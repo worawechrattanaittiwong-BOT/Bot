@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 
 const read = (path) => fs.readFileSync(path, "utf8");
 
@@ -63,7 +64,34 @@ assert.match(ea, /if\(closeConfirmed && commandCanAck\)[\s\S]*?AckCommand\(comma
 const eaVersion = ea.match(/#define SCENOVA_EA_VERSION "([^"]+)"/)?.[1];
 const apiEaVersion = release.match(/DEFAULT_EA_VERSION = "([^"]+)"/)?.[1];
 assert.equal(eaVersion, apiEaVersion, "EA source and API promoted EA version must match");
-assert.equal(eaManifest.eaVersion, eaVersion, "Published EA artifact manifest must match EA source version");
+
+// Build MT5 EA publishes EX5 + manifest only after the source commit reaches
+// main. During an EA source PR, the checked-in artifact legitimately remains
+// the previous internally-consistent release. Mirror release-version-consistency
+// instead of forcing a fake manifest version onto the old EX5.
+let eaSourceChanged = false;
+try {
+  const changed = execFileSync(
+    "git",
+    ["diff", "--name-only", "HEAD^", "HEAD", "--", "mt5/FastBasketBot.mq5", "mt5/include"],
+    { encoding: "utf8" }
+  );
+  eaSourceChanged = changed
+    .split(/\r?\n/)
+    .some((path) => /^mt5\/(FastBasketBot\.mq5|include\/)/.test(path));
+} catch {
+  eaSourceChanged = false;
+}
+if (eaManifest.eaVersion !== eaVersion) {
+  assert.equal(
+    eaSourceChanged,
+    true,
+    "Published EA artifact manifest may lag only on an EA source change awaiting the dedicated builder"
+  );
+  console.log(
+    `EA artifact publication pending: source=${eaVersion} manifest=${eaManifest.eaVersion}`
+  );
+}
 
 const workerVersion = workerLoop.match(/Version = "([^"]+)"/)?.[1];
 const workerProjectVersion = workerProject.match(/<Version>([^<]+)<\/Version>/)?.[1];
