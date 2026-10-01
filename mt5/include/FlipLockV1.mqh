@@ -11,6 +11,8 @@
 #define FLIP_LOCK_LIVE_COMMENT "SCNFlipLockLive"
 #define FLIP_LOCK_UNARMED_RESTART_COOLDOWN_SECONDS 5
 #define FLIP_LOCK_PENDING_SYNC_MIN_MS 120
+#define FLIP_LOCK_PROFIT_TIGHTEN_ARM_MONEY 0.50
+#define FLIP_LOCK_PROFIT_LOCK_MONEY 0.30
 
 int g_flipLockDirection=0;
 double g_flipLockPeakPrice=0.0;
@@ -96,6 +98,99 @@ double FlipLockTrailDistancePoints()
       FlipLockBrokerMinDistancePoints(),
       MathMax(spread*3.0,atr*0.45)
    );
+}
+
+double FlipLockProfitLockTriggerPrice(
+   const int direction,
+   const double positionVolume,
+   const MqlTick &tick
+)
+{
+   if(direction==0 || positionVolume<=0.0)
+      return 0.0;
+
+   // Do not tighten the baton while the live FLIP leg is flat or losing.
+   // Once displayed floating profit reaches +0.50 account currency, move the
+   // opposite STOP toward a price that still leaves about +0.30 if triggered.
+   double liveProfit=PositionGetDouble(POSITION_PROFIT);
+   if(liveProfit<FLIP_LOCK_PROFIT_TIGHTEN_ARM_MONEY)
+      return 0.0;
+
+   double openPrice=PositionGetDouble(POSITION_PRICE_OPEN);
+   double currentPrice=direction>0 ? tick.bid : tick.ask;
+   if(openPrice<=0.0 || currentPrice<=0.0)
+      return 0.0;
+   if((direction>0 && currentPrice<=openPrice) ||
+      (direction<0 && currentPrice>=openPrice))
+      return 0.0;
+
+   ENUM_ORDER_TYPE liveType=direction>0 ? ORDER_TYPE_BUY : ORDER_TYPE_SELL;
+   double currentCalculatedProfit=0.0;
+   if(!OrderCalcProfit(
+         liveType,
+         _Symbol,
+         positionVolume,
+         openPrice,
+         currentPrice,
+         currentCalculatedProfit
+      ) ||
+      currentCalculatedProfit<FLIP_LOCK_PROFIT_LOCK_MONEY)
+      return 0.0;
+
+   // Solve the executable price that corresponds to +0.30 account currency.
+   // Profit is monotonic between entry and the current favorable price, so a
+   // short binary search works across symbols without hard-coding tick value.
+   double low=0.0;
+   double high=1.0;
+   for(int i=0;i<28;i++)
+   {
+      double mid=(low+high)*0.5;
+      double testPrice=openPrice+(currentPrice-openPrice)*mid;
+      double testProfit=0.0;
+      if(!OrderCalcProfit(
+            liveType,
+            _Symbol,
+            positionVolume,
+            openPrice,
+            testPrice,
+            testProfit
+         ))
+         return 0.0;
+
+      if(testProfit<FLIP_LOCK_PROFIT_LOCK_MONEY)
+         low=mid;
+      else
+         high=mid;
+   }
+
+   double lockPrice=openPrice+(currentPrice-openPrice)*high;
+   double brokerMinimum=FlipLockBrokerMinDistancePoints()*_Point;
+
+   // Pending STOP still has to respect the broker's live minimum distance.
+   // If +0.30 cannot be protected legally yet, keep the normal ATR baton until
+   // price moves far enough instead of claiming a lock that is not achievable.
+   if(direction>0)
+      lockPrice=MathMin(lockPrice,tick.bid-brokerMinimum);
+   else
+      lockPrice=MathMax(lockPrice,tick.ask+brokerMinimum);
+
+   lockPrice=NormalizeTargetPriceToTick(lockPrice,-direction);
+   if(lockPrice<=0.0)
+      return 0.0;
+
+   double lockedCalculatedProfit=0.0;
+   if(!OrderCalcProfit(
+         liveType,
+         _Symbol,
+         positionVolume,
+         openPrice,
+         lockPrice,
+         lockedCalculatedProfit
+      ) ||
+      lockedCalculatedProfit+0.0001<FLIP_LOCK_PROFIT_LOCK_MONEY)
+      return 0.0;
+
+   return lockPrice;
 }
 
 double FlipLockSafetyDistancePoints()
@@ -393,15 +488,29 @@ bool FlipLockOpenStarter(const int forcedDirection=0)
    return sent;
 }
 
-double FlipLockCandidateTrigger(const int direction,const MqlTick &tick)
+double FlipLockCandidateTrigger(
+   const int direction,
+   const double positionVolume,
+   const MqlTick &tick
+)
 {
    double distancePoints=FlipLockTrailDistancePoints();
-   if(direction==0 || distancePoints<=0.0) return 0.0;
+   if(direction==0 || positionVolume<=0.0 || distancePoints<=0.0) return 0.0;
 
    // BUY position => SELL STOP below Bid. SELL position => BUY STOP above Ask.
    double candidate=direction>0
       ? tick.bid-distancePoints*_Point
       : tick.ask+distancePoints*_Point;
+   candidate=NormalizeTargetPriceToTick(candidate,-direction);
+
+   // Losing/flat legs keep the wider ATR baton. After +0.50 floating profit,
+   // tighten only if the broker can legally protect roughly +0.30.
+   double profitLock=FlipLockProfitLockTriggerPrice(direction,positionVolume,tick);
+   if(profitLock>0.0)
+      candidate=direction>0
+         ? MathMax(candidate,profitLock)
+         : MathMin(candidate,profitLock);
+
    return NormalizeTargetPriceToTick(candidate,-direction);
 }
 
@@ -424,7 +533,7 @@ bool FlipLockSyncBaton(
    if(!PositionSelectByTicket(positionTicket)) return false;
 
    int pendingDirection=-direction;
-   double candidate=FlipLockCandidateTrigger(direction,tick);
+   double candidate=FlipLockCandidateTrigger(direction,positionVolume,tick);
    if(candidate<=0.0 || !FlipLockTriggerIsLegal(direction,candidate,tick))
    {
       g_flipLockReason="WAIT_M1_PENDING_DISTANCE";
