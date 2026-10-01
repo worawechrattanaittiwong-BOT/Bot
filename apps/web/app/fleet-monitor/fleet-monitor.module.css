@@ -440,14 +440,11 @@
 @media(max-width:960px){
   .main{padding:10px 10px 22px}
   .mobileHead{
-    display:flex;
-    min-height:48px;
-    align-items:center;
-    justify-content:space-between;
-    gap:8px;
-    margin-bottom:10px;
+    display:block;
+    width:100%;
+    min-height:58px;
+    margin:0 0 12px;
   }
-  .mobileLogo{width:128px;height:auto}
   .pageHead{align-items:flex-start;flex-direction:column}
   .headActions{width:100%;justify-content:flex-start}
   .summaryGrid{grid-template-columns:repeat(2,minmax(0,1fr))}
