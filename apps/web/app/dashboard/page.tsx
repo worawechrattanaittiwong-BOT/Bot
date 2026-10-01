@@ -1127,32 +1127,32 @@ export default function DashboardPage() {
   const cloudUpdateLabel =
     cloudUpdateState === "WAITING_SAFE"
       ? (desired === "RUNNING" || state === "RUNNING"
-          ? "มีอัปเดตใหม่ · กดหยุดบอทเมื่อคุณสะดวก"
-          : "รอระบบเริ่มอัปเดตบัญชีนี้")
+          ? "พบ EA เวอร์ชันใหม่ · พร้อมติดตั้งเมื่อหยุดบอท"
+          : "กำลังเตรียมการติดตั้ง EA เวอร์ชันใหม่")
       : cloudUpdateState === "DELIVERED"
-        ? "กำลังอัปเดต EA ของบัญชีนี้"
+        ? "กำลังติดตั้ง EA เวอร์ชันใหม่"
         : cloudUpdateState === "VERIFYING"
-          ? "กำลังเปิด MT5 ใหม่และตรวจสอบเวอร์ชัน"
+          ? "กำลังตรวจสอบเวอร์ชันและสถานะหลังอัปเดต"
           : cloudUpdateState === "FAILED"
-            ? "อัปเดตบัญชีนี้ไม่สำเร็จ · ผู้ดูแลกำลังตรวจสอบ"
-            : "กำลังเตรียมอัปเดต SCENOVA";
+            ? "การอัปเดต EA ไม่สำเร็จ"
+            : "กำลังเตรียมแพ็กเกจอัปเดต";
   const cloudUpdateDetail =
     cloudUpdateState === "WAITING_SAFE"
       ? (desired === "RUNNING" || state === "RUNNING"
-          ? "บอทยังทำงานต่อได้ตามปกติ ระบบจะไม่หยุดให้เอง และจะอัปเดตเฉพาะบัญชีนี้หลังคุณกด Stop และ Position เป็น 0"
-          : "กรุณารอสักครู่ Worker จะรีเฟรช EA เฉพาะบัญชีนี้ แล้วตรวจ Heartbeat ให้อัตโนมัติ")
+          ? "การอัปเดตจะเริ่มเมื่อ Bot อยู่ในสถานะ STOPPED และไม่มี Position เปิดอยู่ ระบบจะไม่หยุดบอทให้เอง"
+          : "ระบบกำลังเตรียม EA สำหรับบัญชีนี้ก่อนเริ่มขั้นตอนติดตั้ง")
       : cloudUpdateState === "DELIVERED"
-        ? "กำลังปิด/รีเฟรชเฉพาะ MT5 บัญชีนี้เพื่อเปลี่ยน EA โดยไม่กระทบบัญชีอื่น"
+        ? "กำลังรีสตาร์ต MT5 สำหรับบัญชีนี้และโหลด EA เวอร์ชันใหม่ โดยไม่กระทบบัญชีอื่น"
         : cloudUpdateState === "VERIFYING"
-          ? "กำลังรอ EA เวอร์ชันใหม่ส่ง Heartbeat กลับมา เมื่อตรวจผ่านแล้วคุณสามารถกด Start เอง"
+          ? "กำลังตรวจสอบ EA Version, Runtime และ Heartbeat ก่อนเปิดให้เริ่มบอทอีกครั้ง"
           : cloudUpdateState === "FAILED"
-            ? "บอทยังคงหยุดอยู่เพื่อความปลอดภัย กรุณารอผู้ดูแลตรวจสอบ"
-            : "กำลังประมวลผล";
+            ? "ระบบคงสถานะ Bot เป็น STOPPED เพื่อความปลอดภัย กรุณาตรวจสอบรายละเอียดหรือติดต่อผู้ดูแล"
+            : "ระบบกำลังเตรียมทรัพยากรสำหรับการอัปเดต";
   const cloudUpdateOperation = cloudUpdateVisible
     ? {
         id:"cloud-update-" + cloudUpdateStageKey,
         kind:"CLOUD_UPDATE",
-        title:"SCENOVA CLOUD UPDATE" + (cloudUpdate?.target_version ? " · v" + cloudUpdate.target_version : ""),
+        title:"SCENOVA EA UPDATE" + (cloudUpdate?.target_version ? " · v" + cloudUpdate.target_version : ""),
         status:cloudUpdateState === "FAILED" ? "FAILED" : "RUNNING",
         message:cloudUpdateLabel + " · " + cloudUpdateDetail,
         target:String(cloudUpdate?.target_version || ""),
@@ -3892,7 +3892,7 @@ export default function DashboardPage() {
                 <div>
                   <span className="cc-server-operation-icon">&gt;_</span>
                   <div>
-                    <small>SCENOVA SERVER TERMINAL</small>
+                    <small>SCENOVA OPERATIONS CONSOLE</small>
                     <h3 id="cc-server-operation-title">{operationTerminal.title}</h3>
                   </div>
                 </div>
@@ -3916,21 +3916,21 @@ export default function DashboardPage() {
               </header>
               <div className="cc-server-operation-body">
                 <div className="cc-server-operation-line">
-                  <span className="prompt">server@scenova:~$</span>
-                  <b>{operationTerminal.status === "RUNNING" ? "processing" : operationTerminal.status === "SUCCESS" ? "completed" : "failed"}</b>
+                  <span className="prompt">STATUS</span>
+                  <b>{operationTerminal.status === "RUNNING" ? "IN PROGRESS" : operationTerminal.status === "SUCCESS" ? "COMPLETED" : "FAILED"}</b>
                 </div>
                 <p>{operationTerminal.message}</p>
                 {operationTerminal.kind === "SYMBOL" && operationTerminal.target && (
-                  <div className="cc-server-operation-meta"><span>Target Symbol</span><b>{operationTerminal.target}</b></div>
+                  <div className="cc-server-operation-meta"><span>SYMBOL</span><b>{operationTerminal.target}</b></div>
                 )}
                 {operationTerminal.kind === "CLOUD_UPDATE" && operationTerminal.target && (
-                  <div className="cc-server-operation-meta"><span>Target Version</span><b>v{operationTerminal.target}</b></div>
+                  <div className="cc-server-operation-meta"><span>RELEASE VERSION</span><b>v{operationTerminal.target}</b></div>
                 )}
                 {operationTerminal.kind === "MIGRATION" &&
                   operationTerminal.stage === "WAITING_LOCAL_INSTALL" &&
                   operationTerminal.targetSlotId && (
                     <div className="cc-server-operation-meta">
-                      <span>ขั้นตอนถัดไป</span>
+                      <span>NEXT ACTION</span>
                       <button
                         type="button"
                         className="btn primary"
@@ -3969,19 +3969,19 @@ export default function DashboardPage() {
               <footer>
                 <span>{operationTerminal.kind === "CLOUD_UPDATE"
                   ? operationTerminal.status === "FAILED"
-                    ? "อัปเดตไม่สำเร็จ · ตรวจข้อความด้านบนแล้วกดปิด"
+                    ? "การอัปเดตไม่สำเร็จ · กรุณาตรวจสอบรายละเอียดด้านบน"
                     : cloudUpdateState === "WAITING_SAFE"
-                      ? "ปิดหน้าต่างนี้เพื่อกดหยุดบอทเมื่อคุณพร้อม แล้วระบบจะอัปเดตต่อ"
-                      : "SCENOVA กำลังอัปเดตบัญชีนี้ใน Terminal เดียว"
+                      ? "การอัปเดตจะดำเนินการต่อหลัง Bot เป็น STOPPED และ Position = 0"
+                      : "ระบบกำลังติดตั้งและตรวจสอบ Release สำหรับบัญชีนี้"
                   : operationTerminal.status === "RUNNING"
                     ? operationTerminal.kind === "STOP"
-                      ? "Safe Stop ยังทำงานต่อแม้ย่อหน้าต่าง · กดการ์ดสถานะด้านบนเพื่อเปิดกลับ"
+                      ? "Safe Stop ยังดำเนินการต่อในพื้นหลัง และสามารถเปิดสถานะกลับจาก Dashboard"
                       : operationTerminal.kind === "MIGRATION"
-                        ? "การย้ายระบบยังทำงานต่อแม้ย่อหน้าต่าง · กดการ์ดสถานะด้านบนเพื่อเปิดกลับ"
-                        : "กำลังติดตามสถานะจาก Server อัตโนมัติทุก 1.5 วินาที"
+                        ? "การย้ายระบบยังดำเนินการต่อในพื้นหลัง และสามารถเปิดสถานะกลับจาก Dashboard"
+                        : "ระบบกำลังตรวจสอบสถานะการดำเนินการโดยอัตโนมัติ"
                     : operationTerminal.status === "SUCCESS"
-                      ? "สำเร็จ · หน้าต่างจะปิดอัตโนมัติ"
-                      : "ไม่สำเร็จ · ตรวจข้อความด้านบนแล้วกดปิด"}</span>
+                      ? "ดำเนินการเสร็จสมบูรณ์ · หน้าต่างนี้จะปิดอัตโนมัติ"
+                      : "การดำเนินการไม่สำเร็จ · กรุณาตรวจสอบรายละเอียดด้านบน"}</span>
                 {(operationTerminal.status === "FAILED" || operationTerminal.canClose || (["STOP","MIGRATION"].includes(String(operationTerminal.kind || "")) && operationTerminal.status === "RUNNING")) && (
                   <button
                     type="button"

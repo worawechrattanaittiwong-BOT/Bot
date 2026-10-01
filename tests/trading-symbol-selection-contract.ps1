@@ -74,7 +74,7 @@ Assert-Contains $dashboard 'เลือก Symbol' 'bot renders the Symbol butt
 Assert-Contains $dashboard 'marketWatchSymbols' 'bot selector is populated from MT5 Market Watch telemetry'
 Assert-Contains $dashboard 'const tradingSymbolOptions = marketWatchSymbols;' 'bot selector contains only live MT5 Market Watch symbols'
 Assert-Contains $dashboard 'cc-server-operation-terminal' 'server actions render a centered operation terminal'
-Assert-Contains $dashboard 'กำลังติดตามสถานะจาก Server อัตโนมัติทุก 1.5 วินาที' 'operation terminal explains fast live status polling'
+Assert-Contains $dashboard 'ระบบกำลังตรวจสอบสถานะการดำเนินการโดยอัตโนมัติ' 'operation console uses production live-status wording'
 Assert-Contains $controller 'Symbol นี้ไม่มีอยู่ใน Market Watch จริงของบัญชี MT5' 'Server rejects symbols that are not present in the live account Market Watch'
 Assert-Contains $controller 'resolveBrokerTradingSymbol' 'Server resolves the requested Web symbol to the broker-native MT5 symbol'
 Assert-Contains $controller 'account_broker_server' 'Server symbol resolver receives the actual MT5 broker server'
