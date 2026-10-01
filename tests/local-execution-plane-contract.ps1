@@ -51,7 +51,8 @@ Need $fastClose ': "ZERO_GRID_STOPPED_FLAT";' 'ZERO fast close must release STOP
 Need $flipManage 'bool canOpenNewCycle=' 'SaaS authorization must control only new FLIP risk'
 Need $flipManage 'A live FLIP-owned position is always protected from the local MT5 quote.' 'live FLIP position protection must bypass SaaS latency'
 Need $flipSync 'SymbolInfoDouble(_Symbol,SYMBOL_TRADE_TICK_SIZE)' 'FLIP SL must follow broker tick increments'
-Need $flipSync 'FLIP_LOCK_STOP_SYNC_MIN_MS' 'FLIP SL local cadence missing'
+Need $flip 'FLIP_LOCK_STOP_SYNC_MIN_MS 0' 'FLIP Tick-on-Tick must have zero artificial cadence delay'
+Forbid $flipSync 'nowMs-g_flipLockLastStopSyncMs>=' 'FLIP local execution must not time-throttle SL updates'
 
 $flipTimer=$onTimer.IndexOf('FlipLockManage();')
 $zeroTimer=$onTimer.IndexOf('ManageZeroGrid();')

@@ -7,13 +7,14 @@
 // enough positive distance to place a broker-legal lock above/below entry, the
 // SL arms locally and then follows every meaningful price step without waiting
 // for SaaS price/commands. Server state controls NEW risk only.
-#define FLIP_LOCK_V1_VERSION "6.0.1"
+#define FLIP_LOCK_V1_VERSION "6.1.0"
 #define FLIP_LOCK_PENDING_COMMENT "SCNFlipLock"
 #define FLIP_LOCK_LIVE_COMMENT "SCNFlipLockLive"
 #define FLIP_LOCK_FLAT_PENDING_GRACE_SECONDS 2
 #define FLIP_LOCK_UNARMED_RESTART_COOLDOWN_SECONDS 5
-#define FLIP_LOCK_ARM_USD_PER_001_LOT 0.25
-#define FLIP_LOCK_STOP_SYNC_MIN_MS 120
+#define FLIP_LOCK_MIN_NET_PROFIT_MONEY 0.30
+#define FLIP_LOCK_SLIPPAGE_BUFFER_TICKS 2.0
+#define FLIP_LOCK_STOP_SYNC_MIN_MS 0
 
 int g_flipLockDirection=0;
 double g_flipLockPeakPrice=0.0;
@@ -86,18 +87,15 @@ bool FlipLockStartReady()
 
 double FlipLockTrailDistancePoints()
 {
-   double spread=CurrentSpreadPoints();
-   if(spread<=0.0 || spread>=999999.0) return 0.0;
+   double tickSize=SymbolInfoDouble(_Symbol,SYMBOL_TRADE_TICK_SIZE);
+   if(tickSize<=0.0) tickSize=_Point;
+   double tickPoints=MathMax(1.0,tickSize/_Point);
 
-   double atr=FlipLockAtrPoints();
-   if(atr<=0.0) return 0.0;
-
-   // The baton is a PROFIT-lock trail, not the starter safety stop. Keep enough
-   // room for live spread/noise while still following a profitable move.
-   return MathMax(
-      FlipLockBrokerMinDistancePoints(),
-      MathMax(spread*3.0,atr*0.35)
-   );
+   // Tick-on-Tick FLIP: trail as tightly as the broker legally allows.
+   // Broker stops/freeze level is the real lower bound; keep just one extra
+   // tradable tick so a quote change between calculation and SLTP submission
+   // does not make the request unnecessarily fragile.
+   return FlipLockBrokerMinDistancePoints()+tickPoints;
 }
 
 double FlipLockSafetyDistancePoints()
@@ -135,21 +133,6 @@ double FlipLockInitialSafetyStopPrice(const int direction,const double entryPric
    return NormalizeStopPriceToTick(stop,direction);
 }
 
-double FlipLockProfitReservePoints()
-{
-   double spread=CurrentSpreadPoints();
-   if(spread<=0.0 || spread>=999999.0) return FlipLockBrokerMinDistancePoints();
-   return MathMax(FlipLockBrokerMinDistancePoints(),spread*0.50);
-}
-
-double FlipLockArmProfitMoney(const double volume)
-{
-   if(volume<=0.0) return 0.0;
-   // User contract: start profit locking at approximately $0.25 for 0.01 lot
-   // and scale linearly with the actual FLIP LOCK position volume.
-   return FLIP_LOCK_ARM_USD_PER_001_LOT*(volume/0.01);
-}
-
 double FlipLockPositionProfitMoney(const ulong positionTicket)
 {
    if(positionTicket==0 || !PositionSelectByTicket(positionTicket))
@@ -157,33 +140,120 @@ double FlipLockPositionProfitMoney(const ulong positionTicket)
    return PositionGetDouble(POSITION_PROFIT)+PositionGetDouble(POSITION_SWAP);
 }
 
-double FlipLockBreakEvenFloorPrice(const int direction,const double openPrice)
+double FlipLockEntryCommissionCost(const ulong positionTicket)
 {
-   if(direction==0 || openPrice<=0.0) return 0.0;
-   double reserve=FlipLockProfitReservePoints()*_Point;
-   return NormalizeTargetPriceToTick(
-      direction>0 ? openPrice+reserve : openPrice-reserve,
-      direction
-   );
+   if(positionTicket==0 || !PositionSelectByTicket(positionTicket))
+      return 0.0;
+
+   ulong positionId=(ulong)PositionGetInteger(POSITION_IDENTIFIER);
+   if(positionId==0 || !HistorySelectByPosition(positionId))
+      return 0.0;
+
+   double cost=0.0;
+   int total=HistoryDealsTotal();
+   for(int i=0;i<total;i++)
+   {
+      ulong deal=HistoryDealGetTicket(i);
+      if(deal==0) continue;
+
+      long entry=HistoryDealGetInteger(deal,DEAL_ENTRY);
+      if(entry!=DEAL_ENTRY_IN && entry!=DEAL_ENTRY_INOUT)
+         continue;
+      if(HistoryDealGetString(deal,DEAL_SYMBOL)!=_Symbol)
+         continue;
+
+      double commission=HistoryDealGetDouble(deal,DEAL_COMMISSION);
+      if(commission<0.0)
+         cost+=MathAbs(commission);
+   }
+   return cost;
+}
+
+double FlipLockMinimumNetProfitStopPrice(
+   const ulong positionTicket,
+   const int direction,
+   const double volume,
+   const double openPrice
+)
+{
+   if(positionTicket==0 || direction==0 || volume<=0.0 || openPrice<=0.0)
+      return 0.0;
+   if(!PositionSelectByTicket(positionTicket))
+      return 0.0;
+
+   double swap=PositionGetDouble(POSITION_SWAP);
+   double entryCommission=FlipLockEntryCommissionCost(positionTicket);
+
+   // Most commission brokers charge the closing side similarly to the entry
+   // side. Reserving the observed entry commission again prevents a chart-level
+   // "winner" from closing negative after the exit commission is booked.
+   double estimatedExitCommission=entryCommission;
+
+   double tickSize=SymbolInfoDouble(_Symbol,SYMBOL_TRADE_TICK_SIZE);
+   if(tickSize<=0.0) tickSize=_Point;
+
+   ENUM_ORDER_TYPE orderType=direction>0 ? ORDER_TYPE_BUY : ORDER_TYPE_SELL;
+   double oneTickGross=0.0;
+   double oneTickClose=direction>0
+      ? openPrice+tickSize
+      : openPrice-tickSize;
+   if(!OrderCalcProfit(
+      orderType,
+      _Symbol,
+      volume,
+      openPrice,
+      oneTickClose,
+      oneTickGross
+   ))
+      return 0.0;
+
+   oneTickGross=MathAbs(oneTickGross);
+   if(oneTickGross<=0.0)
+      return 0.0;
+
+   // Guarantee the requested +0.30 in account currency after observed entry
+   // commission, estimated closing commission, current Swap and a small
+   // adverse-fill allowance. This is a protection floor, not a profit target.
+   double requiredGross=
+      FLIP_LOCK_MIN_NET_PROFIT_MONEY+
+      entryCommission+
+      estimatedExitCommission-
+      swap;
+   requiredGross=MathMax(FLIP_LOCK_MIN_NET_PROFIT_MONEY,requiredGross);
+
+   double requiredTicks=MathCeil(requiredGross/oneTickGross);
+   requiredTicks+=FLIP_LOCK_SLIPPAGE_BUFFER_TICKS;
+   requiredTicks=MathMax(1.0,requiredTicks);
+
+   double floorPrice=direction>0
+      ? openPrice+requiredTicks*tickSize
+      : openPrice-requiredTicks*tickSize;
+   return NormalizeTargetPriceToTick(floorPrice,direction);
 }
 
 bool FlipLockProfitLockReady(
    const ulong positionTicket,
    const int direction,
+   const double volume,
    const double openPrice,
    const MqlTick &tick
 )
 {
-   if(positionTicket==0 || direction==0 || openPrice<=0.0)
+   if(positionTicket==0 || direction==0 || volume<=0.0 || openPrice<=0.0)
       return false;
 
-   double current=FlipLockPositionProfitMoney(positionTicket);
-   if(current<=0.0)
+   double floor=FlipLockMinimumNetProfitStopPrice(
+      positionTicket,
+      direction,
+      volume,
+      openPrice
+   );
+   if(floor<=0.0)
       return false;
 
-   // Do not wait for a SaaS/money threshold. Arm at the first MT5 tick where a
-   // positive break-even reserve is actually legal at the broker.
-   double floor=FlipLockBreakEvenFloorPrice(direction,openPrice);
+   // Arm only when the +0.30 NET floor itself is broker-legal. Until then the
+   // wide starter Safety Stop remains in place; merely showing floating profit
+   // is not enough to declare the trade protected.
    double minimum=FlipLockBrokerMinDistancePoints()*_Point;
    if(direction>0)
       return floor>openPrice && floor<=tick.bid-minimum;
@@ -556,29 +626,49 @@ bool FlipLockSyncBaton(
 
    if(!g_flipLockArmed)
    {
-      if(!FlipLockProfitLockReady(positionTicket,direction,openPrice,tick))
+      if(!FlipLockProfitLockReady(
+         positionTicket,
+         direction,
+         positionVolume,
+         openPrice,
+         tick
+      ))
       {
          // Safety Stop stays broker-side until the current MT5 quote can support
-         // a genuinely positive, broker-legal stop. No server price is involved.
+         // an estimated NET +0.30 stop after commission/swap/slippage reserve.
          FlipLockRemoveAllPending();
          g_flipLockTriggerPrice=0.0;
-         g_flipLockReason="WAIT_LOCAL_PROFIT_LOCK";
-         g_executionStatus="FLIP_LOCK_WAIT_PROFIT_LOCK";
+         g_flipLockReason="WAIT_NET_PROFIT_LOCK";
+         g_executionStatus="FLIP_LOCK_WAIT_NET_PROFIT_LOCK";
          return true;
       }
+   }
 
-      double breakEvenFloor=FlipLockBreakEvenFloorPrice(direction,openPrice);
-      if(direction>0)
-         candidate=MathMax(candidate,breakEvenFloor);
-      else
-         candidate=MathMin(candidate,breakEvenFloor);
+   // Recalculate the floor on every tick so Swap/cost changes cannot make the
+   // trailing stop drift back below the protected NET-profit contract.
+   double netProfitFloor=FlipLockMinimumNetProfitStopPrice(
+      positionTicket,
+      direction,
+      positionVolume,
+      openPrice
+   );
+   if(netProfitFloor<=0.0)
+   {
+      g_flipLockReason="WAIT_NET_PROFIT_FLOOR";
+      g_executionStatus="FLIP_LOCK_WAIT_NET_PROFIT_LOCK";
+      return true;
+   }
 
-      if(!FlipLockTriggerIsLegal(direction,candidate,tick))
-      {
-         g_flipLockReason="WAIT_PROFIT_LOCK_DISTANCE";
-         g_executionStatus="FLIP_LOCK_WAIT_PROFIT_LOCK";
-         return true;
-      }
+   if(direction>0)
+      candidate=MathMax(candidate,netProfitFloor);
+   else
+      candidate=MathMin(candidate,netProfitFloor);
+
+   if(!FlipLockTriggerIsLegal(direction,candidate,tick))
+   {
+      g_flipLockReason="WAIT_NET_PROFIT_DISTANCE";
+      g_executionStatus="FLIP_LOCK_WAIT_NET_PROFIT_LOCK";
+      return true;
    }
 
    if(g_flipLockTriggerPrice<=0.0)
@@ -605,15 +695,10 @@ bool FlipLockSyncBaton(
          ? trigger>=currentSl+moveThreshold-1e-12
          : trigger<=currentSl-moveThreshold+1e-12);
 
-   ulong nowMs=GetTickCount64();
-   bool syncReady=
-      g_flipLockLastStopSyncMs==0 ||
-      nowMs-g_flipLockLastStopSyncMs>=FLIP_LOCK_STOP_SYNC_MIN_MS;
-   bool urgentMove=currentSl<=0.0 || MathAbs(currentSl-trigger)>=moveThreshold*3.0;
-
-   // Track the MT5 quote aggressively, but avoid flooding the broker with
-   // multiple SLTP requests inside the same ~120 ms burst.
-   if(stopImproved && (syncReady || urgentMove))
+   // Tick-on-Tick means there is no artificial time throttle. Submit a new SL
+   // whenever the broker quote has advanced enough to improve the stop by one
+   // tradable tick. Broker retcodes remain the final rate/legality authority.
+   if(stopImproved)
    {
       if(!FlipLockSetPositionStop(positionTicket,trigger))
       {
@@ -621,7 +706,7 @@ bool FlipLockSyncBaton(
          g_executionStatus="FLIP_LOCK_SL_TRAIL_RETRY";
          return false;
       }
-      g_flipLockLastStopSyncMs=nowMs;
+      g_flipLockLastStopSyncMs=GetTickCount64();
    }
 
    g_flipLockArmed=true;
