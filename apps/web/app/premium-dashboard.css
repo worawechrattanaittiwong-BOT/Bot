@@ -4861,26 +4861,11 @@
   font-weight:800;
 }
 .cc-mode-guide-block{
-  display:grid;
-  grid-template-columns:36px minmax(0,1fr);
-  gap:12px;
-  align-items:start;
+  display:block;
   padding:14px;
   border:1px solid #273243;
   border-radius:14px;
   background:rgba(11,17,27,.78);
-}
-.cc-mode-guide-block-icon{
-  width:32px;
-  height:32px;
-  display:grid;
-  place-items:center;
-  border:1px solid #364257;
-  border-radius:10px;
-  background:#151e2b;
-  color:#8797ad;
-  font-size:var(--ui-type-caption);
-  font-weight:900;
 }
 .cc-mode-guide-block small{
   display:block;
@@ -4899,30 +4884,15 @@
 .cc-mode-guide-workflow{
   border-color:color-mix(in srgb,var(--mode-guide-accent) 34%,#293447);
 }
-.cc-mode-guide-workflow .cc-mode-guide-block-icon{
-  border-color:color-mix(in srgb,var(--mode-guide-accent) 45%,#344157);
-  background:var(--mode-guide-accent-soft);
-  color:var(--mode-guide-accent);
-}
 .cc-mode-guide-workflow small{color:var(--mode-guide-accent)}
 .cc-mode-guide-good{
   border-color:rgba(75,181,132,.28);
   background:linear-gradient(135deg,rgba(20,55,43,.46),rgba(11,17,27,.78));
 }
-.cc-mode-guide-good .cc-mode-guide-block-icon{
-  border-color:rgba(91,205,155,.35);
-  background:rgba(45,138,99,.13);
-  color:#75d9ad;
-}
 .cc-mode-guide-good small{color:#75d9ad}
 .cc-mode-guide-caution{
   border-color:rgba(223,84,108,.30);
   background:linear-gradient(135deg,rgba(62,22,31,.44),rgba(11,17,27,.78));
-}
-.cc-mode-guide-caution .cc-mode-guide-block-icon{
-  border-color:rgba(239,94,118,.34);
-  background:rgba(157,43,62,.13);
-  color:#f08ca0;
 }
 .cc-mode-guide-caution small{color:#f08ca0}
 .cc-mode-guide-capital{
@@ -5069,7 +5039,7 @@
   .cc-mode-guide-tabs{padding:10px 12px}
   .cc-mode-guide-content{padding:12px}
   .cc-mode-guide-system{grid-template-columns:1fr}
-  .cc-mode-guide-block{grid-template-columns:32px minmax(0,1fr);padding:12px;gap:10px}
+  .cc-mode-guide-block{padding:12px}
   .cc-mode-guide-capital>header{align-items:flex-start;flex-direction:column;gap:4px}
   .cc-mode-guide-capital-tiers{grid-template-columns:1fr}
   .cc-mode-guide-capital-tiers>div{padding:10px 11px}

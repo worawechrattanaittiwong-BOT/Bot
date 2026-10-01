@@ -6773,15 +6773,12 @@ function BotSettingsModal(props:any) {
             </section>
 
             <article className="cc-mode-guide-block cc-mode-guide-workflow">
-              <span className="cc-mode-guide-block-icon">01</span>
               <div><small>แนวทางการทำงาน</small><p>{activeModeGuide.workflow}</p></div>
             </article>
             <article className="cc-mode-guide-block cc-mode-guide-good">
-              <span className="cc-mode-guide-block-icon">02</span>
               <div><small>ตลาดที่น่าเล่น</small><p>{activeModeGuide.good}</p></div>
             </article>
             <article className="cc-mode-guide-block cc-mode-guide-caution">
-              <span className="cc-mode-guide-block-icon">03</span>
               <div><small>ตลาดที่ต้องระวัง</small><p>{activeModeGuide.caution}</p></div>
             </article>
 
