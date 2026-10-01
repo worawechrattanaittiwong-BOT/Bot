@@ -57,6 +57,16 @@ Therefore:
 
 All prices must be normalized to the symbol tick size and broker stop-distance rules.
 
+### Low-volatility profile
+
+When **กริดตลาดความผันผวนต่ำ** is enabled:
+
+- First pending offset from the captured cycle center: `2.00`
+- Inter-level spacing: `1.00` price unit
+- Example center `4000.00`: BUY STOP `4002.00, 4003.00, 4004.00, ...`; SELL STOP `3998.00, 3997.00, 3996.00, ...`
+- Lot remains fixed at `0.03` on every low-volatility level.
+- Broker minimum stop distance remains authoritative if it requires a wider first pending price.
+
 ## Pending placement order
 
 The order in which pending tickets are created is deterministic and must be:

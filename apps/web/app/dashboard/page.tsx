@@ -6627,7 +6627,7 @@ function BotSettingsModal(props:any) {
                 <div className="cc-bot-v2-fields">
                   {controlMode==="ZERO_GRID" ? <>
                     {zeroGridLowVolatilityEnabled
-                      ? <div className="cc-bot-v2-field"><span><ScenovaIcon name="layers" size={17}/>ระยะห่างกริด</span><div className="cc-bot-v2-readonly-control"><b>0.30</b></div></div>
+                      ? <div className="cc-bot-v2-field"><span><ScenovaIcon name="layers" size={17}/>ระยะห่างกริด</span><div className="cc-bot-v2-readonly-control"><b>1.00 · เริ่ม 2.00</b></div></div>
                       : <label className="cc-bot-v2-field"><span><ScenovaIcon name="layers" size={17}/>ระยะห่างกริด</span><select className="input" value={String(Number(props.settings.zeroGridStepPrice) === 2 ? 2 : 3)} onChange={e=>props.onEdit?.("zeroGridStepPrice",e.target.value)}><option value="2">2.00</option><option value="3">3.00</option></select></label>}
                     <label className="cc-bot-v2-field"><span><ScenovaIcon name="layers" size={17}/>จำนวนคำสั่งรอต่อฝั่ง</span><select className="input" value={String(Math.max(1,Math.min(30,Number(props.settings.zeroGridLevelsPerSide)||10)))} onChange={e=>props.onEdit?.("zeroGridLevelsPerSide",Number(e.target.value))}>{Array.from({length:30},(_,i)=>i+1).map(value=><option key={value} value={value}>{value} ระดับต่อฝั่ง</option>)}</select></label>
                     <div className="cc-bot-v2-field"><span><ScenovaIcon name="lot" size={17}/>{zeroGridLowVolatilityEnabled?"Lot คงที่ต่อระดับ":"Lot เริ่มต้น"}</span><div className="cc-bot-v2-readonly-control"><b>0.03 Lot</b></div></div>
@@ -6702,7 +6702,7 @@ function BotSettingsModal(props:any) {
                 <div><dt>คู่เทรด</dt><dd>{props.symbol || "—"}</dd></div>
                 <div><dt>รูปแบบกริด</dt><dd>{zeroGridLowVolatilityEnabled?"ตลาดความผันผวนต่ำ":"กริดมาตรฐาน"}</dd></div>
                 <div><dt>คำสั่งรอ</dt><dd>{Math.max(1,Math.min(30,Number(props.settings.zeroGridLevelsPerSide)||10))} BUY + {Math.max(1,Math.min(30,Number(props.settings.zeroGridLevelsPerSide)||10))} SELL</dd></div>
-                <div><dt>ระยะห่างกริด</dt><dd>{zeroGridLowVolatilityEnabled?"0.30":(Number(props.settings.zeroGridStepPrice) === 2 ? "2.00" : "3.00")}</dd></div>
+                <div><dt>ระยะห่างกริด</dt><dd>{zeroGridLowVolatilityEnabled?"1.00 · เริ่ม 2.00":(Number(props.settings.zeroGridStepPrice) === 2 ? "2.00" : "3.00")}</dd></div>
                 <div><dt>{zeroGridLowVolatilityEnabled?"Lot คงที่":"Lot เริ่มต้น"}</dt><dd>0.03 Lot</dd></div>
                 <div><dt>เป้ากำไรสุทธิ</dt><dd>{formatAccountMoney(props.settings.zeroGridMinNetProfitMoney||0.5,accountCurrency)} · ถึงแล้วปิดทันที</dd></div>
               </dl> : (

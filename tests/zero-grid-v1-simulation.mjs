@@ -6,8 +6,8 @@ function down(value, tick) { return Math.floor(value / tick + 1e-10) * tick; }
 
 export function buildPendingPlan({ bid, ask, step = 3, baseLot = 0.03, levelsPerSide = 5, brokerMinDistance = 0, tick = 0.01, firstOffsetPrice = 3.0, lowVolatility = false }) {
   const center = (bid + ask) / 2;
-  const effectiveStep = lowVolatility ? 0.30 : step;
-  const effectiveFirstOffset = lowVolatility ? 0.10 : firstOffsetPrice;
+  const effectiveStep = lowVolatility ? 1.00 : step;
+  const effectiveFirstOffset = lowVolatility ? 2.00 : firstOffsetPrice;
   const brokerSafe = Math.max(tick, brokerMinDistance) + tick;
   const requestedBuy = lowVolatility ? center + effectiveFirstOffset : ask + effectiveFirstOffset;
   const requestedSell = lowVolatility ? center - effectiveFirstOffset : bid - effectiveFirstOffset;
@@ -46,8 +46,8 @@ export function buildPendingPlan({ bid, ask, step = 3, baseLot = 0.03, levelsPer
   const orders = buildPendingPlan({ bid: 3999.99, ask: 4000.01, baseLot: 0.01, levelsPerSide: 3, tick: 0.01, lowVolatility: true });
   const buys = orders.filter((o) => o.type === "BUY_STOP");
   const sells = orders.filter((o) => o.type === "SELL_STOP");
-  assert.deepEqual(buys.map((o) => Number(o.price.toFixed(2))), [4000.10, 4000.40, 4000.70]);
-  assert.deepEqual(sells.map((o) => Number(o.price.toFixed(2))), [3999.90, 3999.60, 3999.30]);
+  assert.deepEqual(buys.map((o) => Number(o.price.toFixed(2))), [4002.00, 4003.00, 4004.00]);
+  assert.deepEqual(sells.map((o) => Number(o.price.toFixed(2))), [3998.00, 3997.00, 3996.00]);
   assert.deepEqual(buys.map((o) => Number(o.lot.toFixed(2))), [0.03, 0.03, 0.03]);
   assert.deepEqual(sells.map((o) => Number(o.lot.toFixed(2))), [0.03, 0.03, 0.03]);
 }
@@ -71,7 +71,7 @@ assert.match(sendBlock, /request\.action\s*=\s*TRADE_ACTION_PENDING/);
 assert.match(sendBlock, /ORDER_TYPE_BUY_STOP/);
 assert.match(sendBlock, /ORDER_TYPE_SELL_STOP/);
 assert.doesNotMatch(sendBlock, /TRADE_ACTION_DEAL/);
-assert.match(ea, /double ZeroGridEntryGapPrice\(\)[\s\S]*double preferredGap=ZeroGridEffectiveLowVolatilityEnabled\(\) \? 0\.10 : 3\.0;[\s\S]*ZeroGridMinPendingDistancePrice\(\)\+tick/);
+assert.match(ea, /double ZeroGridEntryGapPrice\(\)[\s\S]*double preferredGap=ZeroGridEffectiveLowVolatilityEnabled\(\) \? ZERO_GRID_LOW_VOL_FIRST_GAP : 3\.0;[\s\S]*ZeroGridMinPendingDistancePrice\(\)\+tick/);
 assert.doesNotMatch(ea, /MathMax\(stops,freeze\)/);
 assert.match(ea, /double ZeroGridPendingAnchorPrice\(bool buySide\)[\s\S]*g_zeroGridCenter\+gap[\s\S]*live\.ask\+gap[\s\S]*live\.bid-gap[\s\S]*live\.ask\+brokerSafe[\s\S]*live\.bid-brokerSafe/);
 assert.doesNotMatch(ea, /ZeroGridEffectiveStepPrice\(\)\*1\.5/);
@@ -91,8 +91,10 @@ assert.match(sendBlock, /OrderSendAsync\(request,result\)/, "live ZERO pending p
 assert.match(ea, /ZeroGridPendingRequestInFlight\(bool buySide,int level\)/, "async ZERO placement must suppress duplicate in-flight requests");
 assert.match(ea, /ZERO_SIMPLE_STABLE_V117/, "ZERO must use the simple stable pending engine");
 assert.match(ea, /InpZeroGridLowVolatilityEnabled\s*=\s*false/, "low-volatility switch must default OFF");
-assert.match(ea, /ZeroGridEffectiveLowVolatilityEnabled\(\) \? 0\.10 : 3\.0/, "normal first gap must be 3.00 while low-volatility stays 0.10");
-assert.match(ea, /g_zeroGridLowVolatilityEnabled \? 0\.30/, "low-volatility level spacing must be 0.30");
+assert.match(ea, /#define ZERO_GRID_LOW_VOL_FIRST_GAP 2\.00/, "low-volatility first pending must start 2.00 from center");
+assert.match(ea, /#define ZERO_GRID_LOW_VOL_STEP_PRICE 1\.00/, "low-volatility levels must be spaced by 1.00");
+assert.match(ea, /ZeroGridEffectiveLowVolatilityEnabled\(\) \? ZERO_GRID_LOW_VOL_FIRST_GAP : 3\.0/, "normal first gap stays 3.00 while low-volatility starts at 2.00");
+assert.match(ea, /g_zeroGridLowVolatilityEnabled \? ZERO_GRID_LOW_VOL_STEP_PRICE/, "low-volatility level spacing must use the locked 1.00 step");
 assert.match(ea, /ZeroGridEffectiveLevelLot\(int level\)/, "ZERO must isolate fixed-vs-ladder lot calculation");
 assert.match(web, /กริดตลาดความผันผวนต่ำ/, "ZERO UI must expose the professional low-volatility switch");
 assert.doesNotMatch(ea, /ZERO_GRID_PAIR_ROLLBACK/, "ZERO must not churn accepted orders with pair rollback");
@@ -118,3 +120,5 @@ assert.match(ea, /ZERO_GRID_EXISTING_CYCLE_GUARD/, "ZERO must hard-block a fresh
 assert.match(ea, /ZERO_GRID_WAIT_FLAT_CONFIRM/, "ZERO must wait through transient async flat snapshots");
 assert.match(web, /zeroGridBaseLot: 0\.03/, "ZERO UI default lot must be 0.03");
 assert.match(web, /<b>0\.03 Lot<\/b>/, "ZERO UI lot must be read-only at 0.03");
+
+assert.match(web, /1\.00 · เริ่ม 2\.00/, "ZERO low-volatility UI must show 1.00 spacing and 2.00 first offset");
