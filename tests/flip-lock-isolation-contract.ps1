@@ -114,7 +114,7 @@ Need $api 'clean.profitTargetMode = "OFF";' 'API must keep AUTO profit targets o
 Need $api 'clean.dailyProfitDrawdownPercent = 0;' 'API must disable FLIP LOCK daily giveback drawdown'
 
 Need $web 'MT5 Local Tick · Server ไม่กำหนดราคา SL' 'FLIP LOCK UI must explain local price ownership'
-Need $web 'Safety Stop → Trailing SL ขยับตามราคา MT5' 'FLIP LOCK UI must expose direct MT5 trailing behavior'
+Need $web 'Safety Stop → ล็อกกำไรสุทธิ ≥ 0.30 → Trailing SL แบบ Tick-on-Tick' 'FLIP LOCK UI must expose the net-profit Tick-on-Tick trailing contract'
 Need $web 'ไม่มีการวาง BUY STOP / SELL STOP ล่วงหน้า' 'FLIP LOCK UI must state that no opposite pending direction is pre-placed'
 
 $eaVersionMatch = [regex]::Match($ea, '#property\s+version\s+"([^"]+)"')
