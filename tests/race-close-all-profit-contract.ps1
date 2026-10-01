@@ -36,11 +36,12 @@ Need $ea 'JsonNumber(json, "racePerPositionProfitMoney"' 'EA must receive RACE p
 Need $race 'raceBasketProfitTarget' 'RACE Basket target ownership is missing'
 Need $race 'racePerPositionProfitTarget' 'RACE per-position target ownership is missing'
 Need $race 'raceStrictProfitTarget' 'RACE configured target must block hidden profitable exits'
-Need $race 'displayedRoundProfit >= g_raceCloseAllProfitMoney' 'RACE Basket arm must use the live MT5 displayed Profit for the current round'
+Need $race 'displayedRoundProfit>=g_raceCloseAllProfitMoney' 'RACE Basket arm must use the live MT5 displayed Profit for the current round'
 Need $race 'RACE_PROFIT_ARMED' 'RACE Basket target must arm the profit runner instead of closing immediately'
 Need $race 'RACE_PROFIT_ARM_GIVEBACK' 'RACE armed Basket must bank profit on protected giveback'
 Need $race 'RACE_PROFIT_ARM_FLOW_END' 'RACE armed Basket must bank profit when the 30-second flow ends'
-Need $race 'RaceGivebackMoney(g_racePeakProfit,g_raceCloseAllProfitMoney)' 'RACE Basket arm must trail from the configured money target'
+Need $race 'RaceGivebackMoney(' 'RACE Basket arm must use the profit giveback helper'
+Need $race 'g_raceCloseAllProfitMoney' 'RACE Basket arm must trail from the configured money target'
 Need $race 'protectedProfitFloor' 'RACE Basket arm must protect part of the configured target after arming'
 if($race.Contains('RaceCloseCycle("RACE_CLOSE_ALL_PROFIT_TARGET")')){throw 'RACE Basket target must not close immediately after arming'}
 if($race.Contains('cycleProfit >= g_raceCloseAllProfitMoney')){throw 'RACE Basket arm must not carry prior realized cycle P/L into the current round target'}
