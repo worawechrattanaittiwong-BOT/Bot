@@ -1,0 +1,535 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { api } from "../../lib/api";
+import {
+  CustomerMobileNav,
+  CustomerSidebar,
+  OwnerMobileNav,
+  OwnerSidebar
+} from "../../components/OwnerSidebar";
+import { ScenovaBrand } from "../../components/ScenovaBrand";
+import { ScenovaIcon } from "../../components/ScenovaIcon";
+import styles from "./fleet-monitor.module.css";
+
+type CurrencyTotal = {
+  currency: string;
+  accounts: number;
+  balance: number;
+  equity: number;
+  floatingProfit: number;
+  todayClosedProfit: number;
+  netProfit: number;
+  netProfit30d: number;
+};
+
+type FleetSlot = {
+  slotId: string;
+  slotNumber: number;
+  slotLabel?: string | null;
+  slotMode: string;
+  slotType: string;
+  slotStatus: string;
+  ownerUserCode?: string | null;
+  assignedUserCode?: string | null;
+  assignedEmail?: string | null;
+  subscription: {
+    status?: string | null;
+    startsAt?: string | null;
+    expiresAt?: string | null;
+    planCode?: string | null;
+    planName?: string | null;
+  };
+  account: null | {
+    id: string;
+    userCode?: string | null;
+    email?: string | null;
+    number?: string | null;
+    broker?: string | null;
+    server?: string | null;
+    mode?: string | null;
+    status?: string | null;
+  };
+  runtime: {
+    instanceId?: string | null;
+    actualState?: string | null;
+    desiredState?: string | null;
+    heartbeatOnline: boolean;
+    heartbeatAgeSeconds?: number | null;
+    runnerOnline: boolean;
+    runnerAgeSeconds?: number | null;
+    runnerRegion?: string | null;
+    runnerHostname?: string | null;
+    lastSeenAt?: string | null;
+    symbol?: string | null;
+    currency: string;
+    engineMode?: string | null;
+    executionStatus?: string | null;
+    marketRegime?: string | null;
+    signalConfidence: number;
+    spreadPoints: number;
+    brokerPingMs: number;
+    adaptiveLot: number;
+    positions: number;
+    pendingOrders: number;
+    consecutiveLosses: number;
+  };
+  money: {
+    balance: number;
+    equity: number;
+    floatingProfit: number;
+    todayClosedProfit: number;
+    todayNetProfitJournal: number;
+    netProfit: number;
+    netProfit30d: number;
+    grossProfit: number;
+    grossLoss: number;
+    averageWin: number;
+    averageLoss: number;
+    derivedStartCapital: number;
+    returnPercent: number;
+    maxDrawdownMoney: number;
+    maxDrawdownPercent: number;
+  };
+  performance: {
+    closedBaskets: number;
+    wins: number;
+    losses: number;
+    winRate: number;
+    profitFactor: number;
+    todayBaskets: number;
+    todayWins: number;
+    todayLosses: number;
+    baskets30d: number;
+    entries: number;
+    entriesToday: number;
+    totalEntryLots: number;
+    latestBasketAt?: string | null;
+    latestEntryAt?: string | null;
+  };
+};
+
+type FleetResponse = {
+  user: {
+    id: string;
+    user_code: string;
+    email: string;
+    role: string;
+    status: string;
+  } | null;
+  elevated: boolean;
+  scope: "ALL_SLOTS" | "OWN_ASSIGNED_SLOTS";
+  generatedAt: string;
+  source: {
+    live: string;
+    performance: string;
+    fundingHistory: string;
+  };
+  summary: {
+    totalSlots: number;
+    connectedAccounts: number;
+    online: number;
+    running: number;
+    stopped: number;
+    offline: number;
+    empty: number;
+    totalPositions: number;
+    totalPendingOrders: number;
+    totalClosedBaskets: number;
+    totalWins: number;
+    winRate: number;
+    highestMaxDrawdownPercent: number;
+    currencyTotals: CurrencyTotal[];
+  };
+  slots: FleetSlot[];
+};
+
+type StatusFilter = "ALL" | "RUNNING" | "ONLINE" | "STOPPED" | "OFFLINE" | "EMPTY";
+type SortMode = "SLOT" | "BALANCE" | "PROFIT" | "WIN_RATE" | "DRAWDOWN";
+
+function num(value: unknown) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function fixed(value: unknown, digits = 2) {
+  return num(value).toLocaleString("en-US", {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits
+  });
+}
+
+function money(value: unknown, currency: string, signed = false) {
+  const amount = num(value);
+  const sign = signed && amount > 0 ? "+" : "";
+  return sign + fixed(amount, 2) + " " + (currency || "USD");
+}
+
+function percent(value: unknown, signed = false) {
+  const amount = num(value);
+  const sign = signed && amount > 0 ? "+" : "";
+  return sign + amount.toFixed(2) + "%";
+}
+
+function freshness(seconds: number | null | undefined) {
+  if (seconds === null || seconds === undefined || !Number.isFinite(Number(seconds))) return "ยังไม่มี Heartbeat";
+  const value = Math.max(0, Math.round(Number(seconds)));
+  if (value < 60) return value + " วินาที";
+  if (value < 3600) return Math.floor(value / 60) + " นาที";
+  return Math.floor(value / 3600) + " ชม.";
+}
+
+function expiryLabel(value?: string | null) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "—";
+  return date.toLocaleDateString("th-TH", {
+    timeZone: "Asia/Bangkok",
+    day: "2-digit",
+    month: "short",
+    year: "2-digit"
+  });
+}
+
+function cardStatus(slot: FleetSlot) {
+  if (!slot.account) return "EMPTY";
+  if (!slot.runtime.heartbeatOnline) return "OFFLINE";
+  const actual = String(slot.runtime.actualState || "").toUpperCase();
+  if (actual === "RUNNING") return "RUNNING";
+  if (actual === "SAFE_STOP") return "SAFE_STOP";
+  return actual || "ONLINE";
+}
+
+function statusTone(status: string) {
+  if (status === "RUNNING" || status === "ONLINE") return "good";
+  if (status === "SAFE_STOP" || status === "STOPPED") return "warn";
+  if (status === "EMPTY") return "neutral";
+  return "bad";
+}
+
+function Metric({
+  label,
+  value,
+  tone = ""
+}: {
+  label: string;
+  value: string;
+  tone?: "good" | "bad" | "warn" | "";
+}) {
+  return (
+    <div className={styles.metric}>
+      <span>{label}</span>
+      <b className={tone ? styles[tone] : ""}>{value}</b>
+    </div>
+  );
+}
+
+export default function FleetMonitorPage() {
+  const [data, setData] = useState<FleetResponse | null>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
+  const [modeFilter, setModeFilter] = useState("ALL");
+  const [brokerFilter, setBrokerFilter] = useState("ALL");
+  const [sortMode, setSortMode] = useState<SortMode>("SLOT");
+
+  async function load(silent = false) {
+    if (!silent) setLoading(true);
+    try {
+      const next = await api("/fleet-monitor");
+      setData(next);
+      setError("");
+    } catch (e: any) {
+      setError(String(e?.message || "โหลด Trading Fleet Monitor ไม่สำเร็จ"));
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    load();
+    const timer = window.setInterval(() => load(true), 15_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  function logout() {
+    window.localStorage.removeItem("bot_token");
+    window.location.href = "/login";
+  }
+
+  const brokers = useMemo(() => {
+    const values = new Set(
+      (data?.slots || [])
+        .map((slot) => String(slot.account?.broker || "").trim())
+        .filter(Boolean)
+    );
+    return Array.from(values).sort((a, b) => a.localeCompare(b));
+  }, [data]);
+
+  const visibleSlots = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    const rows = (data?.slots || []).filter((slot) => {
+      const status = cardStatus(slot);
+      const mode = String(slot.account?.mode || slot.slotMode || "").toUpperCase();
+      const broker = String(slot.account?.broker || "");
+      const haystack = [
+        slot.slotNumber,
+        slot.slotLabel,
+        slot.assignedUserCode,
+        slot.assignedEmail,
+        slot.account?.userCode,
+        slot.account?.email,
+        slot.account?.number,
+        slot.account?.broker,
+        slot.account?.server,
+        slot.runtime.symbol,
+        slot.runtime.engineMode
+      ].join(" ").toLowerCase();
+
+      const statusOk =
+        statusFilter === "ALL" ||
+        (statusFilter === "ONLINE" && slot.runtime.heartbeatOnline) ||
+        (statusFilter === "STOPPED" && slot.runtime.heartbeatOnline && status !== "RUNNING") ||
+        status === statusFilter;
+      const modeOk = modeFilter === "ALL" || mode === modeFilter;
+      const brokerOk = brokerFilter === "ALL" || broker === brokerFilter;
+      const searchOk = !query || haystack.includes(query);
+      return statusOk && modeOk && brokerOk && searchOk;
+    });
+
+    rows.sort((a, b) => {
+      if (sortMode === "BALANCE") return num(b.money.balance) - num(a.money.balance);
+      if (sortMode === "PROFIT") return num(b.money.netProfit) - num(a.money.netProfit);
+      if (sortMode === "WIN_RATE") return num(b.performance.winRate) - num(a.performance.winRate);
+      if (sortMode === "DRAWDOWN") return num(b.money.maxDrawdownPercent) - num(a.money.maxDrawdownPercent);
+      const userCompare = String(a.account?.userCode || a.assignedUserCode || "")
+        .localeCompare(String(b.account?.userCode || b.assignedUserCode || ""));
+      return userCompare || num(a.slotNumber) - num(b.slotNumber);
+    });
+    return rows;
+  }, [data, search, statusFilter, modeFilter, brokerFilter, sortMode]);
+
+  if (!data && loading) {
+    return (
+      <main className={styles.loading}>
+        <span className={styles.loadingDot}/>
+        กำลังเปิด Trading Fleet Monitor...
+      </main>
+    );
+  }
+
+  if (!data) {
+    return <main className={styles.loading}>{error || "ไม่พบข้อมูล Fleet Monitor"}</main>;
+  }
+
+  const primaryCurrency = [...data.summary.currencyTotals].sort((a,b)=>b.accounts-a.accounts)[0] || null;
+
+  return (
+    <div className={styles.shell}>
+      {data.elevated ? (
+        <OwnerSidebar
+          activeKey="trading-fleet-monitor"
+          onLogout={logout}
+          role={String(data.user?.role || "OWNER")}
+        />
+      ) : (
+        <CustomerSidebar
+          activeKey="trading-fleet-monitor"
+          onLogout={logout}
+          userCode={data.user?.user_code}
+        />
+      )}
+
+      <main className={styles.main}>
+        <div className={styles.mobileHead}>
+          <ScenovaBrand className={styles.mobileLogo}/>
+          {data.elevated ? (
+            <OwnerMobileNav activeKey="trading-fleet-monitor" onLogout={logout}/>
+          ) : (
+            <CustomerMobileNav activeKey="trading-fleet-monitor" onLogout={logout}/>
+          )}
+        </div>
+
+        <header className={styles.pageHead}>
+          <div>
+            <div className={styles.eyebrow}>SCENOVA · REAL-TIME ACCOUNT FLEET</div>
+            <h1>Trading Fleet Monitor</h1>
+            <p>
+              {data.elevated
+                ? "ภาพรวมทุก Slot และทุกบัญชี MT5 ในระบบแบบ Read-only"
+                : "ภาพรวม Slot และบัญชี MT5 ของคุณเท่านั้นแบบ Read-only"}
+            </p>
+          </div>
+          <div className={styles.headActions}>
+            <span className={styles.scopeBadge}>
+              <ScenovaIcon name={data.elevated ? "shield" : "account"} size={15}/>
+              {data.elevated ? "ADMIN · ALL SLOTS" : "MY SLOTS ONLY"}
+            </span>
+            <span className={styles.refreshState}><i/>Auto refresh 15s</span>
+            <button type="button" onClick={() => load()} disabled={loading}>
+              <ScenovaIcon name="refresh" size={15}/>
+              {loading ? "กำลังโหลด..." : "รีเฟรช"}
+            </button>
+          </div>
+        </header>
+
+        {error ? <div className={styles.error}>{error}</div> : null}
+
+        <section className={styles.summaryGrid}>
+          <div><span>Slots ทั้งหมด</span><b>{data.summary.totalSlots}</b><small>{data.summary.connectedAccounts} MT5 connected</small></div>
+          <div><span>กำลัง RUNNING</span><b className={styles.good}>{data.summary.running}</b><small>{data.summary.online} Online</small></div>
+          <div><span>Offline</span><b className={styles.bad}>{data.summary.offline}</b><small>{data.summary.empty} ยังไม่เชื่อม MT5</small></div>
+          <div><span>Win Rate รวม</span><b>{percent(data.summary.winRate)}</b><small>{data.summary.totalClosedBaskets.toLocaleString("en-US")} baskets</small></div>
+          <div><span>Max Drawdown สูงสุด</span><b className={styles.warn}>{percent(data.summary.highestMaxDrawdownPercent)}</b><small>จาก Trade Journal</small></div>
+          <div><span>Open Positions</span><b>{data.summary.totalPositions}</b><small>{data.summary.totalPendingOrders} Pending</small></div>
+          <div><span>{primaryCurrency ? primaryCurrency.currency + " Balance" : "Balance"}</span><b>{primaryCurrency ? money(primaryCurrency.balance, primaryCurrency.currency) : "—"}</b><small>{data.summary.currencyTotals.length} currency · ไม่รวมข้ามสกุล</small></div>
+          <div><span>{primaryCurrency ? primaryCurrency.currency + " Net Profit" : "Net Profit"}</span><b className={num(primaryCurrency?.netProfit) >= 0 ? styles.good : styles.bad}>{primaryCurrency ? money(primaryCurrency.netProfit, primaryCurrency.currency, true) : "—"}</b><small>All-time journal · แยกตามสกุล</small></div>
+        </section>
+
+        <section className={styles.currencyStrip}>
+          {data.summary.currencyTotals.map((item) => (
+            <article key={item.currency}>
+              <header><b>{item.currency}</b><span>{item.accounts} บัญชี</span></header>
+              <div><span>Balance</span><b>{fixed(item.balance)}</b></div>
+              <div><span>Equity</span><b>{fixed(item.equity)}</b></div>
+              <div><span>วันนี้</span><b className={item.todayClosedProfit >= 0 ? styles.good : styles.bad}>{fixed(item.todayClosedProfit)}</b></div>
+              <div><span>30D</span><b className={item.netProfit30d >= 0 ? styles.good : styles.bad}>{fixed(item.netProfit30d)}</b></div>
+              <div><span>Net P/L</span><b className={item.netProfit >= 0 ? styles.good : styles.bad}>{fixed(item.netProfit)}</b></div>
+            </article>
+          ))}
+        </section>
+
+        <section className={styles.toolbar}>
+          <label className={styles.searchBox}>
+            <ScenovaIcon name="report" size={15}/>
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder={data.elevated ? "ค้นหา User / Slot / MT5 / Broker / Server..." : "ค้นหา Slot / MT5 / Broker / Server..."}
+            />
+          </label>
+
+          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}>
+            <option value="ALL">ทุกสถานะ</option>
+            <option value="RUNNING">RUNNING</option>
+            <option value="ONLINE">ONLINE</option>
+            <option value="STOPPED">STOPPED / SAFE STOP</option>
+            <option value="OFFLINE">OFFLINE</option>
+            <option value="EMPTY">ยังไม่เชื่อม MT5</option>
+          </select>
+
+          <select value={modeFilter} onChange={(event) => setModeFilter(event.target.value)}>
+            <option value="ALL">ทุก Runtime</option>
+            <option value="CLOUD">Cloud / VPS</option>
+            <option value="LOCAL">Local MT5</option>
+          </select>
+
+          <select value={brokerFilter} onChange={(event) => setBrokerFilter(event.target.value)}>
+            <option value="ALL">ทุก Broker</option>
+            {brokers.map((broker) => <option key={broker} value={broker}>{broker}</option>)}
+          </select>
+
+          <select value={sortMode} onChange={(event) => setSortMode(event.target.value as SortMode)}>
+            <option value="SLOT">เรียงตาม Slot</option>
+            <option value="BALANCE">Balance สูง → ต่ำ</option>
+            <option value="PROFIT">Net Profit สูง → ต่ำ</option>
+            <option value="WIN_RATE">Win Rate สูง → ต่ำ</option>
+            <option value="DRAWDOWN">Drawdown สูง → ต่ำ</option>
+          </select>
+
+          <span className={styles.resultCount}>แสดง {visibleSlots.length} / {data.slots.length} Slots</span>
+        </section>
+
+        <section className={styles.cards}>
+          {visibleSlots.map((slot) => {
+            const status = cardStatus(slot);
+            const tone = statusTone(status);
+            const currency = slot.runtime.currency || "USD";
+            const accountName = slot.account?.userCode || slot.assignedUserCode || "SCENOVA";
+            const displayName = slot.slotLabel || (slot.account ? "MT5 Account" : "Available Slot");
+            const syncText = freshness(slot.runtime.heartbeatAgeSeconds);
+            const stateDetail = slot.runtime.executionStatus || slot.runtime.actualState || slot.slotStatus || "—";
+            return (
+              <article className={styles.slotCard + " " + styles["tone_" + tone]} key={slot.slotId}>
+                <header className={styles.cardHead}>
+                  <div className={styles.slotNumber}>{String(slot.slotNumber || 0).padStart(2, "0")}</div>
+                  <div className={styles.cardIdentity}>
+                    <b>{displayName}</b>
+                    <span>{data.elevated ? accountName + " · " : ""}{slot.account ? "MT5 " + slot.account.number : "ยังไม่ได้เชื่อม MT5"}</span>
+                  </div>
+                  <span className={styles.status + " " + styles["status_" + tone]}><i/>{status}</span>
+                </header>
+
+                <div className={styles.accountLine}>
+                  <span><ScenovaIcon name="cloud" size={13}/>{slot.account?.broker || "No Broker"}</span>
+                  <span>{slot.account?.server || "No Server"}</span>
+                  <span>{String(slot.account?.mode || slot.slotMode || "—").toUpperCase()}</span>
+                </div>
+
+                <div className={styles.primaryMetrics}>
+                  <Metric label="Balance" value={money(slot.money.balance, currency)}/>
+                  <Metric label="Equity" value={money(slot.money.equity, currency)}/>
+                  <Metric label="Floating" value={money(slot.money.floatingProfit, currency, true)} tone={slot.money.floatingProfit >= 0 ? "good" : "bad"}/>
+                  <Metric label="Today P/L" value={money(slot.money.todayClosedProfit, currency, true)} tone={slot.money.todayClosedProfit >= 0 ? "good" : "bad"}/>
+                  <Metric label="30D P/L" value={money(slot.money.netProfit30d, currency, true)} tone={slot.money.netProfit30d >= 0 ? "good" : "bad"}/>
+                  <Metric label="Net P/L" value={money(slot.money.netProfit, currency, true)} tone={slot.money.netProfit >= 0 ? "good" : "bad"}/>
+                </div>
+
+                <div className={styles.statGrid}>
+                  <Metric label="Win Rate" value={percent(slot.performance.winRate)} tone={slot.performance.winRate >= 60 ? "good" : slot.performance.closedBaskets ? "warn" : ""}/>
+                  <Metric label="Profit Factor" value={slot.performance.profitFactor >= 999 ? "∞" : fixed(slot.performance.profitFactor, 2)} tone={slot.performance.profitFactor >= 1.2 ? "good" : slot.performance.closedBaskets ? "warn" : ""}/>
+                  <Metric label="Max DD" value={percent(slot.money.maxDrawdownPercent)} tone={slot.money.maxDrawdownPercent >= 10 ? "bad" : slot.money.maxDrawdownPercent >= 6 ? "warn" : ""}/>
+                  <Metric label="Baskets" value={slot.performance.closedBaskets.toLocaleString("en-US")}/>
+                  <Metric label="W / L" value={slot.performance.wins + " / " + slot.performance.losses}/>
+                  <Metric label="Entries" value={slot.performance.entries.toLocaleString("en-US")}/>
+                  <Metric label="Positions" value={String(slot.runtime.positions)} tone={slot.runtime.positions > 0 ? "warn" : ""}/>
+                  <Metric label="Pending" value={String(slot.runtime.pendingOrders)} tone={slot.runtime.pendingOrders > 0 ? "warn" : ""}/>
+                  <Metric label="Total Lots" value={fixed(slot.performance.totalEntryLots, 2)}/>
+                  <Metric label="Signal" value={fixed(slot.runtime.signalConfidence, 0) + "%"}/>
+                  <Metric label="Spread" value={fixed(slot.runtime.spreadPoints, 1) + " pt"}/>
+                  <Metric label="Ping" value={fixed(slot.runtime.brokerPingMs, 0) + " ms"}/>
+                </div>
+
+                <footer className={styles.cardFoot}>
+                  <div>
+                    <span>{slot.runtime.symbol || "No Symbol"}</span>
+                    <b>{String(slot.runtime.engineMode || "—").replace(/_/g, " ")}</b>
+                  </div>
+                  <div>
+                    <span>EA / Runtime</span>
+                    <b>{stateDetail}</b>
+                  </div>
+                  <div>
+                    <span>Sync</span>
+                    <b className={slot.runtime.heartbeatOnline ? styles.good : styles.bad}>{syncText}</b>
+                  </div>
+                  <div>
+                    <span>Expire</span>
+                    <b>{expiryLabel(slot.subscription.expiresAt)}</b>
+                  </div>
+                </footer>
+              </article>
+            );
+          })}
+        </section>
+
+        {!visibleSlots.length ? (
+          <div className={styles.emptyState}>
+            <ScenovaIcon name="report" size={28}/>
+            <b>ไม่พบ Slot ตามตัวกรองนี้</b>
+            <span>ลองเปลี่ยนสถานะ, Runtime, Broker หรือคำค้นหา</span>
+          </div>
+        ) : null}
+
+        <div className={styles.dataNote}>
+          <ScenovaIcon name="shield" size={14}/>
+          <span>
+            ข้อมูลหน้านี้เป็น Read-only จาก EA Heartbeat และ Trade Journal จริงเท่านั้น ·
+            ระบบยังไม่แสดงยอด Deposit/Withdraw ของ MT5 เพราะ EA เวอร์ชันปัจจุบันไม่ได้ส่ง Funding History และหน้านี้จะไม่สร้างค่าประมาณขึ้นมาเอง
+          </span>
+        </div>
+      </main>
+    </div>
+  );
+}
