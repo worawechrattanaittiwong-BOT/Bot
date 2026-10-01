@@ -440,6 +440,8 @@ string   g_raceLossState = "NORMAL";
 bool     g_raceHadExposure = false;
 bool     g_raceReentryPending = false;
 datetime g_raceReentryStartedAt = 0;
+double   g_raceLastObservedCycleProfit = 0.0;
+int      g_raceReentryObserveSeconds = 6;
 // RACE VNext Phase 4 news-pause telemetry. RACE only; existing baskets are
 // never force-closed merely because an event window became active.
 bool     g_raceNewsPauseActive = false;
@@ -4237,6 +4239,9 @@ bool ProcessRaceFill(int direction)
    // fill must stay on that same side. A new BUY/SELL decision is allowed only
    // after the entire RACE basket is flat.
    int existingPositions = BasketPositionCount();
+   if(existingPositions<=0)
+      g_raceLastObservedCycleProfit=0.0;
+
    if(existingPositions > 0)
    {
       int existingDirection = BasketDirection();
@@ -4487,6 +4492,7 @@ bool ManageRaceBasket(double momentum)
    bool filling = filledUnits < g_maxPositions;
    double floatingProfit = BasketProfit();
    double cycleProfit = BasketCycleProfit();
+   g_raceLastObservedCycleProfit=cycleProfit;
 
    // Explicit user loss control remains a hard safety boundary in every mode.
    double lossLimit = EffectiveBasketLossLimit();
