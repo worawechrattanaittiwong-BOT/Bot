@@ -191,7 +191,10 @@ Need $css '--desktop-form-control-width:66.666%' 'Desktop Bot Settings must shar
 Need $css '--desktop-form-control-h:34px' 'Desktop standard controls must share one canonical height'
 Need $css '.cc-v19-settings-card .cc-bot-v2-main .cc-bot-v2-field>.cc-bot-v2-choice-row,' 'Desktop RACE/MANUAL segmented controls must use the shared right-column owner'
 Need $css '.cc-v19-settings-card .cc-bot-v2-toggle-row>.cc-bot-v2-control-cell,' 'Desktop ZERO GRID toggle must use the shared right-column owner'
-Need $css 'grid-auto-rows:52px!important;' 'Current desktop risk-row sizing missing'
+Need $css 'Risk rows follow the same desktop row rhythm as the MANUAL profit target:' 'Current desktop risk-row rhythm marker missing'
+Need $css '.cc-v19-settings-card .cc-bot-v2-limit-grid .money-input-shell,' 'Desktop risk amount fields must use the shared control-height owner'
+Need $css 'height:var(--desktop-form-control-h)!important;' 'Desktop risk amount fields must match the canonical 34px desktop control height'
+if($css.Contains('grid-auto-rows:52px!important;')) { throw 'Old 52px desktop risk-row owner must not return; risk rows now follow the MANUAL profit-target rhythm' }
 Need $css 'Control Center V59 · mobile authoritative alignment' 'Current mobile authoritative alignment layer missing'
 Need $css '--mobile-form-control-width:66.666%' 'All mobile modes must share the same right-edge control width'
 Need $css '--mobile-form-row-h:52px' 'Standard mobile settings rows must share one vertical rhythm'
