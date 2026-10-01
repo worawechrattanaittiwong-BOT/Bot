@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.1.5"
-#define SCENOVA_EA_VERSION "1.1.5"
-#define SCENOVA_PRODUCT_VERSION "1.1.5"
+#property version   "1.1.6"
+#define SCENOVA_EA_VERSION "1.1.6"
+#define SCENOVA_PRODUCT_VERSION "1.1.6"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_CONFIGURED_LOSS_ONLY_V1"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
 #property description "Use Demo and forward testing before live trading."
@@ -13442,6 +13442,146 @@ int BrainV13SmartDirection(double momentum)
    return EnforceUserDirectionLock(direction);
 }
 
+// Shared AUTO / MANUAL Zone-First entry brain -----------------------------
+// Both modes read the same Demand/Supply + price-reaction intelligence.
+// AUTO owns automatic SL/TP after entry; MANUAL keeps user-defined exits.
+bool SharedZoneReactionCandidate(
+   int direction,
+   double momentum,
+   double &scoreOut,
+   string &reasonOut
+)
+{
+   scoreOut=0.0;
+   reasonOut="NONE";
+   if(direction==0)
+      return false;
+
+   MqlTick tick;
+   if(!SymbolInfoTick(_Symbol,tick))
+      return false;
+
+   double zoneScore=direction>0 ? g_demandZoneScore : g_supplyZoneScore;
+   double zoneLow=direction>0 ? g_demandZoneLow : g_supplyZoneLow;
+   double zoneHigh=direction>0 ? g_demandZoneHigh : g_supplyZoneHigh;
+   if(zoneScore<50.0 || zoneLow<=0.0 || zoneHigh<zoneLow)
+      return false;
+
+   double atrPrice=MathMax(
+      _Point*12.0,
+      AverageTrueRangePoints(PERIOD_M5,g_atrPeriod)*_Point
+   );
+   double price=(tick.bid+tick.ask)*0.5;
+   if(!PriceInsideOrNearZone(price,zoneLow,zoneHigh,atrPrice*0.24))
+      return false;
+
+   double paScore=direction>0 ? g_priceActionBuyScore : g_priceActionSellScore;
+   bool rejection=RecentDirectionalRejection(
+      direction,zoneLow,zoneHigh,atrPrice*0.12
+   );
+   bool executionTurn=ExecutionTurningEvent(direction,momentum);
+   bool m1Body=RecentDirectionalBody(direction,PERIOD_M1);
+   bool m5Body=RecentDirectionalBody(direction,PERIOD_M5);
+   bool emaTurn=
+      (direction>0 && g_emaReclaimState=="RECLAIM_EMA21_UP") ||
+      (direction<0 && g_emaReclaimState=="LOSE_EMA21_DOWN");
+   bool liveMomentum=MomentumSupportsDirection(direction,momentum,0.18);
+
+   // The zone itself is context; at least one live reaction is required.
+   bool reaction=
+      rejection ||
+      executionTurn ||
+      m5Body ||
+      (m1Body && (paScore>=18.0 || liveMomentum || emaTurn)) ||
+      (zoneScore>=75.0 &&
+       (paScore>=27.0 || (liveMomentum && g_trendM1==direction)));
+   if(!reaction)
+      return false;
+
+   scoreOut=zoneScore;
+   if(rejection) scoreOut+=8.0;
+   if(executionTurn) scoreOut+=7.0;
+   if(m5Body) scoreOut+=5.0;
+   else if(m1Body) scoreOut+=3.0;
+   if(emaTurn) scoreOut+=4.0;
+   if(liveMomentum) scoreOut+=3.0;
+   scoreOut=MathMin(100.0,scoreOut);
+
+   reasonOut=direction>0
+      ? "DEMAND_ZONE_REACTION"
+      : "SUPPLY_ZONE_REACTION";
+   return true;
+}
+
+void PublishSharedZoneEntry(int direction,double score)
+{
+   g_entryModel=direction>0 ? "ZONE_FIRST_DEMAND" : "ZONE_FIRST_SUPPLY";
+   g_entryTrigger=direction>0 ? "DEMAND_REACTION_BUY" : "SUPPLY_REACTION_SELL";
+   g_entryBias=direction>0 ? "BUY" : "SELL";
+   g_entryQualityScore=MathMax(0.0,MathMin(100.0,score));
+   g_entryQuality=score>=78.0 ? "A" : score>=65.0 ? "B" : "C";
+   g_adaptiveBlockReason="";
+}
+
+int SharedAutoManualBrainDirection(double momentum)
+{
+   double buyScore=0.0;
+   double sellScore=0.0;
+   string buyReason="NONE";
+   string sellReason="NONE";
+   bool buyReady=SharedZoneReactionCandidate(1,momentum,buyScore,buyReason);
+   bool sellReady=SharedZoneReactionCandidate(-1,momentum,sellScore,sellReason);
+
+   int direction=0;
+   double selectedScore=0.0;
+
+   if(g_entryMode==ENTRY_BUY_ONLY)
+   {
+      if(buyReady)
+      {
+         direction=1;
+         selectedScore=buyScore;
+      }
+   }
+   else if(g_entryMode==ENTRY_SELL_ONLY)
+   {
+      if(sellReady)
+      {
+         direction=-1;
+         selectedScore=sellScore;
+      }
+   }
+   else if(buyReady || sellReady)
+   {
+      if(buyReady && !sellReady)
+         direction=1;
+      else if(sellReady && !buyReady)
+         direction=-1;
+      else if(MathAbs(buyScore-sellScore)>=2.0)
+         direction=buyScore>sellScore ? 1 : -1;
+      else if(momentum>0.0)
+         direction=1;
+      else if(momentum<0.0)
+         direction=-1;
+      else if(g_macroTrendDirection!=0)
+         direction=g_macroTrendDirection;
+      else
+         direction=buyScore>=sellScore ? 1 : -1;
+
+      selectedScore=direction>0 ? buyScore : sellScore;
+   }
+
+   if(direction!=0)
+   {
+      PublishSharedZoneEntry(direction,selectedScore);
+      return EnforceUserDirectionLock(direction);
+   }
+
+   // Away from a live zone reaction, keep normal shared market intelligence.
+   return BrainV13SmartDirection(momentum);
+}
+
+
 bool BrainV13FastWrongEntryCorrection(double momentum)
 {
    int count = BasketPositionCount();
@@ -14072,20 +14212,53 @@ void AutoV20PlanPrices(AUTO_V20_SIDE &side,AUTO_V20_LEVELS &levels)
    side.entryPrice=side.direction>0 ? tick.ask : tick.bid;
 
    double stopDistance=atrPrice*0.58;
-   if(side.direction>0 && levels.nearestSupport>0.0 &&
+   bool zoneStopApplied=false;
+
+   // Zone-First AUTO: place SL beyond the active Demand/Supply zone when the
+   // entry came from that area; otherwise fall back to nearest structure.
+   if(side.direction>0 &&
+      g_demandZoneLow>0.0 && g_demandZoneHigh>=g_demandZoneLow &&
+      side.entryPrice<=g_demandZoneHigh+atrPrice*0.30)
+   {
+      double zoneDistance=side.entryPrice-(g_demandZoneLow-atrPrice*0.10);
+      if(zoneDistance>=atrPrice*0.28 && zoneDistance<=atrPrice*0.95)
+      {
+         stopDistance=zoneDistance;
+         zoneStopApplied=true;
+      }
+   }
+   else if(side.direction<0 &&
+           g_supplyZoneLow>0.0 && g_supplyZoneHigh>=g_supplyZoneLow &&
+           side.entryPrice>=g_supplyZoneLow-atrPrice*0.30)
+   {
+      double zoneDistance=(g_supplyZoneHigh+atrPrice*0.10)-side.entryPrice;
+      if(zoneDistance>=atrPrice*0.28 && zoneDistance<=atrPrice*0.95)
+      {
+         stopDistance=zoneDistance;
+         zoneStopApplied=true;
+      }
+   }
+
+   if(!zoneStopApplied &&
+      side.direction>0 && levels.nearestSupport>0.0 &&
       levels.nearestSupport<side.entryPrice)
    {
       double structureDistance=side.entryPrice-(levels.nearestSupport-atrPrice*0.08);
       if(structureDistance>=atrPrice*0.30 && structureDistance<=atrPrice*0.85)
          stopDistance=structureDistance;
    }
-   else if(side.direction<0 && levels.nearestResistance>side.entryPrice)
+   else if(!zoneStopApplied &&
+           side.direction<0 && levels.nearestResistance>side.entryPrice)
    {
       double structureDistance=(levels.nearestResistance+atrPrice*0.08)-side.entryPrice;
       if(structureDistance>=atrPrice*0.30 && structureDistance<=atrPrice*0.85)
          stopDistance=structureDistance;
    }
-   stopDistance=AutoV20Clamp(stopDistance,atrPrice*0.36,atrPrice*0.78);
+   stopDistance=AutoV20Clamp(
+      stopDistance,
+      atrPrice*0.32,
+      atrPrice*(zoneStopApplied ? 0.95 : 0.78)
+   );
 
    double configuredStop=EffectiveStopLossDistancePoints()*_Point;
    if(configuredStop>_Point)
@@ -14095,20 +14268,30 @@ void AutoV20PlanPrices(AUTO_V20_SIDE &side,AUTO_V20_LEVELS &levels)
    // nearby opposing M5 level may shorten it; the net-RR policy then rejects
    // that setup instead of accepting a trade that can lose more than it earns.
    double targetDistance=MathMax(atrPrice*0.76,stopDistance*1.55);
-   if(side.direction>0 && levels.nearestResistance>side.entryPrice)
+
+   // Zone-First AUTO targets the nearest opposing reaction area and banks
+   // slightly before the exact level: BUY -> Supply/Resistance,
+   // SELL -> Demand/Support.
+   double opposingLevel=side.direction>0
+      ? ClosestAbove(
+         side.entryPrice,
+         g_supplyZoneLow,
+         levels.nearestResistance,
+         levels.majorResistance
+      )
+      : ClosestBelow(
+         side.entryPrice,
+         g_demandZoneHigh,
+         levels.nearestSupport,
+         levels.majorSupport
+      );
+   if(opposingLevel>0.0)
    {
-      double room=levels.nearestResistance-side.entryPrice-atrPrice*0.05;
-      if(room>=atrPrice*0.28 && room<=atrPrice*1.40)
+      double room=MathAbs(opposingLevel-side.entryPrice)-atrPrice*0.06;
+      if(room>=atrPrice*0.30 && room<=atrPrice*1.60)
          targetDistance=MathMin(targetDistance,room);
    }
-   else if(side.direction<0 && levels.nearestSupport>0.0 &&
-           levels.nearestSupport<side.entryPrice)
-   {
-      double room=side.entryPrice-levels.nearestSupport-atrPrice*0.05;
-      if(room>=atrPrice*0.28 && room<=atrPrice*1.40)
-         targetDistance=MathMin(targetDistance,room);
-   }
-   targetDistance=AutoV20Clamp(targetDistance,atrPrice*0.28,atrPrice*1.35);
+   targetDistance=AutoV20Clamp(targetDistance,atrPrice*0.30,atrPrice*1.35);
 
    side.slPrice=side.direction>0
       ? side.entryPrice-stopDistance
@@ -14409,6 +14592,7 @@ int AutoV20PrecisionDirection(double momentum)
    AUTO_V20_SIDE selected;
    AutoV20ResetSide(selected,0);
    int direction=0;
+   bool sharedZoneFirst=false;
 
    if(count>0)
    {
@@ -14421,53 +14605,50 @@ int AutoV20PrecisionDirection(double momentum)
       direction=basketDirection;
       selected=direction>0 ? g_autoV20Buy : g_autoV20Sell;
    }
-   else if(g_entryMode==ENTRY_BUY_ONLY)
-   {
-      direction=1;
-      selected=g_autoV20Buy;
-   }
-   else if(g_entryMode==ENTRY_SELL_ONLY)
-   {
-      direction=-1;
-      selected=g_autoV20Sell;
-   }
    else
    {
-      double edge=g_autoV20Buy.rankScore-g_autoV20Sell.rankScore;
-      if(MathAbs(edge)<5.0)
+      direction=SharedAutoManualBrainDirection(momentum);
+      sharedZoneFirst=StringFind(g_entryModel,"ZONE_FIRST_")==0;
+      if(direction==0)
       {
-         g_autoV20RejectReason="BUY_SELL_EDGE_TOO_SMALL";
-         g_adaptiveBlockReason="AUTO_V20_WAIT_CONFLICT";
-         Print("AUTO V20 reject id=",g_autoV20DecisionId,
-               " reason=",g_autoV20RejectReason,
-               " buy=",DoubleToString(g_autoV20Buy.rankScore,1),
-               " sell=",DoubleToString(g_autoV20Sell.rankScore,1));
+         g_autoV20RejectReason="SHARED_BRAIN_WAIT";
+         if(g_adaptiveBlockReason=="")
+            g_adaptiveBlockReason="WAITING_ZONE_REACTION";
          return 0;
       }
-      direction=edge>0.0 ? 1 : -1;
       selected=direction>0 ? g_autoV20Buy : g_autoV20Sell;
    }
 
-   double minimumConfidence=count>0 ? 62.0 : 60.0;
-   double minimumRank=count>0 ? 66.0 : 64.0;
+   // Demand/Supply + reaction is a direct first-entry trigger. Away from a
+   // live zone, keep a moderate quality floor. Adds remain strict.
+   double minimumConfidence=count>0 ? 62.0 : 54.0;
+   double minimumRank=count>0 ? 66.0 : 56.0;
    if(g_marketRegime=="HIGH_VOLATILITY")
    {
-      minimumConfidence+=3.0;
-      minimumRank+=3.0;
+      minimumConfidence+=count>0 ? 3.0 : 2.0;
+      minimumRank+=count>0 ? 3.0 : 2.0;
    }
    else if(g_marketRegime=="RANGE")
-      minimumRank+=2.0;
+      minimumRank+=count>0 ? 2.0 : 1.0;
 
-   if(selected.confidence<minimumConfidence || selected.rankScore<minimumRank)
+   if(!sharedZoneFirst &&
+      (selected.confidence<minimumConfidence || selected.rankScore<minimumRank))
    {
       g_autoV20RejectReason="CENTRAL_SCORE_NOT_READY";
       g_adaptiveBlockReason="AUTO_V20_WAIT_QUALITY";
-      Print("AUTO V20 reject id=",g_autoV20DecisionId,
-            " side=",direction>0 ? "BUY" : "SELL",
-            " confidence=",DoubleToString(selected.confidence,1),
-            " rank=",DoubleToString(selected.rankScore,1),
-            " model=",selected.model);
       return 0;
+   }
+
+   if(sharedZoneFirst)
+   {
+      selected.model=direction>0
+         ? "AUTO_DEMAND_REACTION"
+         : "AUTO_SUPPLY_REACTION";
+      selected.reason=direction>0
+         ? "DEMAND_ZONE_REACTION"
+         : "SUPPLY_ZONE_REACTION";
+      double zoneQuality=direction>0 ? g_demandZoneScore : g_supplyZoneScore;
+      selected.rankScore=MathMax(selected.rankScore,MathMin(100.0,zoneQuality));
    }
 
    if(count>0)
@@ -14521,8 +14702,11 @@ int AutoV20PrecisionDirection(double momentum)
       g_autoV20DirectionChangeReason="FINAL_RR_LOCATION_HISTORY_CHANGED_SIDE";
 
    string vectorLiveReason="NONE";
-   if(!AutoVectorEdgeLiveAllow(direction,vectorLiveReason))
+   bool vectorLiveAllowed=AutoVectorEdgeLiveAllow(direction,vectorLiveReason);
+   if(!vectorLiveAllowed && count>0)
    {
+      // Vector Edge remains a hard guard for additional positions, but does
+      // not veto a valid first entry already confirmed by the shared brain.
       g_autoV20RejectReason=vectorLiveReason;
       g_adaptiveBlockReason="AUTO_VECTOR_EDGE_WAIT";
       g_cachedAdaptiveDirection=0;
@@ -15015,7 +15199,7 @@ int AdaptiveEntryDirection(double momentum)
       return autoDirection;
    }
 
-   int rawDirection = BrainV13SmartDirection(momentum);
+   int rawDirection = SharedAutoManualBrainDirection(momentum);
    g_marketRegimeDetail = DetailedMarketRegime(momentum, rawDirection);
 
    if(rawDirection == 0)
@@ -18800,7 +18984,11 @@ bool SendMarketOrder(int direction) /* V9_RETRY */
    {
       double atrPrice=MathMax(_Point*12.0,
          AverageTrueRangePoints(PERIOD_M5,g_atrPeriod)*_Point);
-      if(MathAbs(entryPrice-autoPlan.entryPrice)>MathMax(_Point*2.0,atrPrice*0.08))
+      double executionMoveTolerance=MathMax(
+         _Point*2.0,
+         MathMax((tick.ask-tick.bid)*1.50,atrPrice*0.18)
+      );
+      if(MathAbs(entryPrice-autoPlan.entryPrice)>executionMoveTolerance)
       {
          g_executionStatus="AUTO_V20_PRICE_MOVED_REEVALUATE";
          return false;
