@@ -54,7 +54,7 @@ Need $send '? NormalizeTradeVolume(g_lot)' 'FLIP starter must use configured Lot
 Need $send 'FLIP_LOCK_LIVE_COMMENT' 'FLIP live position ownership tag missing'
 Need $send 'FlipLockInitialSafetyStopPrice(direction,entryPrice,tick)' 'FLIP Safety Stop missing'
 
-Need $flip '#define FLIP_LOCK_V1_VERSION "1.1.0"' 'FLIP internal version must be 1.1.0'
+Need $flip '#define FLIP_LOCK_V1_VERSION "1.1.1"' 'FLIP internal version must be 1.1.1'
 Need $atr 'PERIOD_M1' 'FLIP ATR must use M1'
 Forbid $atr 'PERIOD_M5' 'FLIP ATR must not use M5 fallback'
 Forbid $starterDirection 'g_macroTrendDirection' 'FLIP starter must not use macro trend'
@@ -109,8 +109,8 @@ $releaseVersionMatch = [regex]::Match($release, 'DEFAULT_EA_VERSION\s*=\s*"([^"]
 if(-not $eaVersionMatch.Success -or -not $releaseVersionMatch.Success){
   throw 'EA release version marker missing'
 }
-if($eaVersionMatch.Groups[1].Value -ne '1.1.0' -or $releaseVersionMatch.Groups[1].Value -ne '1.1.0'){
-  throw ("FLIP 1.1.0 version mismatch: EA={0} API={1}" -f $eaVersionMatch.Groups[1].Value,$releaseVersionMatch.Groups[1].Value)
+if($eaVersionMatch.Groups[1].Value -ne '1.1.1' -or $releaseVersionMatch.Groups[1].Value -ne '1.1.1'){
+  throw ("FLIP 1.1.1 version mismatch: EA={0} API={1}" -f $eaVersionMatch.Groups[1].Value,$releaseVersionMatch.Groups[1].Value)
 }
 
-Write-Host 'FLIP LOCK 1.1.0 M1 pending-baton / fixed-Lot contract: PASS'
+Write-Host 'FLIP LOCK 1.1.1 M1 pending-baton / fixed-Lot + cost-aware profit lock contract: PASS'
