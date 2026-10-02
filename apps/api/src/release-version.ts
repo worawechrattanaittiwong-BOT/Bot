@@ -129,7 +129,7 @@ export function latestEaRelease() {
   const configuredHash = String(process.env.SCENOVA_EA_SHA256 || "").trim().toLowerCase() || null;
   const manifestEaVersion = String(manifest.eaVersion || "").trim();
   const configuredEaVersion = String(process.env.SCENOVA_EA_VERSION || "").trim();
-  const manifestBuildId = String(manifest.buildId || manifest.sourceCommit || "").trim() || null;
+  const manifestBuildId = String(manifest.buildId || "").trim() || null;
   const configuredBuildId = String(process.env.SCENOVA_EA_BUILD_ID || "").trim() || null;
 
   // Trust a release version only when it is bound to the EX5 actually served.
