@@ -88,7 +88,10 @@ jobs:
         run: npm run typecheck
 
       - name: Generate iOS native project with ReplayKit extension
-        run: npx expo prebuild --platform ios --clean
+        run: npm run prebuild:ios
+
+      - name: Install iOS Pods
+        run: npx pod-install ios
 
       - name: Verify ReplayKit native configuration
         run: |
