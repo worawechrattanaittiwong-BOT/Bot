@@ -6315,7 +6315,7 @@ function BotSettingsModal(props:any) {
   ))));
   const modeCopy:Record<string,{title:string;subtitle:string}> = {
     AUTO:{title:"AUTO · VECTOR EDGE",subtitle:"Vector Edge / V20 เป็นเจ้าของเฉพาะ Position ที่ AUTO เปิดเอง · Lot ต่อไม้ใช้ค่าที่ตั้งแบบตายตัว · ไม่รับช่วง Position จากโหมดอื่น"},
-    FLIP_LOCK:{title:"FLIP LOCK",subtitle:"อ่านราคา MT5 โดยตรง · รอจน SL สามารถล็อกกำไรสุทธิอย่างน้อย 0.30 ได้ แล้วไล่ SL ตามราคาทุก Tick โดยเว้นระยะแค่ขั้นต่ำที่ Broker อนุญาต"},
+    FLIP_LOCK:{title:"FLIP LOCK",subtitle:"M1 เท่านั้น · เปิด 1 Position พร้อม Pending Stop ฝั่งตรงข้ามที่ขยับตามราคา · ทุกไม้ใช้ Lot ตามค่าที่ตั้ง ไม่มี Martingale"},
     RACE:{title:"RACE",subtitle:"เพิ่มความถี่ในการเปิดสถานะเพื่อให้ครบจำนวนที่กำหนดเร็วขึ้น โดยแยกการบริหารรอบจากโหมดอัตโนมัติ"},
     ZERO_GRID:{title:"ZERO GRID",subtitle:"วางคำสั่ง BUY STOP และ SELL STOP แบบสมมาตร รองรับ 1–30 ระดับต่อฝั่ง"},
     MANUAL:{title:"MANUAL",subtitle:"ใช้สมองเข้าเดียวกับ AUTO: Demand/Supply + Reaction + โครงสร้างตลาด แต่ Lot / จำนวนไม้ / Stop / Profit ใช้ค่าที่ผู้ใช้กำหนดเอง"}
@@ -6375,13 +6375,13 @@ function BotSettingsModal(props:any) {
     FLIP_LOCK:{
       title:"FLIP LOCK",
       icon:"trend",
-      systemType:"Single Position + Trailing Stop · ไม่ใช่ Martingale",
-      sizing:"1 Position · Lot คงที่ตามค่าที่ตั้ง",
-      exitStyle:"Broker SL + Trailing ตาม Tick เมื่อ Broker อนุญาต",
-      workflow:"เปิดทีละฝั่ง พอราคาไปถูกทางและเริ่มมีกำไร ระบบจะค่อย ๆ ขยับจุดป้องกันกำไรตามราคา พอรอบจบก็ดูตลาดใหม่แล้วเลือกฝั่งต่อ",
+      systemType:"Single Position + Opposite Pending Stop · ไม่ใช่ Martingale",
+      sizing:"1 Position หลัก + Pending ฝั่งตรงข้าม · Lot คงที่ตามค่าที่ตั้ง",
+      exitStyle:"Safety SL + Opposite Pending Baton · สลับฝั่งเมื่อ Pending ถูก Trigger",
+      workflow:"ใช้ M1 เลือกฝั่งเริ่มต้น แล้ววาง Pending Stop ฝั่งตรงข้ามไว้พร้อมกัน เมื่อราคาวิ่งถูกทาง Pending จะขยับตาม พอราคาย้อนชน Pending ระบบสลับฝั่งด้วย Lot เดิมตามค่าที่ตั้ง",
       good:"ตลาดที่เดินเป็นทาง วิ่งยาว มีระยะให้กำไรโต",
       caution:"Sideway แคบ ๆ สะบัดกลับไปกลับมาบ่อย เพราะอาจปิดแล้วเข้าใหม่หลายรอบ กำไรต่อไม้สั้นและต้นทุนเกิดบ่อย",
-      remember:"FLIP LOCK = 1 Position แล้วใช้ Trailing ปกป้องกำไร",
+      remember:"FLIP LOCK = 1 Position + Pending ฝั่งตรงข้าม · M1 เท่านั้น · Lot คงที่ตาม Settings",
       capital:{
         minimum:"50 USD",
         balanced:"150 USD",
@@ -6572,8 +6572,8 @@ function BotSettingsModal(props:any) {
             <span>MANUAL Ownership</span>
             <span>MT5 Local Tick · Server ไม่กำหนดราคา SL</span>
             <span>ราคา / SL / TP / Exit บริหารใน MT5 โดยตรงทุกโหมด</span>
-            <span>Safety Stop → กำไรเป็นบวก → Trailing SL แบบ Tick-on-Tick</span>
-            <span>ไม่มีการวาง BUY STOP / SELL STOP ล่วงหน้า</span>
+            <span>FLIP LOCK M1 · Safety SL + Pending Stop ฝั่งตรงข้ามขยับตามราคา</span>
+            <span>FLIP LOCK วาง BUY STOP / SELL STOP ฝั่งตรงข้ามล่วงหน้า · Lot เท่าค่าที่ตั้ง</span>
           </div>
           <section className="cc-bot-v2-mode-section cc-mode-guide-anchor">
             <div className="cc-bot-v2-section-title"><span>01</span><div><b>โหมดการเทรด</b></div></div>
@@ -6636,7 +6636,7 @@ function BotSettingsModal(props:any) {
                   </>}
                 </div>
                 <div className="cc-bot-v17-hidden-engine">{controlMode!=="ZERO_GRID"&&(controlMode==="FLIP_LOCK"
-                  ? <div className="cc-bot-v2-engine-line"><ScenovaIcon name="trend" size={16}/><b>โครงสร้าง FLIP LOCK</b><span>1 Position เท่านั้น · ไม่มี Pending BUY/SELL STOP ล่วงหน้า · SL ต้องล็อกกำไรสุทธิ ≥ 0.30 ก่อน แล้วตามราคาแบบ Tick-on-Tick ใกล้สุดตามข้อจำกัด Broker · Server ควบคุมเฉพาะ Start/Stop/Settings</span></div>
+                  ? <div className="cc-bot-v2-engine-line"><ScenovaIcon name="trend" size={16}/><b>โครงสร้าง FLIP LOCK</b><span>1 Position หลัก + Pending Stop ฝั่งตรงข้าม 1 อัน · ใช้ M1 เท่านั้น · Pending ขยับตามราคาเพื่อสลับฝั่ง · ทุกขาใช้ Lot ตาม Settings ไม่มี Martingale</span></div>
                   : controlMode==="AUTO"
                     ? <div className="cc-bot-v2-engine-line"><ScenovaIcon name="spark" size={16}/><b>AUTO · Shared Zone Brain</b><span>Demand/Supply + Reaction เป็นแกนเข้าออเดอร์ร่วมกับ MANUAL · AUTO วาง SL/TP และจัดการ Position ของ AUTO เอง</span></div>
                     : controlMode==="MANUAL"
