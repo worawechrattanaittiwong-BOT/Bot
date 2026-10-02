@@ -180,8 +180,8 @@ export class TradingSymbolController {
       activeSymbol: activeSymbol || null,
       instrumentProfile: bitcoin ? "BTC" : "STANDARD",
       supportedControlModes: bitcoin
-        ? ["AUTO", "RACE", "FLIP_LOCK", "MANUAL"]
-        : ["AUTO", "RACE", "FLIP_LOCK", "ZERO_GRID", "MANUAL"],
+        ? ["AUTO", "RACE", "COUNTER", "FLIP_LOCK", "MANUAL"]
+        : ["AUTO", "RACE", "COUNTER", "FLIP_LOCK", "ZERO_GRID", "MANUAL"],
       blockedControlModes: bitcoin ? ["ZERO_GRID"] : [],
       brokerSymbolTradeMode: tradeMode,
       brokerTradingAllowed: tradingAllowed,
@@ -245,7 +245,7 @@ export class TradingSymbolController {
     ).toUpperCase();
     if (isBitcoinSymbol(symbol) && savedControlMode === "ZERO_GRID") {
       throw new ConflictException(
-        "เปลี่ยนโหมดจาก ZERO GRID เป็น AUTO, RACE, FLIP LOCK หรือ MANUAL ก่อนเลือก BTC/XBT"
+        "เปลี่ยนโหมดจาก ZERO GRID เป็น AUTO, RACE, COUNTER, FLIP LOCK หรือ MANUAL ก่อนเลือก BTC/XBT"
       );
     }
     const positions = Math.max(0, Number(instance.positions || 0));
