@@ -165,6 +165,8 @@ input string          InpEngineMode           = "AUTO";
 input bool            InpRaceCloseAllProfitEnabled = true;
 input double          InpRaceCloseAllProfitMoney = 0.50;
 input double          InpRacePerPositionProfitMoney = 0.50;
+// COUNTER has one exit only: close each owned position at this money profit.
+input double          InpCounterPerPositionProfitMoney = 0.50;
 #define LOCAL_EXECUTION_PLANE_V1 "MT5_TICK_DIRECT_V1"
 #define LOCAL_EXECUTION_NETWORK_QUIET_MS 300
 #define LOCAL_EXECUTION_HEARTBEAT_MAX_DEFER_MS 5000
@@ -195,6 +197,9 @@ input double          InpRacePerPositionProfitMoney = 0.50;
 #define RACE_EXIT_LAST_FILL_GRACE_SECONDS 10
 #define RACE_EXIT_CONFIRM_SECONDS 8
 #define RACE_EXIT_SEVERE_CONFIRM_SECONDS 5
+// COUNTER entry pacing is internal operational safety, not a trading signal.
+#define COUNTER_FILL_INTERVAL_MS 1000
+#define COUNTER_MAX_ORDERS_PER_MINUTE 30
 // ZERO GRID is isolated from AUTO/RACE and requires an MT5 Hedging account.
 #define ZERO_GRID_MAX_LEVELS 30
 #define ZERO_GRID_DEFAULT_LEVELS 3
@@ -261,6 +266,7 @@ double g_dayStartEquity = 0.0;
 double g_dailyClosedProfit = 0.0;
 double g_dailyClosedProfitAuto = 0.0;
 double g_dailyClosedProfitRace = 0.0;
+double g_dailyClosedProfitCounter = 0.0;
 double g_dailyClosedProfitFlipLock = 0.0;
 double g_dailyClosedProfitManual = 0.0;
 bool   g_dailyProfitLocked = false;
@@ -404,6 +410,10 @@ bool   g_raceCloseAllProfitEnabled = true;
 double g_raceCloseAllProfitMoney = 0.50;
 string g_raceProfitTargetMode = "BASKET";
 double g_racePerPositionProfitMoney = 0.50;
+// COUNTER is intentionally minimal: no SL/TP/basket/daily/recovery logic.
+double g_counterPerPositionProfitMoney = 0.50;
+datetime g_counterOrderWindowStart = 0;
+int      g_counterOrdersInWindow = 0;
 // RACE uses a rolling 30-second order-flow window as the primary side signal.
 // Exchange/deal-side flags are used when the broker publishes them; quote-only
 // symbols fall back to uptick/downtick tick-volume counts. A modest 55%
@@ -1720,9 +1730,10 @@ int OnInit()
    g_raceCloseAllProfitMoney = MathMax(0.01, InpRaceCloseAllProfitMoney);
    g_raceProfitTargetMode = g_raceCloseAllProfitEnabled ? "BASKET" : "OFF";
    g_racePerPositionProfitMoney = MathMax(0.01, InpRacePerPositionProfitMoney);
+   g_counterPerPositionProfitMoney = MathMax(0.01, InpCounterPerPositionProfitMoney);
    g_engineMode = InpEngineMode;
    StringToUpper(g_engineMode);
-   if(g_engineMode != "RACE" && g_engineMode != "ZERO_GRID")
+   if(g_engineMode != "RACE" && g_engineMode != "COUNTER" && g_engineMode != "ZERO_GRID")
       g_engineMode = "AUTO";
    g_zeroGridStepPrice = ZeroGridAllowedStep(InpZeroGridStepPrice);
    g_zeroGridLevelsPerSide = (int)MathMax(1.0,MathMin((double)ZERO_GRID_MAX_LEVELS,(double)InpZeroGridLevelsPerSide));
@@ -2038,6 +2049,7 @@ string EffectiveExecutionMode()
    StringToUpper(control);
    if(control == "ZERO_GRID") return "ZERO_GRID";
    if(control == "RACE") return "RACE";
+   if(control == "COUNTER") return "COUNTER";
    if(control == "FLIP_LOCK") return "FLIP_LOCK";
    if(control == "AUTO") return "AUTO";
    if(control == "MANUAL" || control == "ASSISTED" || control == "LEGACY")
@@ -2045,7 +2057,7 @@ string EffectiveExecutionMode()
 
    string engine=g_engineMode;
    StringToUpper(engine);
-   if(engine == "ZERO_GRID" || engine == "RACE") return engine;
+   if(engine == "ZERO_GRID" || engine == "RACE" || engine == "COUNTER") return engine;
    return "AUTO";
 }
 
