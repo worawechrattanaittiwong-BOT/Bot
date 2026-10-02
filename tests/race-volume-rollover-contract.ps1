@@ -26,6 +26,7 @@ $raceNewsV1 = Read-Text 'mt5/include/RaceNewsV1.mqh'
 $raceTelemetryV1 = Read-Text 'mt5/include/RaceTelemetryV1.mqh'
 $api = Read-Text 'apps/api/src/ea.controller.ts'
 $release = Read-Text 'apps/api/src/release-version.ts'
+$liveDirection = Block $ea 'int RaceLivePriceDirection()'
 $analysis = Block $ea 'int RaceAnalysisDirection(double momentum)'
 $flow = Block $ea 'bool RaceFlowStillRunning(int direction, double momentum)'
 $harvest = Block $ea 'int RaceHarvestProfitablePositions()'
@@ -59,7 +60,15 @@ if($raceSyncGate -lt 0 -or $dailyControl -lt 0 -or $raceManager -lt 0 -or
   throw 'RACE settings-sync guard must execute before daily money controls and RACE Basket management'
 }
 Need $ea 'int RaceLivePriceDirection()' 'RACE live-price direction helper missing'
-Need $analysis 'int direction=RaceLivePriceDirection();' 'RACE entry must follow live price flow directly'
+Need $liveDirection 'nowTick.time_msc>2000' 'RACE direction window must use roughly two seconds of live ticks'
+Need $liveDirection 'ticks[i].bid' 'RACE live-price direction must follow visible MT5 Bid chart'
+if($liveDirection.Contains('ticks[i].ask') -or $liveDirection.Contains('firstMid') -or $liveDirection.Contains('lastMid')){
+  throw 'RACE entry direction must not use Bid/Ask midpoint because spread changes can fake chart direction'
+}
+Need $liveDirection 'double delta=lastBid-firstBid;' 'RACE direction must compare newest versus oldest visible Bid'
+Need $liveDirection 'if(delta>0.0) return 1;' 'RACE rising Bid must choose BUY'
+Need $liveDirection 'if(delta<0.0) return -1;' 'RACE falling Bid must choose SELL'
+Need $analysis 'int direction=RaceLivePriceDirection();' 'RACE entry must follow live Bid flow directly'
 Need $analysis 'g_raceVNextLegPhase="LIVE_PRICE";' 'RACE telemetry must identify live-price entry mode'
 if($analysis.Contains('RaceVolumeDirection()')){throw 'RACE entry direction must not use rolling volume'}
 if($analysis.Contains('RaceZonePriorityActive(')){throw 'RACE entry direction must not be overridden by Demand/Supply zones'}
@@ -73,11 +82,14 @@ Need $ea '#include "include\\RaceDecisionV2.mqh"' 'RACE Decision V2 module missi
 Need $flow 'RaceVolumeDirection() == direction' 'RACE profit flow must follow qualified 30-second volume side'
 if($start.Contains('if(!RaceVolumeWindowReady())')){throw 'RACE first entry must not wait for the 30-second volume warmup'}
 if($start.Contains('RACE_SIGNAL_TIMEOUT_RESET')){throw 'RACE first entry must not be held/reset by an unresolved volume window'}
-Need $start 'RaceReentryObserveReady();' 'RACE re-entry observation must remain available as advisory telemetry'
-if($start.Contains('if(!RaceReentryObserveReady())')){throw 'RACE re-entry observation must not block a fresh entry'}
-Need $start 'RaceNewsPauseActive(raceNewsReason)' 'RACE news analysis must remain available'
-if($start.Contains('if(RaceNewsPauseActive(raceNewsReason))')){throw 'RACE news analysis must not block a fresh entry'}
-Need $start 'bool started=ProcessRaceFill(direction);' 'RACE must immediately attempt the analyzed direction'
+if($start.Contains('RaceReentryObserveReady(') -or
+   $start.Contains('RaceReentryDetectFlatTransition(') -or
+   $start.Contains('RaceNewsPauseActive(') -or
+   $start.Contains('RefreshMarketContext(')){
+  throw 'RACE first-entry path must stay price-only before operational safety'
+}
+Need $start 'RACE_PRICE_FLOW_WAIT' 'RACE must wait only when the short Bid flow has no direction'
+Need $start 'bool started=ProcessRaceFill(direction);' 'RACE must immediately attempt the live-Bid direction'
 Need $ea '#define SCENOVA_RUNTIME_CONTRACT "RACE_CONFIGURED_LOSS_ONLY_V1"' 'RACE compatibility runtime marker missing'
 Need $manage 'volumeDirection != direction' 'RACE must detect a volume-side flip'
 Need $manage 'cycleProfit >= 0.0' 'ordinary RACE rollover must not close a negative net cycle'
@@ -132,7 +144,9 @@ Need $dualManager 'EffectiveBasketLossLimit()' 'Mixed RACE POSITION must preserv
 Need $dualManager 'filledUnits<g_maxPositions' 'Mixed RACE POSITION must preserve Max Positions'
 if($dualManager.Contains('if(floatingProfit<=0.0 || cycleProfit<=0.0)')){throw 'RACE POSITION must not wait for existing tickets/cycle to become profitable'}
 if($dualManager.Contains('RACE_ADD_WAIT_PROFIT')){throw 'RACE POSITION profitable-add wait state must be removed'}
-Need $dualManager 'ProcessRaceFill(signalDirection);' 'RACE POSITION must open the current analyzed BUY/SELL side'
+Need $dualManager 'RACE_PRICE_FLOW_WAIT' 'RACE POSITION must expose a price-flow wait state only when Bid is flat/not ready'
+if($dualManager.Contains('RefreshMarketContext(')){throw 'RACE POSITION fill path must not run full market-context analysis'}
+Need $dualManager 'ProcessRaceFill(signalDirection);' 'RACE POSITION must open the current live-Bid BUY/SELL side'
 Need $raceAtr 'AverageTrueRangePoints(PERIOD_M5,g_atrPeriod)' 'RACE 1.1.10 automatic stop must use M5 ATR'
 Need $raceStop 'RaceV2StructureInvalidPrice(direction)' 'RACE stop must use M5 structure as the primary invalidation reference'
 Need $raceStop 'double minDistancePoints' 'RACE stop must keep a minimum anti-noise distance'
@@ -142,23 +156,18 @@ Need $fill 'RaceV1UpdateExposureTelemetry(direction,g_adaptiveLot)' 'RACE must r
 Need $manage 'RaceV1UpdateExposureTelemetry(direction,0.0)' 'RACE must refresh live Basket exposure before loss classification'
 Need $ea '#include "include\\RaceExposureV1.mqh"' 'RACE Exposure V1 module missing'
 Need $ea '#include "include\\RaceLossV2.mqh"' 'RACE Loss V2 module missing'
-Need $ea '#include "include\\RaceReentryV1.mqh"' 'RACE Re-entry V1 module missing'
-Need $start 'RaceReentryDetectFlatTransition();' 'RACE must detect the previous Basket flat transition before starting a new cycle'
-Need $start 'RaceReentryObserveReady();' 'RACE must keep re-entry observation available without making it a gate'
-Need $fill 'RaceReentryMarkExposure();' 'RACE must remember accepted exposure for the next flat transition'
-Need $raceReentryV1 '#define RACE_REENTRY_PROFIT_OBSERVE_SECONDS 6' 'RACE profitable-cycle re-entry observation must stay fast'
-Need $raceReentryV1 '#define RACE_REENTRY_LOSS_OBSERVE_SECONDS 20' 'RACE losing-cycle re-entry must enforce a longer observation period'
-Need $raceReentryV1 'previousCycleWasLoss' 'RACE re-entry must distinguish losing cycles from profitable cycles'
-Need $raceReentryV1 'RaceResetVolumeWindow(now);' 'RACE losing-cycle re-entry must discard stale pressure and rebuild fresh 30-second flow'
-Need $raceReentryV1 'RACE_REENTRY_AFTER_LOSS' 'RACE losing-cycle re-entry state must be observable'
-Need $raceReentryV1 'RACE_REENTRY_AFTER_PROFIT' 'RACE profitable-cycle re-entry state must be observable'
-Need $manage 'g_raceLastObservedCycleProfit=cycleProfit;' 'RACE must preserve the last open-cycle P/L for post-flat re-entry classification'
-Need $ea '#include "include\\RaceNewsV1.mqh"' 'RACE News V1 module missing'
-Need $start 'RaceNewsPauseActive(raceNewsReason)' 'RACE must check high-impact news before a new cycle'
-Need $fill 'RaceNewsPauseActive(raceNewsReason)' 'RACE must keep news analysis available during fills'
-if($fill.Contains('if(RaceNewsPauseActive(raceNewsReason))')){throw 'RACE news analysis must not veto additional fills'}
-Need $fill 'bool raceAntiChaseAdvisory=RaceAntiChaseBlocked(direction,raceAntiChaseReason);' 'RACE anti-chase analysis must remain advisory'
-if($fill.Contains('if(RaceAntiChaseBlocked(direction,raceAntiChaseReason))')){throw 'RACE anti-chase must not veto a fill'}
+Need $ea '#include "include\\RaceReentryV1.mqh"' 'RACE Re-entry V1 compatibility module missing'
+Need $fill 'RaceReentryMarkExposure();' 'RACE must still mark accepted exposure for recovery/telemetry accounting'
+Need $manage 'g_raceLastObservedCycleProfit=cycleProfit;' 'RACE must preserve the last open-cycle P/L telemetry'
+Need $ea '#include "include\\RaceNewsV1.mqh"' 'RACE News V1 compatibility module missing'
+if($fill.Contains('RaceNewsPauseActive(')){throw 'RACE fill path must not run news analysis'}
+if($fill.Contains('RaceAntiChaseBlocked(')){throw 'RACE fill path must not run anti-chase analysis'}
+Need $fill 'g_entryModel = "RACE_LIVE_BID_2S";' 'RACE entry telemetry must identify visible-Bid two-second flow'
+Need $fill '"RACE_PRICE_FLOW_BUY"' 'RACE BUY trigger telemetry must identify price flow'
+Need $fill '"RACE_PRICE_FLOW_SELL"' 'RACE SELL trigger telemetry must identify price flow'
+Need $fill 'g_entryQuality = "RACE_LIVE_PRICE";' 'RACE entry quality must identify the price-only path'
+if($fill.Contains('RACE_SPREAD_WAIT')){throw 'RACE normal adaptive spread quality must not block entries'}
+Need $fill 'if(g_spreadStatus == "EXTREME")' 'RACE must retain explicit extreme-spread safety'
 Need $raceNewsV1 'RACE_NEWS_BEFORE_MAJOR_MINUTES 15' 'RACE major-news pre-window must be 15 minutes'
 Need $raceNewsV1 'RACE_NEWS_AFTER_MAJOR_MINUTES 15' 'RACE major-news post-window must be 15 minutes'
 Need $raceNewsV1 'CALENDAR_IMPORTANCE_HIGH' 'RACE news pause must remain limited to high-impact calendar events'
@@ -206,4 +215,4 @@ if($eaVersionMatch.Groups[1].Value -ne $releaseVersionMatch.Groups[1].Value){
 }
 Need $release 'EA_RUNTIME_CONTRACT = "RACE_CONFIGURED_LOSS_ONLY_V1"' 'API runtime contract must match EA'
 
-Write-Host 'RACE 1.1.15 live-price direction + dual-direction POSITION + hard safety isolation: PASS'
+Write-Host 'RACE 1.1.16 visible-Bid two-second flow + dual-direction POSITION + hard safety isolation: PASS'
