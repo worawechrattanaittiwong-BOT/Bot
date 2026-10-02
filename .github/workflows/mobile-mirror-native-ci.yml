@@ -54,8 +54,8 @@ jobs:
       - name: Verify Android MediaProjection configuration
         run: |
           grep -R "FOREGROUND_SERVICE_MEDIA_PROJECTION" android/app/src/main/AndroidManifest.xml
-          grep -R "MediaProjectionService" android/app/src/main/AndroidManifest.xml
-          grep -R "enableMediaProjectionService" android/app/src/main || true
+          grep -R "enableMediaProjectionService" android/app/src/main
+          grep -R "MediaProjectionService" node_modules/react-native-webrtc/android/src/main/AndroidManifest.xml
 
       - name: Build Android installable APK
         run: |
