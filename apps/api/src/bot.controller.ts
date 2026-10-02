@@ -63,6 +63,9 @@ export class BotController {
         latestEaHash: release.sha256,
         eaVersionMatch: true,
         eaHashMatch: true,
+        currentRuntimeBuildId: null,
+        requiredRuntimeBuildId: release.buildId,
+        runtimeBuildMatch: true,
         currentRuntimeContract: null,
         requiredRuntimeContract: EA_RUNTIME_CONTRACT,
         runtimeContractMatch: true,
@@ -75,6 +78,11 @@ export class BotController {
     const currentEaVersion = String(instance.metrics?.eaVersion || "").trim() || null;
     const currentEaHash = String(instance.agent_ea_hash || "").trim().toLowerCase() || null;
     const latestEaHash = String(release.sha256 || "").trim().toLowerCase() || null;
+    const currentRuntimeBuildId = String(instance.metrics?.buildId || "").trim() || null;
+    const requiredRuntimeBuildId = String(release.buildId || "").trim() || null;
+    const runtimeBuildMatch =
+      !requiredRuntimeBuildId ||
+      currentRuntimeBuildId === requiredRuntimeBuildId;
     const currentRuntimeContract = String(instance.metrics?.runtimeContract || "").trim() || null;
     const requiredRuntimeContract = EA_RUNTIME_CONTRACT;
     const runtimeContractMatch = currentRuntimeContract === requiredRuntimeContract;
@@ -92,7 +100,11 @@ export class BotController {
       currentEaHash &&
       currentEaHash === latestEaHash
     );
-    const eaUpdateRequired = !eaVersionMatch || !eaHashMatch || !runtimeContractMatch;
+    const eaUpdateRequired =
+      !eaVersionMatch ||
+      !eaHashMatch ||
+      !runtimeBuildMatch ||
+      !runtimeContractMatch;
     const required = installerRequired || eaUpdateRequired;
 
     let reason: string | null = null;
@@ -105,6 +117,10 @@ export class BotController {
         "FastBasketBot เวอร์ชันไม่ตรงกับ Server: เครื่องนี้ v" +
         (currentEaVersion || "ไม่ทราบ") +
         " · Server v" + release.eaVersion;
+    } else if (!runtimeBuildMatch) {
+      reason = currentRuntimeBuildId
+        ? "ไฟล์ EA อาจอัปเดตแล้ว แต่ MT5 ยังกำลังรัน Build เก่า กรุณากดอัปเดต EA เพื่อรีโหลด Build ล่าสุด"
+        : "EA ที่กำลังรันยังไม่ยืนยัน Build ID กรุณากดอัปเดต EA เพื่อโหลด Build ล่าสุด";
     } else if (!runtimeContractMatch) {
       reason = currentRuntimeContract
         ? "EA ที่กำลังรันยังเป็น Runtime เก่า แม้ไฟล์ EX5 บนเครื่องอาจอัปเดตแล้ว กรุณากดอัปเดต EA และให้ MT5 รีโหลด Runtime ล่าสุด"
@@ -130,9 +146,13 @@ export class BotController {
       latestEaHash,
       eaVersionMatch,
       eaHashMatch,
+      currentRuntimeBuildId,
+      requiredRuntimeBuildId,
+      runtimeBuildMatch,
       currentRuntimeContract,
       requiredRuntimeContract,
       runtimeContractMatch,
+      buildId: release.buildId,
       sourceCommit: release.sourceCommit,
       builtAt: release.builtAt,
       downloadPath: installerDownloadPath(latestVersion),

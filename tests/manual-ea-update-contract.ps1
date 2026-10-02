@@ -5,6 +5,11 @@ $updateGuard = [System.IO.File]::ReadAllText((Resolve-Path 'apps/api/src/manual-
 $appModule = [System.IO.File]::ReadAllText((Resolve-Path 'apps/api/src/app.module.ts'))
 $agent = [System.IO.File]::ReadAllText((Resolve-Path 'tools/windows-installer/AgentRunner.cs'))
 $smart = [System.IO.File]::ReadAllText((Resolve-Path 'tools/windows-installer/SmartAgentRunner.cs'))
+$ea = [System.IO.File]::ReadAllText((Resolve-Path 'mt5/FastBasketBot.mq5'))
+$release = [System.IO.File]::ReadAllText((Resolve-Path 'apps/api/src/release-version.ts'))
+$eaController = [System.IO.File]::ReadAllText((Resolve-Path 'apps/api/src/ea.controller.ts'))
+$botController = [System.IO.File]::ReadAllText((Resolve-Path 'apps/api/src/bot.controller.ts'))
+$buildWorkflow = [System.IO.File]::ReadAllText((Resolve-Path '.github/workflows/build-mt5-ea.yml'))
 
 foreach ($required in @(
   "SET desired_state='SAFE_STOP'",
@@ -46,6 +51,45 @@ if ($smart.Contains('config.EaVersion = heartbeat.EaVersionRequired')) { throw '
 if ($smart.Contains('config.EaHash = heartbeat.ArtifactHash')) { throw 'Server desired EA hash must not overwrite observed local hash before verification' }
 if (-not $agent.Contains('runtimeContractReady')) { throw 'Manual update ACK must verify Runtime Contract' }
 if (-not $agent.Contains('snapshot.RuntimeContractMatch == false')) { throw 'Manual update must surface Runtime Contract verification failure' }
+
+foreach ($required in @(
+  '#define SCENOVA_BUILD_ID',
+  '\"buildId\":\"%s\"',
+  'SCENOVA_BUILD_ID'
+)) {
+  if (-not $ea.Contains($required)) { throw "Same-version runtime build identity missing from EA: $required" }
+}
+foreach ($required in @(
+  'manifest.buildId',
+  'buildId,'
+)) {
+  if (-not $release.Contains($required)) { throw "Release build identity missing: $required" }
+}
+foreach ($required in @(
+  "metrics->>'buildId' AS runtime_build_id",
+  'runtimeBuildIdRequired',
+  'runtimeBuildMatch',
+  'runtimeIdentityMatch',
+  'runtimeContractMatch: runtimeIdentityMatch'
+)) {
+  if (-not $eaController.Contains($required)) { throw "EA same-version runtime gate missing: $required" }
+}
+foreach ($required in @(
+  'currentRuntimeBuildId',
+  'requiredRuntimeBuildId',
+  'runtimeBuildMatch',
+  '!runtimeBuildMatch'
+)) {
+  if (-not $botController.Contains($required)) { throw "Dashboard same-version build verification missing: $required" }
+}
+foreach ($required in @(
+  'Stamp immutable runtime build identity',
+  'SCENOVA_BUILD_ID',
+  'EA_BUILD_ID=$buildId',
+  'buildId = $env:EA_BUILD_ID'
+)) {
+  if (-not $buildWorkflow.Contains($required)) { throw "EA build stamping contract missing: $required" }
+}
 $web = [System.IO.File]::ReadAllText((Resolve-Path 'apps/web/components/Mt5ManualActionControls.tsx'))
 if (-not $web.Contains('updateIntentAt')) { throw 'Update button optimistic one-click lock missing' }
 if (-not $web.Contains('คำสั่งกำลังทำงาน · ไม่ต้องกดซ้ำ')) { throw 'Update button pending guidance missing' }
