@@ -13781,6 +13781,9 @@ double EffectiveStopLossDistancePoints()
    double brokerMinimumPoints =
       (double)SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL);
 
+   if(EffectiveExecutionMode()=="COUNTER")
+      return 0.0;
+
    if(EffectiveExecutionMode()=="MANUAL")
    {
       if(g_manualStopLossPoints <= 0.0)
@@ -13794,6 +13797,8 @@ double EffectiveStopLossDistancePoints()
 
 string StopLossModeName()
 {
+   if(EffectiveExecutionMode()=="COUNTER")
+      return "OFF";
    if(EffectiveExecutionMode()=="MANUAL")
       return g_manualStopLossPoints > 0.0 ? "MANUAL_POINTS" : "OFF";
    return "SYSTEM_ATR";
@@ -19244,6 +19249,11 @@ double DynamicInitialStopPrice(int direction, double entryPrice)
       (double)SymbolInfoInteger(_Symbol,SYMBOL_TRADE_STOPS_LEVEL),
       0.0
    )+2.0;
+
+   // COUNTER never owns a Broker SL. Keep this explicit even though COUNTER
+   // uses its dedicated market-order path, so future callers cannot add one.
+   if(EffectiveExecutionMode()=="COUNTER")
+      return 0.0;
 
    // MANUAL Stop Loss is an explicit switch. Zero means no Broker SL at all;
    // never substitute a hidden ATR stop behind a disabled website control.
