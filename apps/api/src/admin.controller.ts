@@ -17,6 +17,7 @@ import { PartnerService } from "./partner.service";
 import { ReferralService } from "./referral.service";
 import { TrialAuthorizationService } from "./trial-authorization.service";
 import { createHash, randomBytes, randomUUID } from "crypto";
+import { versionAtLeast } from "./cloud-server-release";
 
 @Controller("admin")
 @UseGuards(AdminGuard)
@@ -1564,6 +1565,26 @@ export class AdminController {
     if (runtimeStopState !== "NONE") {
       throw new ConflictException(
         "Cloud Runtime กำลังอยู่ในขั้นตอนหยุด/ย้ายระบบ กรุณารอให้สถานะกลับมา NONE ก่อน"
+      );
+    }
+
+    const worker = await this.db.one(
+      `SELECT last_seen_at,telemetry
+       FROM worker_nodes
+       WHERE runner_id=$1`,
+      [slot.runner_id]
+    );
+    const workerOnline = Boolean(
+      worker?.last_seen_at &&
+      Date.now() - new Date(worker.last_seen_at).getTime() <= 30_000
+    );
+    if (!workerOnline) {
+      throw new ConflictException("Cloud Worker Offline กรุณาให้ Server กลับมา Online ก่อนซ่อม");
+    }
+    const workerVersion = String(worker?.telemetry?.version || "");
+    if (!versionAtLeast(workerVersion, "2.2.28")) {
+      throw new ConflictException(
+        "Cloud Worker ยังไม่รองรับ Runtime Repair · กรุณาอัปเดต Server เป็น Worker 2.2.28+ ก่อน"
       );
     }
 
