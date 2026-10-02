@@ -57,11 +57,12 @@ jobs:
           grep -R "enableMediaProjectionService" android/app/src/main
           grep -R "MediaProjectionService" node_modules/react-native-webrtc/android/src/main/AndroidManifest.xml
 
-      - name: Build Android installable APK
+      - name: Build Android standalone release APK
         run: |
           chmod +x android/gradlew
-          ./android/gradlew -p android assembleDebug --no-daemon -PreactNativeArchitectures=arm64-v8a
-          test -f android/app/build/outputs/apk/debug/app-debug.apk
+          ./android/gradlew -p android assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a
+          test -f android/app/build/outputs/apk/release/app-release.apk
+          unzip -l android/app/build/outputs/apk/release/app-release.apk | grep -q "assets/index.android.bundle"
 
   ios:
     runs-on: macos-15
