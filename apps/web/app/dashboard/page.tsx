@@ -6541,8 +6541,8 @@ function BotSettingsModal(props:any) {
   const directionLabel = entryMode === "SELL_ONLY" ? "SELL เท่านั้น" : entryMode === "BUY_ONLY" ? "BUY เท่านั้น" : "อัตโนมัติ · EA เลือก BUY / SELL";
   const directionHelp = controlMode === "FLIP_LOCK"
     ? (entryMode === "AUTO_MOMENTUM"
-        ? "ไม้แรกใช้ Momentum/โครงสร้าง · หลังไม้ปิด ระบบอ่านแรงแท่ง M1 + Momentum ใหม่แล้วเข้า Market ทันที"
-        : "กำหนดทิศทางของไม้แรก · หลังจากไม้ปิด ระบบประเมินแรงแท่งใหม่ก่อนเข้า Market รอบถัดไป")
+        ? "ไม้แรกอ่านทิศจากแท่ง M1 · หลัง Profit-Lock SL ปิด ระบบอ่าน M1 ใหม่ก่อนเข้า Market รอบถัดไป"
+        : "กำหนดทิศทางของไม้แรก · หลังจากไม้ปิด ระบบอ่านแท่ง M1 ใหม่ก่อนเข้า Market รอบถัดไป")
     : (entryMode === "AUTO_MOMENTUM"
         ? "M1 / M5 / M15 / M30 / H1 วิเคราะห์ทิศทางอัตโนมัติ"
         : "บังคับทิศตามที่เลือกจนกว่าจะเปลี่ยนค่า");
