@@ -912,14 +912,16 @@ export class EaController {
     }
 
     const savedControlMode = String(runtimeSettings.controlMode || "").toUpperCase();
-    if (!["AUTO", "RACE", "ZERO_GRID", "FLIP_LOCK", "ASSISTED", "MANUAL"].includes(savedControlMode)) {
+    if (!["AUTO", "RACE", "COUNTER", "ZERO_GRID", "FLIP_LOCK", "ASSISTED", "MANUAL"].includes(savedControlMode)) {
       const engineMode = String(runtimeSettings.engineMode || "AUTO").toUpperCase();
       const entryMode = String(runtimeSettings.entryMode || "AUTO_MOMENTUM").toUpperCase();
       runtimeSettings.controlMode = engineMode === "ZERO_GRID"
         ? "ZERO_GRID"
         : engineMode === "RACE"
           ? "RACE"
-          : entryMode === "AUTO_MOMENTUM" ? "AUTO" : "LEGACY";
+          : engineMode === "COUNTER"
+            ? "COUNTER"
+            : entryMode === "AUTO_MOMENTUM" ? "AUTO" : "LEGACY";
     }
 
     // Canonical heartbeat pair. ZERO_GRID must reach the EA unchanged; otherwise
@@ -929,7 +931,9 @@ export class EaController {
       ? "ZERO_GRID"
       : runtimeControlMode === "RACE"
         ? "RACE"
-        : "AUTO";
+        : runtimeControlMode === "COUNTER"
+          ? "COUNTER"
+          : "AUTO";
 
     if (runtimeSettings.engineMode === "RACE") {
       runtimeSettings.minOrderIntervalMs = 150;
@@ -1104,7 +1108,7 @@ export class EaController {
       [instance.id]
     );
     const journalSettings = { ...(journalSettingsRow?.settings || {}) };
-    const validJournalModes = ["AUTO", "RACE", "ZERO_GRID", "FLIP_LOCK", "MANUAL"];
+    const validJournalModes = ["AUTO", "RACE", "COUNTER", "ZERO_GRID", "FLIP_LOCK", "MANUAL"];
     const reportedJournalMode = String(body.controlMode || "").toUpperCase();
     const rawJournalMode = String(journalSettings.controlMode || "").toUpperCase();
     const journalEngineMode = String(journalSettings.engineMode || "AUTO").toUpperCase();
@@ -1122,8 +1126,10 @@ export class EaController {
           ? "ZERO_GRID"
           : journalEngineMode === "RACE"
             ? "RACE"
-            : (journalProfitMode === "MANUAL" || journalManualStop > 0)
-              ? "MANUAL"
+            : journalEngineMode === "COUNTER"
+              ? "COUNTER"
+              : (journalProfitMode === "MANUAL" || journalManualStop > 0)
+                ? "MANUAL"
               : "AUTO";
 
     await this.db.query(

@@ -119,6 +119,9 @@ jobs:
       - name: MANUAL and per-mode daily risk isolation contract
         shell: pwsh
         run: ./tests/manual-daily-mode-isolation-contract.ps1
+      - name: COUNTER minimal inverse-flow isolation contract
+        shell: pwsh
+        run: ./tests/counter-mode-isolation-contract.ps1
       - name: RACE close-all profit contract
         shell: pwsh
         run: ./tests/race-close-all-profit-contract.ps1
@@ -216,23 +219,15 @@ jobs:
     needs: build
     if: ${{ github.event_name != 'push' || (contains(github.event.head_commit.message, '[popup-only]') == false && contains(github.event.head_commit.message, '[customer-admin-only]') == false) }}
     uses: ./.github/workflows/integration-smoke.yml
-    secrets: inherit
-
   three-upgrade-regression:
     name: Three Upgrade Regression
     needs: build
     uses: ./.github/workflows/three-upgrade-regression.yml
-    secrets: inherit
-
   runtime-migration-phase3:
     name: Runtime Migration Phase 3
     needs: build
     uses: ./.github/workflows/runtime-migration-phase3.yml
-    secrets: inherit
-
   production-hardening-phase4:
     name: Production Hardening Phase 4
     needs: build
     uses: ./.github/workflows/production-hardening-phase4.yml
-    secrets: inherit
-

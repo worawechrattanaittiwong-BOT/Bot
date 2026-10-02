@@ -165,6 +165,8 @@ input string          InpEngineMode           = "AUTO";
 input bool            InpRaceCloseAllProfitEnabled = true;
 input double          InpRaceCloseAllProfitMoney = 0.50;
 input double          InpRacePerPositionProfitMoney = 0.50;
+// COUNTER has one exit only: close each owned position at this money profit.
+input double          InpCounterPerPositionProfitMoney = 0.50;
 #define LOCAL_EXECUTION_PLANE_V1 "MT5_TICK_DIRECT_V1"
 #define LOCAL_EXECUTION_NETWORK_QUIET_MS 300
 #define LOCAL_EXECUTION_HEARTBEAT_MAX_DEFER_MS 5000
@@ -195,6 +197,9 @@ input double          InpRacePerPositionProfitMoney = 0.50;
 #define RACE_EXIT_LAST_FILL_GRACE_SECONDS 10
 #define RACE_EXIT_CONFIRM_SECONDS 8
 #define RACE_EXIT_SEVERE_CONFIRM_SECONDS 5
+// COUNTER entry pacing is internal operational safety, not a trading signal.
+#define COUNTER_FILL_INTERVAL_MS 1000
+#define COUNTER_MAX_ORDERS_PER_MINUTE 30
 // ZERO GRID is isolated from AUTO/RACE and requires an MT5 Hedging account.
 #define ZERO_GRID_MAX_LEVELS 30
 #define ZERO_GRID_DEFAULT_LEVELS 3
@@ -261,6 +266,7 @@ double g_dayStartEquity = 0.0;
 double g_dailyClosedProfit = 0.0;
 double g_dailyClosedProfitAuto = 0.0;
 double g_dailyClosedProfitRace = 0.0;
+double g_dailyClosedProfitCounter = 0.0;
 double g_dailyClosedProfitFlipLock = 0.0;
 double g_dailyClosedProfitManual = 0.0;
 bool   g_dailyProfitLocked = false;
@@ -404,6 +410,10 @@ bool   g_raceCloseAllProfitEnabled = true;
 double g_raceCloseAllProfitMoney = 0.50;
 string g_raceProfitTargetMode = "BASKET";
 double g_racePerPositionProfitMoney = 0.50;
+// COUNTER is intentionally minimal: no SL/TP/basket/daily/recovery logic.
+double g_counterPerPositionProfitMoney = 0.50;
+datetime g_counterOrderWindowStart = 0;
+int      g_counterOrdersInWindow = 0;
 // RACE uses a rolling 30-second order-flow window as the primary side signal.
 // Exchange/deal-side flags are used when the broker publishes them; quote-only
 // symbols fall back to uptick/downtick tick-volume counts. A modest 55%
@@ -1720,9 +1730,10 @@ int OnInit()
    g_raceCloseAllProfitMoney = MathMax(0.01, InpRaceCloseAllProfitMoney);
    g_raceProfitTargetMode = g_raceCloseAllProfitEnabled ? "BASKET" : "OFF";
    g_racePerPositionProfitMoney = MathMax(0.01, InpRacePerPositionProfitMoney);
+   g_counterPerPositionProfitMoney = MathMax(0.01, InpCounterPerPositionProfitMoney);
    g_engineMode = InpEngineMode;
    StringToUpper(g_engineMode);
-   if(g_engineMode != "RACE" && g_engineMode != "ZERO_GRID")
+   if(g_engineMode != "RACE" && g_engineMode != "COUNTER" && g_engineMode != "ZERO_GRID")
       g_engineMode = "AUTO";
    g_zeroGridStepPrice = ZeroGridAllowedStep(InpZeroGridStepPrice);
    g_zeroGridLevelsPerSide = (int)MathMax(1.0,MathMin((double)ZERO_GRID_MAX_LEVELS,(double)InpZeroGridLevelsPerSide));
@@ -2038,6 +2049,7 @@ string EffectiveExecutionMode()
    StringToUpper(control);
    if(control == "ZERO_GRID") return "ZERO_GRID";
    if(control == "RACE") return "RACE";
+   if(control == "COUNTER") return "COUNTER";
    if(control == "FLIP_LOCK") return "FLIP_LOCK";
    if(control == "AUTO") return "AUTO";
    if(control == "MANUAL" || control == "ASSISTED" || control == "LEGACY")
@@ -2045,7 +2057,7 @@ string EffectiveExecutionMode()
 
    string engine=g_engineMode;
    StringToUpper(engine);
-   if(engine == "ZERO_GRID" || engine == "RACE") return engine;
+   if(engine == "ZERO_GRID" || engine == "RACE" || engine == "COUNTER") return engine;
    return "AUTO";
 }
 
@@ -3846,6 +3858,303 @@ int RaceLivePriceDirection()
    return 0;
 }
 
+bool CounterModeEnabled()
+{
+   return EffectiveExecutionMode() == "COUNTER";
+}
+
+bool BasketHasCounterPosition()
+{
+   for(int i=PositionsTotal()-1;i>=0;i--)
+   {
+      ulong ticket=PositionGetTicket(i);
+      if(ticket==0 || !PositionSelectByTicket(ticket))
+         continue;
+      if(PositionGetString(POSITION_SYMBOL)!=_Symbol ||
+         PositionGetInteger(POSITION_MAGIC)!=InpMagic)
+         continue;
+      if(StringFind(PositionGetString(POSITION_COMMENT),"SaaSCounter")>=0)
+         return true;
+   }
+   return false;
+}
+
+int CounterPositionCount()
+{
+   int count=0;
+   for(int i=PositionsTotal()-1;i>=0;i--)
+   {
+      ulong ticket=PositionGetTicket(i);
+      if(ticket==0 || !PositionSelectByTicket(ticket))
+         continue;
+      if(PositionGetString(POSITION_SYMBOL)!=_Symbol ||
+         PositionGetInteger(POSITION_MAGIC)!=InpMagic)
+         continue;
+      if(StringFind(PositionGetString(POSITION_COMMENT),"SaaSCounter")>=0)
+         count++;
+   }
+   return count;
+}
+
+int CounterFilledUnits()
+{
+   double baseVolume=NormalizeTradeVolume(g_lot);
+   if(baseVolume<=0.0)
+      return CounterPositionCount();
+
+   double totalVolume=0.0;
+   int positions=0;
+   for(int i=PositionsTotal()-1;i>=0;i--)
+   {
+      ulong ticket=PositionGetTicket(i);
+      if(ticket==0 || !PositionSelectByTicket(ticket))
+         continue;
+      if(PositionGetString(POSITION_SYMBOL)!=_Symbol ||
+         PositionGetInteger(POSITION_MAGIC)!=InpMagic ||
+         StringFind(PositionGetString(POSITION_COMMENT),"SaaSCounter")<0)
+         continue;
+      totalVolume+=PositionGetDouble(POSITION_VOLUME);
+      positions++;
+   }
+
+   int volumeUnits=(int)MathRound(totalVolume/baseVolume);
+   return MathMax(positions,MathMax(0,volumeUnits));
+}
+
+bool CounterCanSendOrder()
+{
+   ulong nowMs=GetTickCount64();
+   if(nowMs-g_lastOrderMs<(ulong)COUNTER_FILL_INTERVAL_MS)
+      return false;
+
+   datetime now=TimeCurrent();
+   if(g_counterOrderWindowStart==0 || now-g_counterOrderWindowStart>=60)
+   {
+      g_counterOrderWindowStart=now;
+      g_counterOrdersInWindow=0;
+   }
+
+   if(g_counterOrdersInWindow>=COUNTER_MAX_ORDERS_PER_MINUTE)
+      return false;
+
+   return CanSendOrder();
+}
+
+void CounterRegisterOrderRequest()
+{
+   RegisterOrderRequest();
+   if(g_counterOrderWindowStart==0)
+      g_counterOrderWindowStart=TimeCurrent();
+   g_counterOrdersInWindow++;
+}
+
+int CounterSignalDirection()
+{
+   // Exactly one decision rule: visible Bid flow up => SELL, down => BUY.
+   int graphDirection=RaceLivePriceDirection();
+   if(graphDirection>0) return -1;
+   if(graphDirection<0) return 1;
+   return 0;
+}
+
+bool SendCounterMarketOrder(int direction)
+{
+   if(direction==0)
+      return false;
+
+   MqlTick tick;
+   if(!SymbolInfoTick(_Symbol,tick))
+   {
+      g_lastOrderError=GetLastError();
+      g_lastOrderRetcode=0;
+      g_lastOrderAt=TimeCurrent();
+      g_executionStatus="COUNTER_NO_TICK";
+      return false;
+   }
+
+   MqlTradeRequest request={};
+   MqlTradeResult result={};
+   request.action=TRADE_ACTION_DEAL;
+   request.magic=InpMagic;
+   request.symbol=_Symbol;
+   request.volume=NormalizeTradeVolume(g_lot);
+   request.deviation=DynamicDeviationPoints();
+   request.type_filling=AllowedFillingMode();
+   request.comment="SaaSCounter";
+   request.sl=0.0;
+   request.tp=0.0;
+
+   if(request.volume<=0.0)
+   {
+      g_executionStatus="COUNTER_INVALID_LOT";
+      return false;
+   }
+
+   if(direction>0)
+   {
+      request.type=ORDER_TYPE_BUY;
+      request.price=tick.ask;
+   }
+   else
+   {
+      request.type=ORDER_TYPE_SELL;
+      request.price=tick.bid;
+   }
+
+   ResetLastError();
+   bool sent=OrderSendWithPriceRetry(request,result);
+   g_lastOrderRetcode=(long)result.retcode;
+   g_lastOrderError=GetLastError();
+   g_lastOrderAt=TimeCurrent();
+
+   if(!sent || !TradeResultAccepted(result))
+   {
+      RecordExecutionQuality(false,0.0);
+      g_executionStatus=RetcodeExecutionStatus((long)result.retcode);
+      Print("COUNTER order rejected. retcode=",result.retcode," comment=",result.comment);
+      return false;
+   }
+
+   double fillPrice=result.price>0.0 ? result.price : request.price;
+   double slippagePoints=MathAbs(fillPrice-request.price)/_Point;
+   RecordExecutionQuality(true,slippagePoints);
+   g_adaptiveLot=request.volume;
+   g_lastEntryReason=direction>0 ? "COUNTER_BUY" : "COUNTER_SELL";
+   g_lastEntryAt=TimeCurrent();
+   g_executionStatus="COUNTER_ORDER_ACCEPTED";
+   return true;
+}
+
+int CounterHarvestProfitablePositions()
+{
+   int harvested=0;
+   bool hedging=((ENUM_ACCOUNT_MARGIN_MODE)AccountInfoInteger(ACCOUNT_MARGIN_MODE)==
+                 ACCOUNT_MARGIN_MODE_RETAIL_HEDGING);
+   double baseVolume=NormalizeTradeVolume(g_lot);
+   double target=MathMax(0.01,g_counterPerPositionProfitMoney);
+
+   for(int i=PositionsTotal()-1;i>=0;i--)
+   {
+      ulong ticket=PositionGetTicket(i);
+      if(ticket==0 || !PositionSelectByTicket(ticket))
+         continue;
+      if(PositionGetString(POSITION_SYMBOL)!=_Symbol ||
+         PositionGetInteger(POSITION_MAGIC)!=InpMagic ||
+         StringFind(PositionGetString(POSITION_COMMENT),"SaaSCounter")<0)
+         continue;
+
+      double displayedProfit=PositionGetDouble(POSITION_PROFIT);
+      double positionVolume=PositionGetDouble(POSITION_VOLUME);
+      double comparableProfit=displayedProfit;
+      if(!hedging && positionVolume>0.0 && baseVolume>0.0)
+         comparableProfit=displayedProfit*MathMin(1.0,baseVolume/positionVolume);
+
+      if(comparableProfit+0.00000001<target)
+         continue;
+
+      double closeVolume=hedging
+         ? positionVolume
+         : MathMin(positionVolume,baseVolume);
+      if(closeVolume<=0.0)
+         continue;
+
+      // Closing is a broker request too. Pace it with the same COUNTER queue so
+      // many profitable tickets can never be dumped onto the trade server at once.
+      if(!CounterCanSendOrder())
+         return harvested;
+
+      bool closed=ClosePositionVolumeByTicket(ticket,closeVolume,"SCNCounterProfit");
+      CounterRegisterOrderRequest();
+      if(closed)
+      {
+         harvested++;
+         g_executionStatus="COUNTER_PROFIT_CLOSE";
+         g_lastCloseReason="COUNTER_PROFIT_CLOSE";
+      }
+
+      // One close request per pass, on both Hedging and Netting accounts.
+      break;
+   }
+
+   return harvested;
+}
+
+bool ProcessCounterFill(int direction)
+{
+   if(direction==0)
+      return false;
+
+   if(CounterFilledUnits()>=g_maxPositions)
+   {
+      g_executionStatus="COUNTER_TARGET_FILLED";
+      return true;
+   }
+
+   if(g_state!=STATE_RUNNING || !g_access ||
+      (!MQLInfoInteger(MQL_TESTER) && !EntryLeaseValid()))
+   {
+      g_executionStatus="COUNTER_CONTROL_NOT_FRESH";
+      return false;
+   }
+
+   if(TradePermissionStatus()!="OK")
+   {
+      g_executionStatus="COUNTER_TRADE_PERMISSION";
+      return false;
+   }
+
+   if(!OpenTradingAllowedForDirection(direction))
+   {
+      g_executionStatus="COUNTER_SYMBOL_DIRECTION_BLOCKED";
+      return false;
+   }
+
+   if(!CounterCanSendOrder())
+   {
+      g_executionStatus="COUNTER_FILL_PACING";
+      return false;
+   }
+
+   bool accepted=SendCounterMarketOrder(direction);
+   CounterRegisterOrderRequest();
+   if(accepted)
+      g_executionStatus=CounterFilledUnits()>=g_maxPositions
+         ? "COUNTER_TARGET_FILLED"
+         : "COUNTER_FILLING";
+   return accepted;
+}
+
+bool ManageCounterMode()
+{
+   // Profit is used only as the per-position exit trigger. It never selects side.
+   CounterHarvestProfitablePositions();
+
+   if(g_state!=STATE_RUNNING || !g_access ||
+      (!MQLInfoInteger(MQL_TESTER) && !EntryLeaseValid()))
+   {
+      g_executionStatus=CounterPositionCount()>0
+         ? "COUNTER_MANAGE_ONLY"
+         : "COUNTER_CONTROL_NOT_FRESH";
+      return true;
+   }
+
+   if(CounterFilledUnits()>=g_maxPositions)
+   {
+      g_executionStatus="COUNTER_FULL_WAIT_PROFIT";
+      return true;
+   }
+
+   int direction=CounterSignalDirection();
+   if(direction==0)
+   {
+      g_executionStatus="COUNTER_PRICE_FLOW_WAIT";
+      return true;
+   }
+
+   ProcessCounterFill(direction);
+   return true;
+}
+
 int RaceAnalysisDirection(double momentum)
 {
    if(g_entryMode == ENTRY_BUY_ONLY) return 1;
@@ -4961,6 +5270,28 @@ void OnTick()
    if(zeroGridOwnsRuntime || zeroGridCanStart)
    {
       ManageZeroGrid();
+      return;
+   }
+
+   // COUNTER is routed before every generic daily/basket risk path. Its only
+   // position exit is its configured per-position profit target; explicit user
+   // Close All above remains authoritative.
+   if(!MQLInfoInteger(MQL_TESTER) &&
+      !g_settingsSynchronized &&
+      count>0 &&
+      BasketHasCounterPosition())
+   {
+      g_executionStatus="COUNTER_WAIT_SETTINGS_SYNC";
+      return;
+   }
+
+   bool counterCanStart=
+      CounterModeEnabled() &&
+      BasketPositionCount()<=0 &&
+      RescuePositionCount()<=0;
+   if((count>0 && BasketHasCounterPosition()) || counterCanStart)
+   {
+      ManageCounterMode();
       return;
    }
 
@@ -8030,6 +8361,7 @@ void ApplySettings(string json)
    g_raceCloseAllProfitEnabled = JsonBool(json, "raceCloseAllProfitEnabled", g_raceCloseAllProfitEnabled);
    g_raceCloseAllProfitMoney = MathMax(0.01, JsonNumber(json, "raceCloseAllProfitMoney", g_raceCloseAllProfitMoney));
    g_racePerPositionProfitMoney = MathMax(0.01, JsonNumber(json, "racePerPositionProfitMoney", g_racePerPositionProfitMoney));
+   g_counterPerPositionProfitMoney = MathMax(0.01, JsonNumber(json, "counterPerPositionProfitMoney", g_counterPerPositionProfitMoney));
    string requestedRaceProfitMode = JsonString(json, "raceProfitTargetMode", "");
    StringToUpper(requestedRaceProfitMode);
    if(requestedRaceProfitMode == "BASKET" ||
@@ -8048,13 +8380,13 @@ void ApplySettings(string json)
 
    string requestedEngineMode = JsonString(json, "engineMode", "");
    StringToUpper(requestedEngineMode);
-   bool hasEngineMode = requestedEngineMode == "AUTO" || requestedEngineMode == "RACE" || requestedEngineMode == "ZERO_GRID";
+   bool hasEngineMode = requestedEngineMode == "AUTO" || requestedEngineMode == "RACE" || requestedEngineMode == "COUNTER" || requestedEngineMode == "ZERO_GRID";
 
    string requestedControlMode = JsonString(json, "controlMode", "");
    StringToUpper(requestedControlMode);
    bool hasControlMode =
       requestedControlMode == "AUTO" || requestedControlMode == "RACE" ||
-      requestedControlMode == "ZERO_GRID" || requestedControlMode == "FLIP_LOCK" ||
+      requestedControlMode == "COUNTER" || requestedControlMode == "ZERO_GRID" || requestedControlMode == "FLIP_LOCK" ||
       requestedControlMode == "ASSISTED" ||
       requestedControlMode == "MANUAL" || requestedControlMode == "LEGACY";
 
@@ -8065,6 +8397,7 @@ void ApplySettings(string json)
       g_controlMode = requestedControlMode;
       if(g_controlMode == "ZERO_GRID") g_engineMode = "ZERO_GRID";
       else if(g_controlMode == "RACE") g_engineMode = "RACE";
+      else if(g_controlMode == "COUNTER") g_engineMode = "COUNTER";
       else g_engineMode = "AUTO";
    }
    else if(hasEngineMode)
@@ -8072,7 +8405,8 @@ void ApplySettings(string json)
       g_engineMode = requestedEngineMode;
       if(g_engineMode == "ZERO_GRID") g_controlMode = "ZERO_GRID";
       else if(g_engineMode == "RACE") g_controlMode = "RACE";
-      else if(g_controlMode == "ZERO_GRID" || g_controlMode == "RACE" || g_controlMode == "LEGACY") g_controlMode = "AUTO";
+      else if(g_engineMode == "COUNTER") g_controlMode = "COUNTER";
+      else if(g_controlMode == "ZERO_GRID" || g_controlMode == "RACE" || g_controlMode == "COUNTER" || g_controlMode == "LEGACY") g_controlMode = "AUTO";
    }
 
    // A valid Server-delivered mode is the startup ownership latch.
@@ -8093,7 +8427,7 @@ void ApplySettings(string json)
    }
 
    // AUTO V20 and each isolated engine are distinct owners. The MANUAL legacy
-   // queue must never survive a transition into AUTO/RACE/ZERO/FLIP.
+   // queue must never survive a transition into AUTO/RACE/COUNTER/ZERO/FLIP.
    if(EffectiveExecutionMode() != "MANUAL")
       ResetLegacyBurstStateForIsolatedMode();
 
@@ -13447,6 +13781,9 @@ double EffectiveStopLossDistancePoints()
    double brokerMinimumPoints =
       (double)SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL);
 
+   if(EffectiveExecutionMode()=="COUNTER")
+      return 0.0;
+
    if(EffectiveExecutionMode()=="MANUAL")
    {
       if(g_manualStopLossPoints <= 0.0)
@@ -13460,6 +13797,8 @@ double EffectiveStopLossDistancePoints()
 
 string StopLossModeName()
 {
+   if(EffectiveExecutionMode()=="COUNTER")
+      return "OFF";
    if(EffectiveExecutionMode()=="MANUAL")
       return g_manualStopLossPoints > 0.0 ? "MANUAL_POINTS" : "OFF";
    return "SYSTEM_ATR";
@@ -13984,6 +14323,8 @@ string TradeModeFromComment(string comment)
    if(StringFind(comment,AUTO_V20_LIVE_COMMENT)>=0 ||
       StringFind(comment,"SaaSTactical")>=0)
       return "AUTO";
+   if(StringFind(comment,"SaaSCounter")>=0)
+      return "COUNTER";
    if(StringFind(comment,"SaaSRace")>=0)
       return "RACE";
    if(StringFind(comment,FLIP_LOCK_LIVE_COMMENT)>=0 ||
@@ -14042,13 +14383,14 @@ string TradeModeForDeal(ulong dealTicket)
 string DailyRiskMode()
 {
    if(BasketHasFlipLockPosition()) return "FLIP_LOCK";
+   if(BasketHasCounterPosition()) return "COUNTER";
    if(BasketHasRacePosition()) return "RACE";
    if(BasketHasAutoFamilyPosition()) return "AUTO";
    if(BasketHasManualPosition()) return "MANUAL";
    if(ZeroGridPositionCount()>0) return "ZERO_GRID";
 
    string mode=EffectiveExecutionMode();
-   if(mode=="RACE" || mode=="FLIP_LOCK" ||
+   if(mode=="RACE" || mode=="COUNTER" || mode=="FLIP_LOCK" ||
       mode=="MANUAL" || mode=="ZERO_GRID")
       return mode;
    return "AUTO";
@@ -14087,6 +14429,7 @@ double DailyClosedProfitForMode(string mode)
 {
    if(mode=="AUTO") return g_dailyClosedProfitAuto;
    if(mode=="RACE") return g_dailyClosedProfitRace;
+   if(mode=="COUNTER") return g_dailyClosedProfitCounter;
    if(mode=="FLIP_LOCK") return g_dailyClosedProfitFlipLock;
    if(mode=="MANUAL") return g_dailyClosedProfitManual;
    return 0.0;
@@ -17545,6 +17888,7 @@ void RecalculateDailyClosedProfit()
 {
    g_dailyClosedProfitAuto=0.0;
    g_dailyClosedProfitRace=0.0;
+   g_dailyClosedProfitCounter=0.0;
    g_dailyClosedProfitFlipLock=0.0;
    g_dailyClosedProfitManual=0.0;
    g_dailyClosedProfit=0.0;
@@ -17592,6 +17936,7 @@ void RecalculateDailyClosedProfit()
       string mode=TradeModeForDeal(deal);
       if(mode=="AUTO") g_dailyClosedProfitAuto+=net;
       else if(mode=="RACE") g_dailyClosedProfitRace+=net;
+      else if(mode=="COUNTER") g_dailyClosedProfitCounter+=net;
       else if(mode=="FLIP_LOCK") g_dailyClosedProfitFlipLock+=net;
       else if(mode=="MANUAL") g_dailyClosedProfitManual+=net;
    }
@@ -18902,6 +19247,11 @@ double DynamicInitialStopPrice(int direction, double entryPrice)
       0.0
    )+2.0;
 
+   // COUNTER never owns a Broker SL. Keep this explicit even though COUNTER
+   // uses its dedicated market-order path, so future callers cannot add one.
+   if(EffectiveExecutionMode()=="COUNTER")
+      return 0.0;
+
    // MANUAL Stop Loss is an explicit switch. Zero means no Broker SL at all;
    // never substitute a hidden ATR stop behind a disabled website control.
    if(EffectiveExecutionMode()=="MANUAL" && g_manualStopLossPoints<=0.0)
@@ -19118,11 +19468,15 @@ void ManageDynamicProtection()
       bool manualPosition=
          StringFind(positionComment,MANUAL_LIVE_COMMENT)>=0 ||
          StringFind(positionComment,LEGACY_BASKET_COMMENT)>=0;
+      bool counterPosition=StringFind(positionComment,"SaaSCounter")>=0;
       bool autoFamilyPosition=autoPosition || tacticalPosition;
 
-      // MANUAL means MANUAL: its broker SL, explicit money targets and explicit
-      // risk controls are the only owners. Never add hidden BE/ATR/EMA trailing.
+      // MANUAL means MANUAL: preserve its existing isolation contract exactly.
       if(manualPosition)
+         continue;
+
+      // COUNTER is stricter: never add Broker SL/TP after the order is open.
+      if(counterPosition)
          continue;
 
       double marketPrice = direction > 0 ? tick.bid : tick.ask;
