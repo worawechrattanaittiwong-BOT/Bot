@@ -122,7 +122,7 @@ jobs:
       - name: RACE close-all profit contract
         shell: pwsh
         run: ./tests/race-close-all-profit-contract.ps1
-      - name: RACE 60-second volume and safe rollover contract
+      - name: RACE visible Bid price-flow and safety contract
         shell: pwsh
         run: ./tests/race-volume-rollover-contract.ps1
       - name: RACE VNext Phase 6 evaluation contract
