@@ -6391,6 +6391,23 @@ function BotSettingsModal(props:any) {
         note:"ขั้นต่ำเหมาะกับ Lot ต่ำสุดและจำนวนไม้จำกัด ระดับ 100 USD ขึ้นไปมี buffer ให้การเปิดหลายไม้และความผันผวนมากกว่า"
       }
     },
+    COUNTER:{
+      title:"COUNTER",
+      icon:"trend",
+      systemType:"Inverse Live Price Flow · ไม่มีตัวกรองกลยุทธ์อื่น",
+      sizing:"Fixed Lot ต่อไม้ · เติมทีละคำสั่งด้วย pacing ภายในระบบ",
+      exitStyle:"Per-position Profit เท่านั้น · ไม่มี Stop Loss / Basket Exit",
+      workflow:"ดูการเคลื่อนของราคา Bid แบบเดียวกับ live flow ของ RACE แต่กลับด้านตรง ๆ: กราฟขึ้นเปิด SELL และกราฟลงเปิด BUY จากนั้นค่อย ๆ เติมจนถึงจำนวนไม้ที่ตั้ง",
+      good:"โหมดนี้ทำตามกฎสวนราคาแบบตรง ๆ โดยไม่มี EMA, ATR, Structure, Volume หรือ Confidence มาช่วยเลือกทิศ",
+      caution:"ไม่มี Stop Loss และไม่มีตัวกรองความเสี่ยงของโหมดอื่น ขาดทุนของไม้ที่ยังไม่ถึงกำไรสามารถค้างและเพิ่มขึ้นได้",
+      remember:"COUNTER = ขึ้น SELL · ลง BUY · ปิดเมื่อกำไรต่อไม้ถึงเป้า",
+      capital:{
+        minimum:"—",
+        balanced:"—",
+        comfortable:"—",
+        note:"ไม่ได้กำหนดทุนแนะนำอัตโนมัติ เพราะความเสี่ยงขึ้นกับ Lot, จำนวนไม้, Symbol และระยะที่ตลาดวิ่งสวน Position โดยไม่มี Stop Loss"
+      }
+    },
     FLIP_LOCK:{
       title:"FLIP LOCK",
       icon:"trend",
@@ -6615,7 +6632,7 @@ function BotSettingsModal(props:any) {
               aria-label={"เปิดคู่มือโหมด "+controlMode}
               title="อ่านแนวทางการใช้งานแต่ละโหมด"
             ><span>!</span></button>
-            {isBitcoinSymbol&&<div className="cc-bot-v2-summary-note"><ScenovaIcon name="status" size={17}/><span><b>BTC Mode Support</b><small>AUTO · RACE · FLIP LOCK · MANUAL ใช้งานได้ · ZERO GRID ถูกบล็อก</small></span></div>}
+            {isBitcoinSymbol&&<div className="cc-bot-v2-summary-note"><ScenovaIcon name="status" size={17}/><span><b>BTC Mode Support</b><small>AUTO · RACE · COUNTER · FLIP LOCK · MANUAL ใช้งานได้ · ZERO GRID ถูกบล็อก</small></span></div>}
             {embedded ? (
               <div className="cc-bot-v12-mode-select-wrap">
                 <label>
@@ -6623,6 +6640,7 @@ function BotSettingsModal(props:any) {
                   <select className={"input cc-bot-v12-mode-select cc-bot-v19-two-thirds-control "+(["RACE","FLIP_LOCK","ZERO_GRID"].includes(controlMode)?"is-rated-mode":"")} value={controlMode} disabled={props.locked} onChange={e=>applyControlMode(e.target.value)} style={{colorScheme:"dark"}}>
                     <option value="AUTO">AUTO</option>
                     <option value="RACE" className="cc-rated-mode-option">★★★ RACE</option>
+                    <option value="COUNTER">COUNTER</option>
                     <option value="FLIP_LOCK" className="cc-rated-mode-option">★★ FLIP LOCK</option>
                     <option value="ZERO_GRID" className="cc-rated-mode-option" disabled={zeroGridBlockedForSymbol}>★ ZERO GRID{zeroGridBlockedForSymbol ? " · ไม่รองรับ BTC" : ""}</option>
                     <option value="MANUAL">MANUAL</option>
@@ -6636,13 +6654,14 @@ function BotSettingsModal(props:any) {
                   {id:"AUTO",icon:"brain",tag:"AUTO + VECTOR"},
                   {id:"FLIP_LOCK",icon:"trend",tag:"ล็อกกำไร + สลับฝั่ง"},
                   {id:"RACE",icon:"status",tag:"ดำเนินการเร็ว",recommended:true},
+                  {id:"COUNTER",icon:"trend",tag:"ขึ้น SELL · ลง BUY"},
                   {id:"ZERO_GRID",icon:"layers",tag:zeroGridBlockedForSymbol?"ไม่รองรับ BTC":"กริดแบบ Hedging"},
                   {id:"MANUAL",icon:"settings",tag:"กำหนดรายละเอียด"}
                 ].map(mode=>{
                   const blocked = mode.id === "ZERO_GRID" && zeroGridBlockedForSymbol;
                   return <button key={mode.id} type="button" role="radio" aria-checked={controlMode===mode.id} disabled={blocked} className={(controlMode===mode.id?"active ":"")+(blocked?"is-disabled":"")} onClick={()=>applyControlMode(mode.id)}>
                     <span className="cc-bot-v2-mode-icon"><ScenovaIcon name={mode.icon} size={22}/></span>
-                    <span><em>{mode.tag}</em><b className="cc-bot-mode-name">{modeCopy[mode.id].title}{mode.recommended?<i className="cc-race-recommended-badge">แนะนำ</i>:null}</b><small>{blocked?"BTC/XBT ใช้ ZERO GRID ไม่ได้ · เลือก AUTO, RACE, FLIP LOCK หรือ MANUAL":modeCopy[mode.id].subtitle}</small></span>
+                    <span><em>{mode.tag}</em><b className="cc-bot-mode-name">{modeCopy[mode.id].title}{mode.recommended?<i className="cc-race-recommended-badge">แนะนำ</i>:null}</b><small>{blocked?"BTC/XBT ใช้ ZERO GRID ไม่ได้ · เลือก AUTO, RACE, COUNTER, FLIP LOCK หรือ MANUAL":modeCopy[mode.id].subtitle}</small></span>
                     <i className="cc-bot-v2-radio"/>
                   </button>;
                 })}
@@ -6784,7 +6803,7 @@ function BotSettingsModal(props:any) {
           </header>
 
           <nav className="cc-mode-guide-tabs" aria-label="เลือกอ่านโหมดการเทรด">
-            {["AUTO","RACE","FLIP_LOCK","ZERO_GRID","MANUAL"].map(mode=>(
+            {["AUTO","RACE","COUNTER","FLIP_LOCK","ZERO_GRID","MANUAL"].map(mode=>(
               <button
                 key={mode}
                 type="button"
