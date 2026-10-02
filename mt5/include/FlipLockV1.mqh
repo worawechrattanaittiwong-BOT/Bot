@@ -4,14 +4,15 @@
 // FLIP LOCK 1.2.0 - M1 one-position protected-profit engine.
 // A live FLIP position starts with the existing wide Safety SL. Once price has
 // moved far enough into profit for a broker-legal stop beyond entry, the SL
-// locks 50% of the best favorable excursion and only moves in the direction of
-// more protected profit. No opposite pending baton is used.
+// jumps to protected profit and then trails the executable market price at a
+// fixed 100-point distance. The SL only tightens; it never moves backward.
+// No opposite pending baton is used.
 #define FLIP_LOCK_V1_VERSION "1.2.0"
 #define FLIP_LOCK_PENDING_COMMENT "SCNFlipLock"
 #define FLIP_LOCK_LIVE_COMMENT "SCNFlipLockLive"
 #define FLIP_LOCK_UNARMED_RESTART_COOLDOWN_SECONDS 5
 #define FLIP_LOCK_STOP_SYNC_MIN_MS 250
-#define FLIP_LOCK_PROFIT_LOCK_RATIO 0.50
+#define FLIP_LOCK_TRAIL_DISTANCE_POINTS 100.0
 
 int g_flipLockDirection=0;
 double g_flipLockPeakPrice=0.0;
@@ -424,37 +425,30 @@ bool FlipLockOpenStarter(const int forcedDirection=0)
 double FlipLockProfitLockPrice(
    const int direction,
    const double openPrice,
-   const double peakPrice,
    const MqlTick &tick
 )
 {
-   if(direction==0 || openPrice<=0.0 || peakPrice<=0.0)
+   if(direction==0 || openPrice<=0.0)
       return 0.0;
 
-   double favorableDistance=direction>0
-      ? peakPrice-openPrice
-      : openPrice-peakPrice;
-   if(favorableDistance<=0.0)
-      return 0.0;
-
-   double lockDistance=favorableDistance*FLIP_LOCK_PROFIT_LOCK_RATIO;
+   double trailPoints=MathMax(
+      FLIP_LOCK_TRAIL_DISTANCE_POINTS,
+      FlipLockBrokerMinDistancePoints()
+   );
+   double executablePrice=direction>0 ? tick.bid : tick.ask;
    double target=direction>0
-      ? openPrice+lockDistance
-      : openPrice-lockDistance;
+      ? executablePrice-trailPoints*_Point
+      : executablePrice+trailPoints*_Point;
 
-   // Keep the requested 50% lock whenever the broker allows it. If that price
-   // is inside Stops/Freeze distance, move only as close as the broker permits.
-   double minimum=FlipLockBrokerMinDistancePoints()*_Point;
+   // Do not replace the wide Safety SL until the fixed-distance trail itself
+   // sits on the profitable side of entry. Broker Stops/Freeze legality is
+   // already included in trailPoints above.
    if(direction>0)
    {
-      double maxLegal=tick.bid-minimum;
-      target=MathMin(target,maxLegal);
       if(target<=openPrice) return 0.0;
    }
    else
    {
-      double minLegal=tick.ask+minimum;
-      target=MathMax(target,minLegal);
       if(target>=openPrice) return 0.0;
    }
 
@@ -490,12 +484,11 @@ bool FlipLockSyncProfitLock(
    const double target=FlipLockProfitLockPrice(
       direction,
       openPrice,
-      g_flipLockPeakPrice,
       tick
    );
 
-   // Until 50% of the favorable excursion can sit beyond entry legally, leave
-   // the original wide Safety SL untouched.
+   // Until the 100-point trailing stop can sit beyond entry legally, leave the
+   // original wide Safety SL untouched.
    if(target<=0.0 || !FlipLockProfitStopIsLegal(direction,target,openPrice,tick))
    {
       g_flipLockReason="WAIT_PROFIT_LOCK_DISTANCE";
@@ -537,7 +530,7 @@ bool FlipLockSyncProfitLock(
    g_flipLockLastStopSyncMs=nowMs;
    g_flipLockTriggerPrice=target;
    g_flipLockArmed=true;
-   g_flipLockReason="LOCAL_50_PERCENT_PROFIT_LOCK";
+   g_flipLockReason="LOCAL_100_POINT_PROFIT_TRAIL";
    g_executionStatus=direction>0
       ? "FLIP_LOCK_BUY_PROFIT_LOCK"
       : "FLIP_LOCK_SELL_PROFIT_LOCK";
