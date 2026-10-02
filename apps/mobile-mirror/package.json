@@ -7,7 +7,7 @@
     "start": "expo start",
     "typecheck": "tsc --noEmit",
     "prebuild:android": "expo prebuild --platform android --clean --no-install",
-    "prebuild:ios": "expo prebuild --platform ios --clean --no-install"
+    "prebuild:ios": "expo prebuild --platform ios --clean --no-install && ruby scripts/fix-ios-entitlements.rb"
   },
   "dependencies": {
     "@apirtc/expo-apirtc-options-plugin": "0.0.12",
