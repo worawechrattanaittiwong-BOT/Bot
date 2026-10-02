@@ -397,7 +397,7 @@ bool FlipLockOpenStarter(const int forcedDirection=0)
 
    // The shared sender forces FLIP volume to NormalizeTradeVolume(g_lot).
    // No martingale or adaptive lot scaling is allowed.
-   g_entryModel="FLIP_LOCK_M1_PENDING_BATON";
+   g_entryModel="FLIP_LOCK_M1_PROFIT_LOCK";
    g_entryTrigger=direction>0 ? "FLIP_LOCK_M1_START_BUY" : "FLIP_LOCK_M1_START_SELL";
    g_entryQuality="FLIP_LOCK_M1";
    g_entryQualityScore=0.0;
