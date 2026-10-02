@@ -3104,7 +3104,6 @@ export class BotController {
       "autoProfitTargetMoney",
       "raceCloseAllProfitMoney",
       "racePerPositionProfitMoney",
-      "counterPerPositionProfitMoney",
       "manualBasketProfitTargetMoney",
       "manualPerPositionProfitMoney",
       "zeroGridMinNetProfitMoney"
