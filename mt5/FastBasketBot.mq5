@@ -14324,11 +14324,8 @@ string TradeModeFromComment(string comment)
       StringFind(comment,"SaaSTactical")>=0)
       return "AUTO";
    if(StringFind(comment,"SaaSCounter")>=0)
-
       return "COUNTER";
-
    if(StringFind(comment,"SaaSRace")>=0)
-
       return "RACE";
    if(StringFind(comment,FLIP_LOCK_LIVE_COMMENT)>=0 ||
       StringFind(comment,FLIP_LOCK_PENDING_COMMENT)>=0)
