@@ -6414,10 +6414,10 @@ function BotSettingsModal(props:any) {
       systemType:"Single Position + Safety SL + 100-Point Profit Trail · ไม่ใช่ Martingale",
       sizing:"1 Position หลัก · Lot คงที่ตามค่าที่ตั้ง · ไม่มี Pending ฝั่งตรงข้าม",
       exitStyle:"Safety SL ก่อน · หลังล็อกกำไร Trail ตามราคาปัจจุบันห่าง 100 จุด · SL ไม่ถอยกลับ",
-      workflow:"ใช้ M1 เลือกฝั่งเริ่มต้น เปิด 1 Position พร้อม Safety SL ก่อน เมื่อกำไรมากพอที่ SL 100 จุดหลังราคาปัจจุบันจะอยู่ฝั่งกำไร ระบบจะยก Broker SL มาล็อกกำไร แล้วเกาะ Bid/Ask ห่าง 100 จุดและขยับเฉพาะทางกำไร",
+      workflow:"ใช้ M1 เลือกฝั่งเริ่มต้น เปิด 1 Position พร้อม Safety SL ก่อน เมื่อกำไรมากพอ ระบบยก SL มาฝั่งกำไรแล้ว Trail ตาม Bid/Ask ห่าง 100 จุดแบบไม่ถอยกลับ เมื่อ SL ถูกชนจะสลับฝั่งทันที: BUY ถูก SL → SELL, SELL ถูก SL → BUY",
       good:"ตลาดที่เดินเป็นทาง วิ่งยาว มีระยะให้กำไรโต",
       caution:"Sideway แคบ ๆ สะบัดกลับไปกลับมาบ่อย เพราะอาจปิดแล้วเข้าใหม่หลายรอบ กำไรต่อไม้สั้นและต้นทุนเกิดบ่อย",
-      remember:"FLIP LOCK = Safety SL ก่อน · จากนั้น Trail 100 จุดตามราคาจริง · SL ไม่ถอยกลับ · M1 เท่านั้น",
+      remember:"FLIP LOCK = Safety SL → Trail 100 จุด → ชน SL แล้วกลับฝั่งทันที BUY↔SELL",
       capital:{
         minimum:"50 USD",
         balanced:"150 USD",
@@ -6541,7 +6541,7 @@ function BotSettingsModal(props:any) {
   const directionLabel = entryMode === "SELL_ONLY" ? "SELL เท่านั้น" : entryMode === "BUY_ONLY" ? "BUY เท่านั้น" : "อัตโนมัติ · EA เลือก BUY / SELL";
   const directionHelp = controlMode === "FLIP_LOCK"
     ? (entryMode === "AUTO_MOMENTUM"
-        ? "ไม้แรกอ่านทิศจากแท่ง M1 · หลัง Profit-Lock SL ปิด ระบบอ่าน M1 ใหม่ก่อนเข้า Market รอบถัดไป"
+        ? "ไม้แรกอ่านทิศจากแท่ง M1 · หลัง SL ถูกชน ระบบกลับฝั่งทันที BUY→SELL / SELL→BUY"
         : "กำหนดทิศทางของไม้แรก · หลังจากไม้ปิด ระบบอ่านแท่ง M1 ใหม่ก่อนเข้า Market รอบถัดไป")
     : (entryMode === "AUTO_MOMENTUM"
         ? "M1 / M5 / M15 / M30 / H1 วิเคราะห์ทิศทางอัตโนมัติ"
@@ -6621,7 +6621,7 @@ function BotSettingsModal(props:any) {
             <span>MT5 Local Tick · Server ไม่กำหนดราคา SL</span>
             <span>ราคา / SL / TP / Exit บริหารใน MT5 โดยตรงทุกโหมด</span>
             <span>FLIP LOCK M1 · Safety SL + Trail กำไรห่างราคาปัจจุบัน 100 จุด</span>
-            <span>FLIP LOCK ไม่วาง Pending ฝั่งตรงข้าม · SL ขยับตามกำไรและไม่ถอยกลับ · Lot เท่าค่าที่ตั้ง</span>
+            <span>FLIP LOCK ไม่วาง Pending ฝั่งตรงข้าม · SL Trail 100 จุดและไม่ถอยกลับ · ชน SL แล้วสลับ BUY↔SELL ทันที</span>
           </div>
           <section className="cc-bot-v2-mode-section cc-mode-guide-anchor">
             <div className="cc-bot-v2-section-title"><span>01</span><div><b>โหมดการเทรด</b></div></div>
@@ -6690,7 +6690,7 @@ function BotSettingsModal(props:any) {
                   </>}
                 </div>
                 <div className="cc-bot-v17-hidden-engine">{controlMode!=="ZERO_GRID"&&(controlMode==="FLIP_LOCK"
-                  ? <div className="cc-bot-v2-engine-line"><ScenovaIcon name="trend" size={16}/><b>โครงสร้าง FLIP LOCK</b><span>1 Position + Safety SL · เมื่อล็อกกำไรได้แล้ว SL เกาะ Bid/Ask ห่าง 100 จุดและเลื่อนไปทางกำไรเท่านั้น · ใช้ M1 · Lot ตาม Settings ไม่มี Martingale</span></div>
+                  ? <div className="cc-bot-v2-engine-line"><ScenovaIcon name="trend" size={16}/><b>โครงสร้าง FLIP LOCK</b><span>1 Position + Safety SL · หลังล็อกกำไร SL เกาะ Bid/Ask ห่าง 100 จุดและไม่ถอยกลับ · ชน SL แล้วเปิดฝั่งตรงข้ามทันที · Lot ตาม Settings ไม่มี Martingale</span></div>
                   : controlMode==="AUTO"
                     ? <div className="cc-bot-v2-engine-line"><ScenovaIcon name="spark" size={16}/><b>AUTO · Shared Zone Brain</b><span>Demand/Supply + Reaction เป็นแกนเข้าออเดอร์ร่วมกับ MANUAL · AUTO วาง SL/TP และจัดการ Position ของ AUTO เอง</span></div>
                     : controlMode==="MANUAL"
