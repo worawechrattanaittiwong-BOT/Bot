@@ -48,7 +48,7 @@ Need $session 'if(IsBitcoinSymbol())' 'BTC weekend/session handling missing'
 Need $session 'cryptoTick.time' 'BTC session fallback must require a live broker tick'
 Need $zero 'return !IsBitcoinSymbol()' 'ZERO GRID must be disabled for BTC at runtime'
 Need $onTick 'BTC_ZERO_GRID_BLOCKED' 'stale BTC ZERO GRID settings must be visibly blocked'
-Need $ea 'RACE_VOLUME_30S' 'RACE entry model must advertise 30-second window'
+Need $ea 'RACE_LIVE_BID_2S' 'RACE entry model must advertise visible-Bid two-second flow'
 
 Need $flip 'NormalizeStopPriceToTick(stop,direction)' 'FLIP starter SL must use broker tick size'
 Need $flip 'NormalizeTargetPriceToTick(triggerPrice,direction)' 'FLIP pending trigger must use broker tick size'
