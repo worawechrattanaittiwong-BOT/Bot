@@ -45,6 +45,20 @@ jobs:
           if (-not $metaEditor) { throw "metaeditor64.exe was not installed" }
           "METAEDITOR=$($metaEditor.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
 
+      - name: Stamp immutable runtime build identity
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $mq5Path = (Resolve-Path "mt5\FastBasketBot.mq5").Path
+          $buildId = "${{ github.sha }}"
+          $text = [System.IO.File]::ReadAllText($mq5Path)
+          $pattern = '#define\s+SCENOVA_BUILD_ID\s+"[^"]*"'
+          if (-not [regex]::IsMatch($text, $pattern)) { throw "EA build identity marker missing" }
+          $replacement = '#define SCENOVA_BUILD_ID "' + $buildId + '"'
+          $stamped = [regex]::Replace($text, $pattern, $replacement, 1)
+          [System.IO.File]::WriteAllText($mq5Path, $stamped, [System.Text.UTF8Encoding]::new($false))
+          "EA_BUILD_ID=$buildId" | Out-File -FilePath $env:GITHUB_ENV -Append
+
       - name: Validate production runtime source
         shell: pwsh
         run: |
@@ -59,6 +73,10 @@ jobs:
           if ($eaVersion -ne $runtimeMatch.Groups[1].Value) { throw "EA version metadata mismatch" }
           $contractMatch = [regex]::Match($text, '#define\s+SCENOVA_RUNTIME_CONTRACT\s+"([^"]+)"')
           if (-not $contractMatch.Success) { throw "EA runtime contract metadata missing" }
+          $buildMatch = [regex]::Match($text, '#define\s+SCENOVA_BUILD_ID\s+"([^"]+)"')
+          if (-not $buildMatch.Success -or $buildMatch.Groups[1].Value -ne $env:EA_BUILD_ID) {
+            throw "EA build identity stamp mismatch"
+          }
           "EA_VERSION=$eaVersion" | Out-File -FilePath $env:GITHUB_ENV -Append
           "EA_RUNTIME_CONTRACT=$($contractMatch.Groups[1].Value)" | Out-File -FilePath $env:GITHUB_ENV -Append
           "EA_SOURCE=$mq5Path" | Out-File -FilePath $env:GITHUB_ENV -Append
@@ -115,6 +133,7 @@ jobs:
             sha256 = $hash
             eaVersion = $env:EA_VERSION
             runtimeContract = $env:EA_RUNTIME_CONTRACT
+            buildId = $env:EA_BUILD_ID
             sourceCommit = "${{ github.sha }}"
             builtAt = (Get-Date).ToUniversalTime().ToString("o")
             brain = "AUTO_VECTOR_EDGE_V1"
