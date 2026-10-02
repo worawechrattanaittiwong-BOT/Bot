@@ -44,13 +44,14 @@ export type ReconstructedBasket = {
   positions: ReconstructedPosition[];
 };
 
-const VALID_MODES = ["AUTO","RACE","ZERO_GRID","FLIP_LOCK","MANUAL"];
+const VALID_MODES = ["AUTO","RACE","COUNTER","ZERO_GRID","FLIP_LOCK","MANUAL"];
 
 export function resolveJournalControlMode(row: PerformanceJournalDeal) {
   const fingerprint = (
     String(row.entry_model || "") + " " +
     String(row.entry_trigger || "")
   ).toUpperCase();
+  if (fingerprint.includes("COUNTER")) return "COUNTER";
   if (fingerprint.includes("RACE")) return "RACE";
   if (fingerprint.includes("FLIP")) return "FLIP_LOCK";
   if (fingerprint.includes("ZERO")) return "ZERO_GRID";
