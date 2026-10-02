@@ -625,6 +625,72 @@ bool FlipLockPendingTriggerCrossed()
    return tick.bid<=g_flipLockPendingTriggerPrice+tolerance;
 }
 
+bool FlipLockHistoryPositionOwned(const ulong positionId)
+{
+   if(positionId==0 || !HistorySelectByPosition(positionId))
+      return false;
+
+   int total=HistoryDealsTotal();
+   for(int i=0;i<total;i++)
+   {
+      ulong deal=HistoryDealGetTicket(i);
+      if(deal==0) continue;
+      long entry=HistoryDealGetInteger(deal,DEAL_ENTRY);
+      if(entry!=DEAL_ENTRY_IN && entry!=DEAL_ENTRY_INOUT) continue;
+      if(HistoryDealGetString(deal,DEAL_SYMBOL)!=_Symbol) continue;
+      if(HistoryDealGetInteger(deal,DEAL_MAGIC)!=InpMagic) continue;
+
+      string comment=HistoryDealGetString(deal,DEAL_COMMENT);
+      if(StringFind(comment,FLIP_LOCK_LIVE_COMMENT)>=0 ||
+         StringFind(comment,FLIP_LOCK_PENDING_COMMENT)>=0)
+         return true;
+   }
+   return false;
+}
+
+bool FlipLockLastExitWasStop()
+{
+   datetime now=TimeCurrent();
+   if(!HistorySelect(now-86400,now+60))
+      return false;
+
+   int total=HistoryDealsTotal();
+   ulong latestExit=0;
+   long latestTime=-1;
+   ulong latestPositionId=0;
+   long latestReason=0;
+
+   for(int i=0;i<total;i++)
+   {
+      ulong deal=HistoryDealGetTicket(i);
+      if(deal==0) continue;
+      if(HistoryDealGetString(deal,DEAL_SYMBOL)!=_Symbol ||
+         HistoryDealGetInteger(deal,DEAL_MAGIC)!=InpMagic)
+         continue;
+
+      long entry=HistoryDealGetInteger(deal,DEAL_ENTRY);
+      if(entry!=DEAL_ENTRY_OUT &&
+         entry!=DEAL_ENTRY_OUT_BY &&
+         entry!=DEAL_ENTRY_INOUT)
+         continue;
+
+      long dealTime=(long)HistoryDealGetInteger(deal,DEAL_TIME_MSC);
+      if(latestExit==0 || dealTime>=latestTime)
+      {
+         latestExit=deal;
+         latestTime=dealTime;
+         latestPositionId=(ulong)HistoryDealGetInteger(deal,DEAL_POSITION_ID);
+         latestReason=HistoryDealGetInteger(deal,DEAL_REASON);
+      }
+   }
+
+   if(latestExit==0 || latestReason!=DEAL_REASON_SL)
+      return false;
+
+   return FlipLockHistoryPositionOwned(latestPositionId);
+}
+
+
 void FlipLockManageFlatState()
 {
    // New engine never pre-places the opposite side. Remove stale pending orders
@@ -632,21 +698,26 @@ void FlipLockManageFlatState()
    FlipLockRemoveAllPending();
    g_flipLockFlatPendingSince=0;
 
-   if(g_flipLockArmed)
+   if(g_flipLockDirection!=0 && FlipLockLastExitWasStop())
    {
-      // A profit-lock SL completed the previous leg. Re-read M1 now and open the
-      // next leg only if normal run authorization still permits new exposure.
-      int reactiveDirection=FlipLockReactiveDirection();
+      // SL is the FLIP handoff trigger. A BUY stop-out means price reversed
+      // downward, so continue with SELL. A SELL stop-out means price reversed
+      // upward, so continue with BUY. Do not re-read M1 for this handoff.
+      int nextDirection=-g_flipLockDirection;
       g_flipLockFlipCount++;
       g_flipLockLastFlipAt=TimeCurrent();
       FlipLockResetTracking(false);
-      FlipLockOpenStarter(reactiveDirection);
+      g_flipLockReason=nextDirection>0
+         ? "SL_HANDOFF_TO_BUY"
+         : "SL_HANDOFF_TO_SELL";
+      FlipLockOpenStarter(nextDirection);
       return;
    }
 
    if(g_flipLockDirection!=0)
    {
-      // Safety SL/manual close before profit lock: avoid instant churn.
+      // Manual/Close-All/non-SL exits are not reversal signals. Reset the old
+      // leg and let the normal M1 starter choose a fresh side after cooldown.
       if(g_flipLockLastFlatAt>0 &&
          TimeCurrent()-g_flipLockLastFlatAt<FLIP_LOCK_UNARMED_RESTART_COOLDOWN_SECONDS)
       {
