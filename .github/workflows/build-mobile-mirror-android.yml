@@ -99,9 +99,18 @@ jobs:
 
           git commit -m "build: publish SCENOVA Mirror Android [skip mirror build]"
 
+          # Expo prebuild / Gradle can leave tracked generated files modified.
+          # Keep the release commit, but discard only leftover build-time edits
+          # before rebasing the publish commit onto the newest main.
+          git reset --hard HEAD
+
           for attempt in 1 2 3 4 5 6; do
             git fetch origin main
-            git rebase origin/main
+            if ! git rebase origin/main; then
+              git rebase --abort || true
+              echo "Could not rebase Mirror APK publish commit onto latest main"
+              exit 1
+            fi
             if git push origin HEAD:main; then
               exit 0
             fi
