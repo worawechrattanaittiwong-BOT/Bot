@@ -46,6 +46,7 @@ export class CloudUpdateService {
       bytes,
       version: String(release.eaVersion || "").trim(),
       sha256,
+      buildId: String(release.buildId || "").trim() || null,
       runtimeContract: String(release.runtimeContract || "").trim(),
       sourceCommit: release.sourceCommit || null
     };
@@ -71,16 +72,20 @@ export class CloudUpdateService {
 
   private fleetReleaseState(
     metrics: Record<string, any> | null | undefined,
-    release: { version: string; runtimeContract: string }
+    release: { version: string; runtimeContract: string; buildId?: string | null }
   ) {
     const installedVersion = String(metrics?.eaVersion || "").trim().replace(/^v/i, "");
     const targetVersion = String(release.version || "").trim().replace(/^v/i, "");
+    const installedBuildId = String(metrics?.buildId || "").trim();
+    const targetBuildId = String(release.buildId || "").trim();
     const installedContract = String(metrics?.runtimeContract || "").trim();
     const targetContract = String(release.runtimeContract || "").trim();
 
     if (!installedVersion) return "UNKNOWN" as const;
     if (installedVersion === targetVersion) {
-      return (!targetContract || installedContract === targetContract)
+      const buildMatch = !targetBuildId || installedBuildId === targetBuildId;
+      const contractMatch = !targetContract || installedContract === targetContract;
+      return buildMatch && contractMatch
         ? "CURRENT" as const
         : "OUTDATED" as const;
     }
@@ -96,7 +101,7 @@ export class CloudUpdateService {
     const jobs = await this.db.query(
       `SELECT
          sj.id,sj.runner_id,sj.action,sj.source_job_id,sj.state,sj.created_at,sj.completed_at,
-         er.version target_version,er.sha256 target_sha256,
+         er.version target_version,er.sha256 target_sha256,er.build_id target_build_id,
          COUNT(ij.id)::int total,
          COUNT(*) FILTER (WHERE ij.state='WAITING_SAFE')::int waiting_safe,
          COUNT(*) FILTER (WHERE ij.state='DELIVERED')::int delivered,
@@ -106,7 +111,7 @@ export class CloudUpdateService {
        FROM server_update_jobs sj
        LEFT JOIN ea_releases er ON er.id=sj.release_id
        LEFT JOIN instance_update_jobs ij ON ij.server_update_job_id=sj.id
-       GROUP BY sj.id,er.version,er.sha256
+       GROUP BY sj.id,er.version,er.sha256,er.build_id
        ORDER BY sj.created_at DESC
        LIMIT 40`
     );
@@ -125,28 +130,16 @@ export class CloudUpdateService {
       const instances = await this.db.query(
         `SELECT
            bi.runner_id,
-           bi.metrics,
-           EXISTS (
-             SELECT 1
-             FROM instance_update_jobs ij
-             WHERE ij.bot_instance_id=bi.id
-               AND ij.action='UPDATE'
-               AND ij.state='COMPLETED'
-               AND ij.target_version=$1
-               AND lower(COALESCE(ij.target_sha256,''))=lower($2)
-           ) AS current_release_completed
+           bi.metrics
          FROM bot_instances bi
          WHERE bi.runner_id IS NOT NULL
            AND bi.mode='CLOUD'
-           AND COALESCE(bi.runtime_stop_state,'NONE')='NONE'`,
-        [release.version, release.sha256]
+           AND COALESCE(bi.runtime_stop_state,'NONE')='NONE'`
       );
       for (const instance of instances.rows) {
         const runnerId = String(instance.runner_id || "");
         if (!runnerId) continue;
-        const state = instance.current_release_completed
-          ? "CURRENT"
-          : this.fleetReleaseState(instance.metrics || {}, release);
+        const state = this.fleetReleaseState(instance.metrics || {}, release);
         const status = runnerStatus[runnerId] ||= {
           total: 0,
           current: 0,
@@ -170,6 +163,7 @@ export class CloudUpdateService {
       currentRelease: release ? {
         version: release.version,
         sha256: release.sha256,
+        buildId: release.buildId,
         runtimeContract: release.runtimeContract
       } : null,
       runnerStatus,
@@ -277,22 +271,14 @@ export class CloudUpdateService {
         `SELECT
            bi.id,bi.desired_state,bi.metrics,
            COALESCE(bi.metrics->>'eaVersion','') previous_version,
-           EXISTS (
-             SELECT 1
-             FROM instance_update_jobs ij
-             WHERE ij.bot_instance_id=bi.id
-               AND ij.action='UPDATE'
-               AND ij.state='COMPLETED'
-               AND ij.target_version=$2
-               AND lower(COALESCE(ij.target_sha256,''))=lower($3)
-           ) AS current_release_completed
+           COALESCE(bi.metrics->>'buildId','') previous_build_id
          FROM bot_instances bi
          WHERE bi.runner_id=$1
            AND bi.mode='CLOUD'
            AND COALESCE(bi.runtime_stop_state,'NONE')='NONE'
          ORDER BY bi.created_at
          FOR UPDATE OF bi`,
-        [runnerId, release.version, release.sha256]
+        [runnerId]
       )).rows;
 
       if (!instances.length) {
@@ -301,7 +287,6 @@ export class CloudUpdateService {
 
       const updateTargets = instances.filter(
         instance =>
-          !instance.current_release_completed &&
           this.fleetReleaseState(instance.metrics || {}, release) === "OUTDATED"
       );
       if (!updateTargets.length) {
@@ -310,11 +295,12 @@ export class CloudUpdateService {
 
       const releaseRow = (await tx.query(
         `INSERT INTO ea_releases(
-           version,sha256,runtime_contract,artifact_name,source_commit,artifact_bytes
+           version,sha256,runtime_contract,build_id,artifact_name,source_commit,artifact_bytes
          )
-         VALUES($1,$2,$3,'FastBasketBot.ex5',$4,$5)
+         VALUES($1,$2,$3,$4,'FastBasketBot.ex5',$5,$6)
          ON CONFLICT(version,sha256) DO UPDATE
          SET runtime_contract=EXCLUDED.runtime_contract,
+             build_id=COALESCE(EXCLUDED.build_id,ea_releases.build_id),
              source_commit=COALESCE(EXCLUDED.source_commit,ea_releases.source_commit),
              artifact_bytes=COALESCE(ea_releases.artifact_bytes,EXCLUDED.artifact_bytes)
          RETURNING id`,
@@ -322,6 +308,7 @@ export class CloudUpdateService {
           release.version,
           release.sha256,
           release.runtimeContract,
+          release.buildId,
           release.sourceCommit,
           release.bytes
         ]
@@ -338,16 +325,18 @@ export class CloudUpdateService {
       for (const instance of updateTargets) {
         const child = (await tx.query(
           `INSERT INTO instance_update_jobs(
-             server_update_job_id,bot_instance_id,action,target_version,target_sha256,
-             previous_version,original_desired_state,state
-           ) VALUES($1,$2,'UPDATE',$3,$4,$5,$6,'WAITING_SAFE')
+             server_update_job_id,bot_instance_id,action,target_version,target_sha256,target_build_id,
+             previous_version,previous_build_id,original_desired_state,state
+           ) VALUES($1,$2,'UPDATE',$3,$4,$5,$6,$7,$8,'WAITING_SAFE')
            RETURNING id`,
           [
             parent.id,
             instance.id,
             release.version,
             release.sha256,
+            release.buildId,
             String(instance.previous_version || "").slice(0, 32) || null,
+            String(instance.previous_build_id || "").slice(0, 64) || null,
             String(instance.desired_state || "STOPPED").slice(0, 24)
           ]
         )).rows[0];
@@ -390,6 +379,7 @@ export class CloudUpdateService {
          WHERE ij.server_update_job_id=$1
            AND ij.state='COMPLETED'
            AND COALESCE(ij.previous_version,'')<>''
+           AND COALESCE(ij.previous_sha256,'')<>''
          ORDER BY ij.created_at
          FOR UPDATE OF bi`,
         [sourceJobId]
@@ -411,8 +401,9 @@ export class CloudUpdateService {
         const child = (await tx.query(
           `INSERT INTO instance_update_jobs(
              server_update_job_id,bot_instance_id,action,source_instance_update_id,
-             target_version,target_sha256,previous_version,original_desired_state,state
-           ) VALUES($1,$2,'ROLLBACK',$3,$4,$5,$6,$7,'WAITING_SAFE')
+             target_version,target_sha256,target_build_id,
+             previous_version,previous_build_id,original_desired_state,state
+           ) VALUES($1,$2,'ROLLBACK',$3,$4,$5,$6,$7,$8,$9,'WAITING_SAFE')
            RETURNING id`,
           [
             parent.id,
@@ -420,7 +411,9 @@ export class CloudUpdateService {
             item.id,
             item.previous_version,
             item.previous_sha256,
+            item.previous_build_id,
             item.target_version,
+            item.target_build_id,
             String(item.current_desired_state || "STOPPED").slice(0, 24)
           ]
         )).rows[0];
@@ -440,7 +433,7 @@ export class CloudUpdateService {
       const row = (await tx.query(
         `SELECT
            ij.id,ij.bot_instance_id,ij.action,ij.source_instance_update_id,
-           ij.target_version,ij.target_sha256,
+           ij.target_version,ij.target_sha256,ij.target_build_id,
            sj.id server_update_job_id
          FROM instance_update_jobs ij
          JOIN server_update_jobs sj ON sj.id=ij.server_update_job_id
@@ -506,7 +499,8 @@ export class CloudUpdateService {
           action: row.action,
           sourceInstanceUpdateId: row.source_instance_update_id || null,
           targetVersion: row.target_version,
-          targetSha256: row.target_sha256 || null
+          targetSha256: row.target_sha256 || null,
+          targetBuildId: row.target_build_id || null
         }
       };
     });
@@ -647,7 +641,7 @@ export class CloudUpdateService {
     await this.db.transaction(async tx => {
       const rows = (await tx.query(
         `SELECT
-           ij.*,sj.action,sj.created_at parent_created_at,er.runtime_contract,
+           ij.*,sj.action,sj.created_at parent_created_at,er.runtime_contract,er.build_id release_build_id,
            bi.desired_state,bi.last_seen_at,bi.metrics
          FROM instance_update_jobs ij
          JOIN server_update_jobs sj ON sj.id=ij.server_update_job_id
@@ -699,12 +693,17 @@ export class CloudUpdateService {
         );
         const versionMatch =
           String(metrics.eaVersion || "").trim() === String(row.target_version || "").trim();
+        const targetBuildId = String(row.target_build_id || "").trim();
+        const runtimeBuildId = String(metrics.buildId || "").trim();
+        const buildMatch =
+          !targetBuildId ||
+          runtimeBuildId === targetBuildId;
         const contractMatch =
           row.action === "ROLLBACK" ||
           !row.runtime_contract ||
           String(metrics.runtimeContract || "").trim() === String(row.runtime_contract).trim();
 
-        if (!freshHeartbeat || !versionMatch || !contractMatch) continue;
+        if (!freshHeartbeat || !versionMatch || !buildMatch || !contractMatch) continue;
 
         await tx.query(
           `UPDATE instance_update_jobs
