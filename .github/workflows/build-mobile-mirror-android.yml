@@ -46,12 +46,16 @@ jobs:
       - name: Generate Android native project
         run: npx expo prebuild --platform android --clean --no-install
 
-      - name: Build installable Android APK
+      - name: Build standalone Android release APK
         run: |
           chmod +x android/gradlew
-          ./android/gradlew -p android assembleDebug --no-daemon -PreactNativeArchitectures=arm64-v8a
-          cp android/app/build/outputs/apk/debug/app-debug.apk ./SCENOVA-Mirror.apk
+          ./android/gradlew -p android assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a
+          cp android/app/build/outputs/apk/release/app-release.apk ./SCENOVA-Mirror.apk
           test -s ./SCENOVA-Mirror.apk
+
+      - name: Verify embedded React Native bundle
+        run: |
+          unzip -l ./SCENOVA-Mirror.apk | grep -q "assets/index.android.bundle"
 
       - name: Create Android manifest
         run: |
