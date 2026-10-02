@@ -6412,7 +6412,7 @@ function BotSettingsModal(props:any) {
       title:"FLIP LOCK",
       icon:"trend",
       systemType:"Single Position + Safety SL + 100-Point Profit Trail · ไม่ใช่ Martingale",
-      sizing:"1 Position หลัก + Pending ฝั่งตรงข้าม · Lot คงที่ตามค่าที่ตั้ง",
+      sizing:"1 Position หลัก · Lot คงที่ตามค่าที่ตั้ง · ไม่มี Pending ฝั่งตรงข้าม",
       exitStyle:"Safety SL ก่อน · หลังล็อกกำไร Trail ตามราคาปัจจุบันห่าง 100 จุด · SL ไม่ถอยกลับ",
       workflow:"ใช้ M1 เลือกฝั่งเริ่มต้น เปิด 1 Position พร้อม Safety SL ก่อน เมื่อกำไรมากพอที่ SL 100 จุดหลังราคาปัจจุบันจะอยู่ฝั่งกำไร ระบบจะยก Broker SL มาล็อกกำไร แล้วเกาะ Bid/Ask ห่าง 100 จุดและขยับเฉพาะทางกำไร",
       good:"ตลาดที่เดินเป็นทาง วิ่งยาว มีระยะให้กำไรโต",
