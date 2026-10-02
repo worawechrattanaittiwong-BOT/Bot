@@ -27,6 +27,8 @@ $raceTelemetryV1 = Read-Text 'mt5/include/RaceTelemetryV1.mqh'
 $api = Read-Text 'apps/api/src/ea.controller.ts'
 $release = Read-Text 'apps/api/src/release-version.ts'
 $analysis = Block $ea 'int RaceAnalysisDirection(double momentum)'
+$liveSampler = Block $ea 'void RaceSampleLivePriceFlow()'
+$liveDirection = Block $ea 'int RaceLivePriceDirection(double &movePointsOut)'
 $flow = Block $ea 'bool RaceFlowStillRunning(int direction, double momentum)'
 $harvest = Block $ea 'int RaceHarvestProfitablePositions()'
 $dualDirection = Block $ea 'bool RacePerPositionDualDirectionEnabled()'
@@ -58,14 +60,30 @@ if($raceSyncGate -lt 0 -or $dailyControl -lt 0 -or $raceManager -lt 0 -or
    $raceSyncGate -gt $dailyControl -or $raceSyncGate -gt $raceManager){
   throw 'RACE settings-sync guard must execute before daily money controls and RACE Basket management'
 }
-Need $analysis 'int volumeDirection=RaceVolumeDirection();' 'RACE analysis must keep rolling 30-second volume as an input'
-Need $analysis 'RaceZonePriorityActive(' 'RACE analysis may protect an intact opposing Demand/Supply boundary'
-Need $analysis 'RaceV2DecisionDirection(' 'RACE must keep Flow/Structure/Leg/Rejection analysis'
-Need $analysis 'if(anchorDirection==0) anchorDirection=flowDirection;' 'RACE must fall back to candle flow when volume is not qualified'
-Need $analysis 'if(anchorDirection==0) anchorDirection=g_raceVNextStructureDirection;' 'RACE must fall back to market structure without waiting'
-Need $analysis 'if(anchorDirection==0 && momentum>0.0) anchorDirection=1;' 'RACE must use live positive momentum as a non-blocking fallback'
-Need $analysis 'return RaceM5CandleDirection();' 'RACE must retain a final closed-candle direction fallback'
-if($analysis.Contains('g_trend') -or $analysis.Contains('g_ema')){throw 'RACE entry direction must not leak trend/EMA into the RACE VNext decision'}
+Need $ea '#define RACE_LIVE_FLOW_WINDOW_MS 2000' 'RACE live-price direction window must be exactly two seconds'
+Need $ea '#define RACE_LIVE_FLOW_SAMPLE_MS 100' 'RACE live-price sampler cadence must remain 100 ms'
+Need $ea '#define RACE_LIVE_FLOW_HISTORY 48' 'RACE live-price history buffer missing'
+Need $onTick 'RaceSampleLivePriceFlow();' 'RACE live price must be sampled on every market tick'
+Need $liveSampler 'if(!RaceModeEnabled())' 'RACE live-price buffer must be isolated to RACE mode'
+Need $liveSampler 'tick.time_msc' 'RACE live-price sampler must use broker tick time'
+Need $liveSampler 'g_raceLiveFlowPrice' 'RACE live-price sampler must persist short price history'
+Need $liveDirection 'RACE_LIVE_FLOW_WINDOW_MS' 'RACE direction must compare against the two-second live-price window'
+Need $liveDirection 'g_raceLiveFlowPrice[latest]-g_raceLiveFlowPrice[reference]' 'RACE direction must use net live-price displacement only'
+Need $liveDirection 'if(movePointsOut>0.0) return 1;' 'RACE rising live price must select BUY'
+Need $liveDirection 'if(movePointsOut<0.0) return -1;' 'RACE falling live price must select SELL'
+Need $analysis 'RaceLivePriceDirection(liveMovePoints)' 'RACE entry analysis must use the live two-second price direction'
+Need $analysis '"LIVE_PRICE_UP"' 'RACE live BUY telemetry missing'
+Need $analysis '"LIVE_PRICE_DOWN"' 'RACE live SELL telemetry missing'
+if($analysis.Contains('RaceVolumeDirection(') -or
+   $analysis.Contains('RaceZonePriorityActive(') -or
+   $analysis.Contains('RaceV2DecisionDirection(') -or
+   $analysis.Contains('RaceV2StructureDirection(') -or
+   $analysis.Contains('RaceV2RejectionDirection(') -or
+   $analysis.Contains('RaceM5CandleDirection(') -or
+   $analysis.Contains('g_trend') -or
+   $analysis.Contains('g_ema')){
+  throw 'RACE entry direction must not be overridden by volume/zones/M5 structure/rejection/trend'
+}
 Need $ea '#include "include\\RaceFlowV2.mqh"' 'RACE Flow V2 module missing'
 Need $ea '#include "include\\RaceStructureV2.mqh"' 'RACE Structure V2 module missing'
 Need $ea '#include "include\\RaceLegPhaseV2.mqh"' 'RACE Leg Phase V2 module missing'
@@ -77,7 +95,8 @@ Need $start 'RaceReentryObserveReady();' 'RACE re-entry observation must remain 
 if($start.Contains('if(!RaceReentryObserveReady())')){throw 'RACE re-entry observation must not block a fresh entry'}
 Need $start 'RaceNewsPauseActive(raceNewsReason)' 'RACE news analysis must remain available'
 if($start.Contains('if(RaceNewsPauseActive(raceNewsReason))')){throw 'RACE news analysis must not block a fresh entry'}
-Need $start 'bool started=ProcessRaceFill(direction);' 'RACE must immediately attempt the analyzed direction'
+Need $start 'RACE_PRICE_FLOW_WAIT' 'RACE must expose a simple wait only when two-second live price is flat/not ready'
+Need $start 'bool started=ProcessRaceFill(direction);' 'RACE must immediately attempt the live-price direction'
 Need $ea '#define SCENOVA_RUNTIME_CONTRACT "RACE_CONFIGURED_LOSS_ONLY_V1"' 'RACE compatibility runtime marker missing'
 Need $manage 'volumeDirection != direction' 'RACE must detect a volume-side flip'
 Need $manage 'cycleProfit >= 0.0' 'ordinary RACE rollover must not close a negative net cycle'
@@ -159,6 +178,11 @@ Need $fill 'RaceNewsPauseActive(raceNewsReason)' 'RACE must keep news analysis a
 if($fill.Contains('if(RaceNewsPauseActive(raceNewsReason))')){throw 'RACE news analysis must not veto additional fills'}
 Need $fill 'bool raceAntiChaseAdvisory=RaceAntiChaseBlocked(direction,raceAntiChaseReason);' 'RACE anti-chase analysis must remain advisory'
 if($fill.Contains('if(RaceAntiChaseBlocked(direction,raceAntiChaseReason))')){throw 'RACE anti-chase must not veto a fill'}
+Need $fill 'g_entryModel = "RACE_LIVE_PRICE_2S";' 'RACE entry telemetry must identify live two-second price flow'
+Need $fill '"RACE_PRICE_FLOW_BUY"' 'RACE BUY trigger telemetry must identify live price flow'
+Need $fill '"RACE_PRICE_FLOW_SELL"' 'RACE SELL trigger telemetry must identify live price flow'
+if($fill.Contains('RACE_SPREAD_WAIT')){throw 'RACE adaptive spread quality must not be an entry gate'}
+Need $fill 'if(g_spreadStatus == "EXTREME")' 'RACE must retain only the explicit extreme-spread safety veto'
 Need $raceNewsV1 'RACE_NEWS_BEFORE_MAJOR_MINUTES 15' 'RACE major-news pre-window must be 15 minutes'
 Need $raceNewsV1 'RACE_NEWS_AFTER_MAJOR_MINUTES 15' 'RACE major-news post-window must be 15 minutes'
 Need $raceNewsV1 'CALENDAR_IMPORTANCE_HIGH' 'RACE news pause must remain limited to high-impact calendar events'
@@ -206,4 +230,4 @@ if($eaVersionMatch.Groups[1].Value -ne $releaseVersionMatch.Groups[1].Value){
 }
 Need $release 'EA_RUNTIME_CONTRACT = "RACE_CONFIGURED_LOSS_ONLY_V1"' 'API runtime contract must match EA'
 
-Write-Host 'RACE 1.1.14 open-flow analysis + dual-direction POSITION + hard safety isolation: PASS'
+Write-Host 'RACE 1.1.15 live two-second price-flow + dual-direction POSITION + hard safety isolation: PASS'
