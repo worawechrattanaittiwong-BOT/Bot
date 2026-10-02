@@ -49,10 +49,11 @@ Need $fastClose '? "ZERO_GRID_REARMING"' 'ZERO fast close must preserve normal R
 Need $fastClose ': "ZERO_GRID_STOPPED_FLAT";' 'ZERO fast close must release STOP/SAFE_STOP without blocking heartbeat'
 
 Need $flipManage 'bool canOpenNewCycle=' 'SaaS authorization must control only new FLIP risk'
-Need $flipManage 'A live FLIP-owned position is always protected from the local MT5 quote.' 'live FLIP position protection must bypass SaaS latency'
-Need $flipSync 'SymbolInfoDouble(_Symbol,SYMBOL_TRADE_TICK_SIZE)' 'FLIP SL must follow broker tick increments'
-Need $flip 'FLIP_LOCK_STOP_SYNC_MIN_MS 0' 'FLIP Tick-on-Tick must have zero artificial cadence delay'
-Forbid $flipSync 'nowMs-g_flipLockLastStopSyncMs>=' 'FLIP local execution must not time-throttle SL updates'
+Need $flipManage 'Stop/authorization changes block NEW opposite exposure' 'FLIP 1.1.0 must block only new opposite pending exposure when authorization is unavailable'
+Need $flipManage 'live leg keeps its broker Safety Stop.' 'existing FLIP leg must keep broker-side Safety Stop protection during SaaS latency or stop state'
+Need $flipSync 'SymbolInfoDouble(_Symbol,SYMBOL_TRADE_TICK_SIZE)' 'FLIP pending baton must follow broker tick increments'
+Need $flip 'FLIP_LOCK_PENDING_SYNC_MIN_MS 120' 'FLIP 1.1.0 pending baton must keep its bounded 120ms local sync cadence'
+Need $flipSync 'nowMs-g_flipLockLastStopSyncMs>=FLIP_LOCK_PENDING_SYNC_MIN_MS' 'FLIP 1.1.0 local pending updates must use the bounded pending sync cadence'
 
 $flipTimer=$onTimer.IndexOf('FlipLockManage();')
 $zeroTimer=$onTimer.IndexOf('ManageZeroGrid();')
