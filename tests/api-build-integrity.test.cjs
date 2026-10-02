@@ -136,7 +136,7 @@ test('auto-deployer repairs a matching stale marker and only records a verified 
   git('add', '.');
   git('commit', '-m', 'fixture release');
   const sha = git('rev-parse', 'HEAD');
-  git('remote', 'add', 'origin', 'https://github.com/SCENOVA-SNV/Bot.git');
+  git('remote', 'add', 'origin', 'https://github.com/worawechrattanaitthiwong-creator/Bot.git');
   git('update-ref', 'refs/remotes/origin/main', sha);
   const realGit = spawnSync(bash, ['-c', 'command -v git'], { encoding: 'utf8' }).stdout.trim();
   const bin = (name, contents) => {
