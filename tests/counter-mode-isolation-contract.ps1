@@ -30,6 +30,7 @@ $web = Read-Text 'apps/web/app/dashboard/page.tsx'
 
 $signal = Block $ea 'int CounterSignalDirection()'
 $send = Block $ea 'bool SendCounterMarketOrder(int direction)'
+$sideCount = Block $ea 'int CounterFilledUnitsByDirection(int direction)'
 $fill = Block $ea 'bool ProcessCounterFill(int direction)'
 $manage = Block $ea 'bool ManageCounterMode()'
 $harvest = Block $ea 'int CounterHarvestProfitablePositions()'
@@ -57,8 +58,13 @@ Forbid $send 'RaceInitialStopPrice' 'RACE Stop leaked into COUNTER'
 Forbid $send 'DynamicInitialStopPrice' 'AUTO/MANUAL Stop leaked into COUNTER'
 Forbid $send 'AverageTrueRangePoints' 'ATR leaked into COUNTER order construction'
 
-# Fill management is capacity + operational pacing only.
-Need $fill 'CounterFilledUnits()>=g_maxPositions' 'COUNTER max-position cap missing'
+# Fill management is per-side capacity + operational pacing only.
+Need $sideCount 'expectedType=direction>0 ? POSITION_TYPE_BUY : POSITION_TYPE_SELL;' 'COUNTER must map BUY/SELL to independent slot counters'
+Need $sideCount 'PositionGetInteger(POSITION_TYPE)!=expectedType' 'COUNTER side counter must ignore positions from the opposite side'
+Need $fill 'CounterFilledUnitsByDirection(direction)>=g_maxPositions' 'COUNTER per-side max-position cap missing'
+Need $manage 'CounterFilledUnitsByDirection(direction)>=g_maxPositions' 'COUNTER manager must gate only the active side'
+Forbid $fill 'CounterFilledUnits()>=g_maxPositions' 'COUNTER must not use a combined BUY+SELL slot cap'
+Forbid $manage 'CounterFilledUnits()>=g_maxPositions' 'COUNTER manager must not block one side because the opposite side is full'
 Need $fill 'CounterCanSendOrder()' 'COUNTER gradual fill pacing missing'
 Need $fill 'SendCounterMarketOrder(direction)' 'COUNTER dedicated sender missing'
 Forbid $fill 'g_spreadStatus' 'Spread strategy gate must not decide COUNTER fills'
@@ -110,7 +116,7 @@ if($counterUiStart -lt 0){throw 'COUNTER three-field UI branch missing'}
 $counterUiEnd = $web.IndexOf('</> : <>',$counterUiStart)
 if($counterUiEnd -lt 0){throw 'COUNTER three-field UI branch is not isolated'}
 $counterUi = $web.Substring($counterUiStart,$counterUiEnd-$counterUiStart)
-foreach($required in @('Lot ต่อไม้','จำนวนไม้','กำไรต่อไม้','counterPerPositionProfitMoney')) {
+foreach($required in @('Lot ต่อไม้','จำนวนไม้ต่อฝั่ง','กำไรต่อไม้','counterPerPositionProfitMoney')) {
   Need $counterUi $required "COUNTER visible field missing: $required"
 }
 foreach($forbidden in @('ทิศทาง','Stop Loss','Risk Controls','ATR','EMA','จำนวนหลอด')) {
@@ -118,6 +124,12 @@ foreach($forbidden in @('ทิศทาง','Stop Loss','Risk Controls','ATR','
 }
 Need $web 'controlMode!=="ZERO_GRID"&&controlMode!=="COUNTER"&&(' 'COUNTER must not render generic Risk Controls'
 Need $web 'กราฟขึ้น → SELL · กราฟลง → BUY' 'COUNTER summary direction contract missing'
+Need $web 'BUY/SELL แยก Slot' 'COUNTER UI must explain independent BUY/SELL capacity'
+Forbid $web 'counterBuyMaxPositions' 'COUNTER must keep one simple max-position setting, not add a BUY-specific user control'
+Forbid $web 'counterSellMaxPositions' 'COUNTER must keep one simple max-position setting, not add a SELL-specific user control'
+Forbid $web 'Profit Bank' 'COUNTER separate-slot change must not add cleanup accounting'
+Forbid $web 'Cleanup' 'COUNTER separate-slot change must not add cleanup behavior'
+Forbid $web 'Trend Guard' 'COUNTER separate-slot change must not add trend filtering'
 Forbid $web 'counterCandleCount' 'Retired candle-count setting must not exist'
 
-Write-Host 'COUNTER minimal inverse-flow / no-SL / isolation contract PASS'
+Write-Host 'COUNTER inverse-flow / separate-side-slots / no-SL isolation contract PASS'
