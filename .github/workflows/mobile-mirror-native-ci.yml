@@ -1,0 +1,104 @@
+name: Mobile Mirror Native CI
+
+on:
+  pull_request:
+    paths:
+      - "apps/mobile-mirror/**"
+      - "apps/web/app/mobile-mirror/**"
+      - "apps/web/components/MobileMirrorOverlay.tsx"
+      - "apps/api/src/mobile-mirror.controller.ts"
+      - "tests/mobile-mirror-isolation-contract.ps1"
+      - ".github/workflows/mobile-mirror-native-ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "apps/mobile-mirror/**"
+      - "apps/web/app/mobile-mirror/**"
+      - "apps/web/components/MobileMirrorOverlay.tsx"
+      - "apps/api/src/mobile-mirror.controller.ts"
+      - "tests/mobile-mirror-isolation-contract.ps1"
+      - ".github/workflows/mobile-mirror-native-ci.yml"
+  workflow_dispatch:
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: apps/mobile-mirror
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            apps/mobile-mirror
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install companion dependencies
+        run: npm install
+
+      - name: Typecheck companion
+        run: npm run typecheck
+
+      - name: Generate Android native project
+        run: npx expo prebuild --platform android --clean --no-install
+
+      - name: Verify Android MediaProjection configuration
+        run: |
+          grep -R "FOREGROUND_SERVICE_MEDIA_PROJECTION" android/app/src/main/AndroidManifest.xml
+          grep -R "MediaProjectionService" android/app/src/main/AndroidManifest.xml
+          grep -R "enableMediaProjectionService" android/app/src/main || true
+
+      - name: Build Android installable APK
+        run: |
+          chmod +x android/gradlew
+          ./android/gradlew -p android assembleDebug --no-daemon -PreactNativeArchitectures=arm64-v8a
+          test -f android/app/build/outputs/apk/debug/app-debug.apk
+
+  ios:
+    runs-on: macos-15
+    timeout-minutes: 35
+    env:
+      SCENOVA_IOS_TEAM_ID: ABCDE12345
+    defaults:
+      run:
+        working-directory: apps/mobile-mirror
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            apps/mobile-mirror
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install companion dependencies
+        run: npm install
+
+      - name: Typecheck companion
+        run: npm run typecheck
+
+      - name: Generate iOS native project with ReplayKit extension
+        run: npx expo prebuild --platform ios --clean
+
+      - name: Verify ReplayKit native configuration
+        run: |
+          grep -R "RTCAppGroupIdentifier" ios
+          grep -R "RTCScreenSharingExtension" ios
+          find ios -type f \( -name "SampleHandler.swift" -o -name "*Broadcast*" \) -print
+
+      - name: Build iOS simulator target without signing
+        run: |
+          WORKSPACE="$(find ios -maxdepth 1 -name '*.xcworkspace' -print -quit)"
+          test -n "$WORKSPACE"
+          SCHEME="$(basename "$WORKSPACE" .xcworkspace)"
+          xcodebuild             -workspace "$WORKSPACE"             -scheme "$SCHEME"             -configuration Debug             -sdk iphonesimulator             -destination 'generic/platform=iOS Simulator'             CODE_SIGNING_ALLOWED=NO             build
