@@ -301,6 +301,71 @@ export default function AdminPage() {
     }
   }
 
+  async function refreshCustomerSlotSymbol(user:any, slot:any) {
+    if (!slot?.id || !slot?.account_number) return;
+    const label=(slot.mode==="CLOUD"?"Cloud VPS":"Local MT5")+" Slot #"+Number(slot.slot_number||0);
+    const confirmed=await confirmPopup({
+      title:"โหลด Symbol ใหม่ · "+label,
+      tone:"warning",
+      message:
+        "ระบบจะรีโหลดเฉพาะ "+label+" แล้วดึง Market Watch / Symbol ใหม่จากบัญชี MT5 จริง\n\n"+
+        "ต้องหยุดบอทและไม่มี Position / Pending Order ก่อนดำเนินการ",
+      confirmLabel:"โหลด Symbol ใหม่"
+    });
+    if(!confirmed) return;
+
+    setCustomerAction("slot-symbol:"+slot.id);
+    try {
+      const result=await adminApi("/admin/slots/refresh-symbol", {
+        method:"POST",
+        body:JSON.stringify({ userId:user.id, slotId:slot.id })
+      });
+      setMessage(result?.message || "ส่งคำสั่งโหลด Symbol ใหม่แล้ว");
+      await search(undefined,true);
+    } catch(e:any) {
+      setMessage(e.message);
+    } finally {
+      setCustomerAction("");
+    }
+  }
+
+  async function disconnectCustomerSlotMt5(user:any, slot:any) {
+    if (!slot?.id || !slot?.account_number) return;
+    const label=(slot.mode==="CLOUD"?"Cloud VPS":"Local MT5")+" Slot #"+Number(slot.slot_number||0);
+    const confirmed=await confirmPopup({
+      title:"ตัดการเชื่อมต่อ MT5 · "+label,
+      tone:"warning",
+      message:
+        "ยืนยันตัด MT5 "+slot.account_number+" ออกจาก "+label+" หรือไม่?\n\n"+
+        "หลังตัดแล้ว Slot จะขึ้นว่า “รอเชื่อม MT5” และลูกค้าต้องเชื่อมบัญชีใหม่ ระบบจึงจะดึง Symbol ใหม่จากบัญชีจริง",
+      confirmLabel:"ตัดการเชื่อมต่อ"
+    });
+    if(!confirmed) return;
+
+    setCustomerAction("slot-disconnect:"+slot.id);
+    try {
+      let result:any=null;
+      for(let attempt=0; attempt<10; attempt++) {
+        result=await adminApi("/admin/slots/disconnect-mt5", {
+          method:"POST",
+          body:JSON.stringify({ userId:user.id, slotId:slot.id })
+        });
+        if(!result?.pendingCloudStop) break;
+        await new Promise(resolve=>setTimeout(resolve,1200));
+      }
+      setMessage(
+        result?.pendingCloudStop
+          ? "กำลังปิด MT5 ของ Slot นี้บน VPS กรุณารอสักครู่แล้วกดตัดการเชื่อมต่ออีกครั้ง"
+          : (result?.message || "ตัดการเชื่อมต่อ MT5 แล้ว")
+      );
+      await search(undefined,true);
+    } catch(e:any) {
+      setMessage(e.message);
+    } finally {
+      setCustomerAction("");
+    }
+  }
+
   async function createAccessGroup() {
     const name = newAccessGroupName.trim();
     if (name.length < 2) return setMessage("กรุณาใส่ชื่อกลุ่มอย่างน้อย 2 ตัวอักษร");
@@ -1367,16 +1432,38 @@ export default function AdminPage() {
                                     <b>Slot #{Number(slot.slot_number || 0)} · {slot.account_number?"MT5 "+slot.account_number:"รอเชื่อม MT5"}</b>
                                     <small>{slot.mode==="LOCAL"?(slot.mt5_online?"ONLINE":"OFFLINE"):(String(slot.actual_state||"OFFLINE").toUpperCase()==="RUNNING"?"ONLINE":"OFFLINE")}</small>
                                   </div>
-                                  {canDeleteCustomerSlot(selectedCustomer,slot) && (
-                                    <button
-                                      type="button"
-                                      className="btn danger owner-slot-delete"
-                                      disabled={Boolean(customerAction)}
-                                      onClick={()=>void deleteCustomerSlot(selectedCustomer,slot)}
-                                    >
-                                      {customerAction==="slot-delete:"+slot.id?"กำลังลบ...":"ลบ"}
-                                    </button>
-                                  )}
+                                  <div className="owner-slot-actions">
+                                    {slot.account_number && (
+                                      <>
+                                        <button
+                                          type="button"
+                                          className="btn owner-slot-refresh"
+                                          disabled={Boolean(customerAction)}
+                                          onClick={()=>void refreshCustomerSlotSymbol(selectedCustomer,slot)}
+                                        >
+                                          {customerAction==="slot-symbol:"+slot.id?"กำลังโหลด...":"โหลด Symbol ใหม่"}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="btn danger owner-slot-disconnect"
+                                          disabled={Boolean(customerAction)}
+                                          onClick={()=>void disconnectCustomerSlotMt5(selectedCustomer,slot)}
+                                        >
+                                          {customerAction==="slot-disconnect:"+slot.id?"กำลังตัด...":"ตัดการเชื่อมต่อ"}
+                                        </button>
+                                      </>
+                                    )}
+                                    {canDeleteCustomerSlot(selectedCustomer,slot) && (
+                                      <button
+                                        type="button"
+                                        className="btn danger owner-slot-delete"
+                                        disabled={Boolean(customerAction)}
+                                        onClick={()=>void deleteCustomerSlot(selectedCustomer,slot)}
+                                      >
+                                        {customerAction==="slot-delete:"+slot.id?"กำลังลบ...":"ลบ"}
+                                      </button>
+                                    )}
+                                  </div>
                                 </div>
                               ))}
                               {!customerSlots(selectedCustomer).length && <div className="owner-control-empty">ยังไม่มี Slot</div>}
