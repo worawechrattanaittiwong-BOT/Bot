@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.1.13"
-#define SCENOVA_EA_VERSION "1.1.13"
-#define SCENOVA_PRODUCT_VERSION "1.1.13"
+#property version   "1.1.14"
+#define SCENOVA_EA_VERSION "1.1.14"
+#define SCENOVA_PRODUCT_VERSION "1.1.14"
 #define SCENOVA_BUILD_ID "SOURCE"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_CONFIGURED_LOSS_ONLY_V1"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
@@ -3435,16 +3435,10 @@ bool ManageRacePerPositionHedgeBasket(double momentum)
       return true;
    }
 
-   // Preserve the existing pyramid rule: a new ticket is added only while the
-   // open Basket and the full cycle are positive. The only change here is that
-   // the new ticket may follow the current BUY or SELL signal independently.
-   if(floatingProfit<=0.0 || cycleProfit<=0.0)
-   {
-      g_raceState="ADD_WAIT_PROFIT";
-      g_executionStatus="RACE_ADD_WAIT_PROFIT";
-      return true;
-   }
-
+   // POSITION/Hedging is open-flow: current analysis chooses BUY or SELL and
+   // the existing ticket P/L never vetoes a new fill. Profit remains owned by
+   // the configured per-ticket target; Max Positions / explicit loss controls
+   // remain authoritative.
    g_raceState="FILLING";
    RefreshMarketContext(false);
    ProcessRaceFill(signalDirection);
@@ -3822,56 +3816,63 @@ bool RaceAntiChaseBlocked(int direction,string &reasonOut)
 
 int RaceAnalysisDirection(double momentum)
 {
-   // Explicit customer direction remains authoritative. AUTO RACE keeps the
-   // rolling 30-second pressure as its primary signal, then combines only
-   // RACE-local candle flow, structure, leg phase and rejection context.
+   // RACE analysis is directional, never a confidence/warmup gate. Rolling
+   // volume remains one input, but Flow/Structure/Rejection/momentum can choose
+   // a side immediately when the 30-second window is not ready or is balanced.
    if(g_entryMode == ENTRY_BUY_ONLY) return 1;
    if(g_entryMode == ENTRY_SELL_ONLY) return -1;
 
    int volumeDirection=RaceVolumeDirection();
-   if(volumeDirection==0)
-      return 0;
-
-   MqlTick tick;
-   if(!SymbolInfoTick(_Symbol,tick))
-      return volumeDirection;
-
-   double price=(tick.bid+tick.ask)*0.5;
-   double atrPrice=MathMax(
-      _Point*12.0,
-      AverageTrueRangePoints(PERIOD_M5,g_atrPeriod)*_Point
-   );
-
-   bool zoneBroken=false;
-   if(volumeDirection<0 &&
-      RaceZonePriorityActive(1,price,atrPrice,zoneBroken))
-   {
-      g_raceVNextDecisionScore=100.0;
-      g_raceVNextLegPhase="ZONE_PRIORITY";
-      return 1;
-   }
-
-   if(volumeDirection>0 &&
-      RaceZonePriorityActive(-1,price,atrPrice,zoneBroken))
-   {
-      g_raceVNextDecisionScore=-100.0;
-      g_raceVNextLegPhase="ZONE_PRIORITY";
-      return -1;
-   }
 
    g_raceVNextFlowScore=RaceV2FlowScore();
    int flowDirection=RaceV2SignedDirection(g_raceVNextFlowScore);
    g_raceVNextStructureDirection=RaceV2StructureDirection();
    g_raceVNextRejectionDirection=RaceV2RejectionDirection();
+
+   int anchorDirection=volumeDirection;
+   if(anchorDirection==0) anchorDirection=flowDirection;
+   if(anchorDirection==0) anchorDirection=g_raceVNextStructureDirection;
+   if(anchorDirection==0) anchorDirection=g_raceVNextRejectionDirection;
+   if(anchorDirection==0 && momentum>0.0) anchorDirection=1;
+   if(anchorDirection==0 && momentum<0.0) anchorDirection=-1;
+   if(anchorDirection==0) anchorDirection=RaceM5CandleDirection();
+
+   MqlTick tick;
+   if(SymbolInfoTick(_Symbol,tick))
+   {
+      double price=(tick.bid+tick.ask)*0.5;
+      double atrPrice=MathMax(
+         _Point*12.0,
+         AverageTrueRangePoints(PERIOD_M5,g_atrPeriod)*_Point
+      );
+
+      bool zoneBroken=false;
+      if(anchorDirection<0 &&
+         RaceZonePriorityActive(1,price,atrPrice,zoneBroken))
+      {
+         g_raceVNextDecisionScore=100.0;
+         g_raceVNextLegPhase="ZONE_PRIORITY";
+         return 1;
+      }
+
+      if(anchorDirection>0 &&
+         RaceZonePriorityActive(-1,price,atrPrice,zoneBroken))
+      {
+         g_raceVNextDecisionScore=-100.0;
+         g_raceVNextLegPhase="ZONE_PRIORITY";
+         return -1;
+      }
+   }
+
    g_raceVNextLegPhase=RaceV2LegPhase(
-      volumeDirection,
+      anchorDirection,
       flowDirection,
       g_raceVNextStructureDirection,
       g_raceVNextRejectionDirection
    );
 
    int decision=RaceV2DecisionDirection(
-      volumeDirection,
+      anchorDirection,
       flowDirection,
       g_raceVNextStructureDirection,
       g_raceVNextRejectionDirection,
@@ -3879,9 +3880,11 @@ int RaceAnalysisDirection(double momentum)
       g_raceVNextDecisionScore
    );
 
-   // No confidence gate is added to RACE. A tie falls back to the qualified
-   // 30-second side so Phase 1 changes direction quality, not trading cadence.
-   return decision==0 ? volumeDirection : decision;
+   if(decision!=0) return decision;
+   if(anchorDirection!=0) return anchorDirection;
+   if(momentum>0.0) return 1;
+   if(momentum<0.0) return -1;
+   return RaceM5CandleDirection();
 }
 
 double RaceMidProgressPoints(int direction)
@@ -4357,13 +4360,10 @@ bool ProcessRaceFill(int direction)
       }
    }
 
+   // News context remains visible to telemetry/analysis but never vetoes a
+   // RACE fill. Explicit operational/broker safeguards remain below.
    string raceNewsReason="NONE";
-   if(RaceNewsPauseActive(raceNewsReason))
-   {
-      g_raceState="NEWS_PAUSE";
-      g_executionStatus="RACE_NEWS_PAUSE";
-      return false;
-   }
+   bool raceNewsAdvisory=RaceNewsPauseActive(raceNewsReason);
 
    int filledUnits = RaceFilledUnits();
    if(filledUnits >= g_maxPositions)
@@ -4401,15 +4401,11 @@ bool ProcessRaceFill(int direction)
       return false;
    }
 
-   // RACE-only hard anti-chase gate. Apply to the first order and every add.
-   // It only delays a fill; it does not flip direction or alter any exit logic.
+   // Anti-chase still evaluates for telemetry, but it is advisory only. RACE
+   // execution must not wait for pullback/continuation once analysis has chosen
+   // the current side.
    string raceAntiChaseReason="NONE";
-   if(RaceAntiChaseBlocked(direction,raceAntiChaseReason))
-   {
-      g_raceState="ANTI_CHASE_WAIT";
-      g_executionStatus=raceAntiChaseReason;
-      return false;
-   }
+   bool raceAntiChaseAdvisory=RaceAntiChaseBlocked(direction,raceAntiChaseReason);
 
    // Never open RACE with a broker-minimum placeholder SL. If ATR is not ready,
    // wait for the next tick instead of creating a position that can be stopped
@@ -4436,7 +4432,10 @@ bool ProcessRaceFill(int direction)
 
    g_entryModel = "RACE_VOLUME_30S";
    g_entryTrigger = direction > 0 ? "RACE_VOLUME_BUY" : "RACE_VOLUME_SELL";
-   g_entryQuality = "RACE";
+   g_entryQuality =
+      raceNewsAdvisory ? "RACE_NEWS_ADVISORY" :
+      raceAntiChaseAdvisory ? "RACE_ANTI_CHASE_ADVISORY" :
+      "RACE";
    g_entryQualityScore = 0.0;
    g_raceDirection = direction;
    if(g_raceCycleStartedAt <= 0)
@@ -4474,61 +4473,22 @@ bool StartRaceCycle(double momentum)
    if(BasketPositionCount() > 0 || RescuePositionCount() > 0)
       return false;
 
-   // Phase 3: after the previous RACE Basket becomes flat, watch fresh ticks for
-   // four seconds before clearing the old direction and choosing the next side.
+   // Keep post-cycle/news observation for telemetry only. Neither can veto a
+   // fresh RACE entry anymore.
    RaceReentryDetectFlatTransition();
-
+   bool reentryObservationReady=RaceReentryObserveReady();
    string raceNewsReason="NONE";
-   if(RaceNewsPauseActive(raceNewsReason))
-   {
-      g_raceState="NEWS_PAUSE";
-      g_executionStatus="RACE_NEWS_PAUSE";
-      return false;
-   }
-
-   if(!RaceReentryObserveReady())
-      return false;
+   bool raceNewsAdvisory=RaceNewsPauseActive(raceNewsReason);
 
    ResetRaceRuntime();
 
-   // RACE warms up for 30 seconds and never lets one unresolved signal window
-   // wait beyond 60 seconds. A timeout skips the window and starts a fresh one;
-   // it never forces an entry just to meet the timing limit.
-   datetime now=TimeCurrent();
-   int signalElapsed=g_raceVolumeWarmupStartedAt>0
-      ? (int)(now-g_raceVolumeWarmupStartedAt)
-      : 0;
-
-   if(!RaceVolumeWindowReady())
-   {
-      if(g_raceVolumeWarmupStartedAt>0 &&
-         signalElapsed>=RACE_SIGNAL_MAX_WAIT_SECONDS)
-      {
-         RaceResetVolumeWindow(now);
-         g_executionStatus="RACE_SIGNAL_TIMEOUT_RESET";
-         return false;
-      }
-
-      g_executionStatus="RACE_VOLUME_WARMUP";
-      return false;
-   }
-
-   // Refresh Demand/Supply only at the actual decision point. The market
-   // context is second-cached, so this adds no new waiting timer.
+   // No 30-second warmup gate. The analyzer uses volume when qualified and
+   // falls back to live Flow/Structure/Rejection/momentum/candle direction.
    RefreshMarketContext(false);
-
    int direction=RaceAnalysisDirection(momentum);
    if(direction==0)
    {
-      if(g_raceVolumeWarmupStartedAt>0 &&
-         signalElapsed>=RACE_SIGNAL_MAX_WAIT_SECONDS)
-      {
-         RaceResetVolumeWindow(now);
-         g_executionStatus="RACE_SIGNAL_TIMEOUT_RESET";
-         return false;
-      }
-
-      g_executionStatus="RACE_VOLUME_BALANCED";
+      g_executionStatus="RACE_ANALYSIS_NO_DIRECTION";
       return false;
    }
 
@@ -4537,14 +4497,10 @@ bool StartRaceCycle(double momentum)
    g_burstTargetPositions = 0;
 
    bool started=ProcessRaceFill(direction);
-   if(!started &&
-      BasketPositionCount()==0 &&
-      g_raceVolumeWarmupStartedAt>0 &&
-      signalElapsed>=RACE_SIGNAL_MAX_WAIT_SECONDS)
-   {
-      RaceResetVolumeWindow(now);
-      g_executionStatus="RACE_SIGNAL_TIMEOUT_RESET";
-   }
+   if(!started && BasketPositionCount()==0)
+      g_executionStatus =
+         g_executionStatus=="" ? "RACE_FILL_RETRY" : g_executionStatus;
+
    return started;
 }
 
@@ -4567,9 +4523,10 @@ bool ManageRaceBasket(double momentum)
       return true;
    }
 
-   // RACE POSITION on a Hedging account may intentionally contain both BUY
-   // and SELL tickets. Route that case to the isolated ticket-level manager.
-   if(RacePerPositionDualDirectionEnabled() && BasketDirection()==0)
+   // RACE POSITION on a Hedging account is ticket-owned from the first fill.
+   // Do not wait until the Basket is already mixed before allowing a fresh
+   // opposite BUY/SELL signal to open its own independent ticket.
+   if(RacePerPositionDualDirectionEnabled())
       return ManageRacePerPositionHedgeBasket(momentum);
 
    // All other RACE modes retain the existing one-way Basket contract.
@@ -4759,13 +4716,6 @@ bool ManageRaceBasket(double momentum)
             g_executionStatus="RACE_WAIT_PER_POSITION_TARGET";
             return true;
          }
-         if(floatingProfit<=0.0 || cycleProfit<=0.0)
-         {
-            g_raceState="ADD_WAIT_PROFIT";
-            g_executionStatus="RACE_ADD_WAIT_PROFIT";
-            return true;
-         }
-
          g_raceState="FILLING";
          RefreshMarketContext(false);
          ProcessRaceFill(volumeDirection);
@@ -4797,16 +4747,8 @@ bool ManageRaceBasket(double momentum)
          return true;
       }
 
-      // Never add exposure while the RACE cycle is still losing. Both the
-      // currently-open Basket and the full cycle including realized deals must
-      // be positive before another pyramid fill is allowed.
-      if(floatingProfit<=0.0 || cycleProfit<=0.0)
-      {
-         g_raceState="ADD_WAIT_PROFIT";
-         g_executionStatus="RACE_ADD_WAIT_PROFIT";
-         return true;
-      }
-
+      // Existing floating/cycle P/L is not an entry gate. Analysis owns the
+      // side and Max Positions owns the requested fill count.
       g_raceState="FILLING";
       RefreshMarketContext(false);
       ProcessRaceFill(direction);
