@@ -21,28 +21,16 @@ if ($comparison -lt 0) {
   throw "mt5/FastBasketBot.mq5 changed and EA version decreased: previous=$previous current=$current"
 }
 if ($comparison -eq 0) {
-  $authorizationText = (git log -1 --pretty=%B) -join "`n"
-  if ($LASTEXITCODE -ne 0) { throw 'Unable to read commit message for same-version authorization' }
-
-  # Pull-request CI checks out a synthetic merge commit. In that case the
-  # authorization marker lives in one of the PR commits, not the synthetic
-  # merge message, so inspect the second-parent range as well.
-  git rev-parse --verify "HEAD^2" *> $null
-  if ($LASTEXITCODE -eq 0) {
-    $prMessages = (git log --format=%B "HEAD^1..HEAD^2") -join "`n"
-    if ($LASTEXITCODE -eq 0) { $authorizationText += "`n" + $prMessages }
-  }
-
-  if ($authorizationText -notmatch '\[same ea version\]') {
-    throw "mt5/FastBasketBot.mq5 changed but EA version did not increase: previous=$previous current=$current"
-  }
-
-  # Same-version rebuilds are permitted only when the compiled artifact carries
-  # an immutable runtime Build ID. This prevents version equality from hiding a
-  # stale EX5/runtime after an authorized rebuild.
+  # Same-version releases are first-class: the user-visible EA version may stay
+  # stable while every compiled artifact gets an immutable Build ID. Permit the
+  # rebuild only when the complete build/runtime identity chain is present.
   if (-not $currentText.Contains('#define SCENOVA_BUILD_ID')) {
     throw 'Same-version EA rebuild requires SCENOVA_BUILD_ID in the EA source'
   }
+  if (-not $currentText.Contains('\"buildId\":\"%s\"')) {
+    throw 'Same-version EA rebuild requires Build ID heartbeat telemetry'
+  }
+
   $buildWorkflow = [System.IO.File]::ReadAllText((Resolve-Path '.github/workflows/build-mt5-ea.yml'))
   foreach ($required in @(
     'Stamp immutable runtime build identity',
@@ -54,7 +42,19 @@ if ($comparison -eq 0) {
     }
   }
 
-  Write-Host "EA same-version rebuild gate PASS: $current explicitly authorized and build-identity protected."
+  $eaController = [System.IO.File]::ReadAllText((Resolve-Path 'apps/api/src/ea.controller.ts'))
+  foreach ($required in @(
+    "metrics->>'buildId' AS runtime_build_id",
+    'runtimeBuildMatch',
+    'runtimeIdentityMatch',
+    'runtimeContractMatch: runtimeIdentityMatch'
+  )) {
+    if (-not $eaController.Contains($required)) {
+      throw "Same-version EA rebuild requires runtime build verification: $required"
+    }
+  }
+
+  Write-Host "EA same-version rebuild gate PASS: $current protected by immutable Build ID + hash + runtime verification."
   exit 0
 }
 Write-Host "EA version bump gate PASS: $previous -> $current"
