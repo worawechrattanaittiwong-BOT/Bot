@@ -119,6 +119,9 @@ jobs:
       - name: MANUAL and per-mode daily risk isolation contract
         shell: pwsh
         run: ./tests/manual-daily-mode-isolation-contract.ps1
+      - name: COUNTER minimal inverse-flow isolation contract
+        shell: pwsh
+        run: ./tests/counter-mode-isolation-contract.ps1
       - name: RACE close-all profit contract
         shell: pwsh
         run: ./tests/race-close-all-profit-contract.ps1
