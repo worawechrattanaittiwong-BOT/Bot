@@ -129,6 +129,8 @@ export function latestEaRelease() {
   const configuredHash = String(process.env.SCENOVA_EA_SHA256 || "").trim().toLowerCase() || null;
   const manifestEaVersion = String(manifest.eaVersion || "").trim();
   const configuredEaVersion = String(process.env.SCENOVA_EA_VERSION || "").trim();
+  const manifestBuildId = String(manifest.buildId || manifest.sourceCommit || "").trim() || null;
+  const configuredBuildId = String(process.env.SCENOVA_EA_BUILD_ID || "").trim() || null;
 
   // Trust a release version only when it is bound to the EX5 actually served.
   // This prevents stale environment values or stale manifests from advertising
@@ -150,10 +152,16 @@ export function latestEaRelease() {
       ? configuredEaVersion
       : DEFAULT_EA_VERSION;
   const sha256 = actualHash || manifestHash || configuredHash || null;
+  const buildId = manifestBoundToArtifact
+    ? manifestBuildId
+    : configuredVersionIsSafeFallback
+      ? configuredBuildId
+      : null;
 
   return {
     eaVersion,
     sha256,
+    buildId,
     runtimeContract: String(manifest.runtimeContract || EA_RUNTIME_CONTRACT).trim() || EA_RUNTIME_CONTRACT,
     sourceCommit: String(manifest.sourceCommit || "").trim() || null,
     builtAt: String(manifest.builtAt || "").trim() || null,
