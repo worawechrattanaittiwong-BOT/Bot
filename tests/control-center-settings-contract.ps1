@@ -166,7 +166,7 @@ if($page.Contains('ใช้ Lot เท่ากันทุกระดับ')
 Need $page 'TRADING MODE GUIDE' 'Trading mode guide modal missing'
 Need $page 'Adaptive Directional · ไม่ใช่ Martingale' 'AUTO guide must disclose its non-Martingale strategy type'
 Need $page 'Momentum / Fast Entry · ไม่ใช่ Martingale' 'RACE guide must disclose its non-Martingale strategy type'
-Need $page 'Single Position + Trailing Stop · ไม่ใช่ Martingale' 'FLIP LOCK guide must disclose trailing and non-Martingale behavior'
+Need $page 'Single Position + Opposite Pending Stop · ไม่ใช่ Martingale' 'FLIP LOCK guide must disclose opposite pending-stop and non-Martingale behavior'
 Need $page 'Dual-Sided Pending Grid · Progressive Sizing' 'ZERO GRID guide must describe the dual-sided progressive grid professionally'
 Need $page 'Base Lot × Level · เพิ่ม Lot ตามระดับ' 'ZERO GRID guide must explain linear level sizing concisely'
 Need $page 'Net Basket Target · ปิดทั้งรอบเมื่อถึงเป้า' 'ZERO GRID guide must explain basket exit concisely'
