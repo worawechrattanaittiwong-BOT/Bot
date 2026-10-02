@@ -119,6 +119,7 @@ assert.match(adminPage, /\/admin\/slots\/refresh-symbol/);
 assert.match(adminPage, /\/admin\/slots\/disconnect-mt5/);
 assert.match(adminPage, /โหลด Symbol ใหม่/);
 assert.match(adminPage, /ตัดการเชื่อมต่อ/);
+assert.match(fs.readFileSync("apps/web/app/dashboard/page.tsx","utf8"), /ตัดการเชื่อมต่อ MT5 เดิมแล้ว · พร้อมเชื่อมบัญชีใหม่/);
 assert.match(adminApi, /Local MT5 ใช้ได้ 1 Slot/);
 assert.doesNotMatch(adminPage, /ค้นหาบัญชี → เลือกลูกค้า/);
 assert.doesNotMatch(adminPage, /ใช้สำหรับสิทธิ์ทดลองชั่วคราวเท่านั้น/);

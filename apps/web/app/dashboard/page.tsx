@@ -1336,7 +1336,8 @@ export default function DashboardPage() {
         failed = true;
         message = "MT5 เปิดแล้วแต่ยังเชื่อม Broker ไม่สำเร็จ · ตรวจ Login, Trading Password และชื่อ Server ให้ตรงกับบัญชี";
       } else if (op.kind === "MT5_SWITCH" && !data?.account) {
-        message = "MT5 เดิมปิดแล้ว · กรุณาเชื่อมบัญชีใหม่เพื่อทำขั้นตอนต่อ";
+        complete = true;
+        message = "ตัดการเชื่อมต่อ MT5 เดิมแล้ว · พร้อมเชื่อมบัญชีใหม่";
       } else if (accountMatches && runnerReady && mt5Ready) {
         complete = true;
 
