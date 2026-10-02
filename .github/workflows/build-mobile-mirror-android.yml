@@ -1,0 +1,112 @@
+name: Build SCENOVA Mirror Android
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/mobile-mirror/**"
+      - ".github/workflows/build-mobile-mirror-android.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: scenova-mobile-mirror-android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      EXPO_PUBLIC_API_URL: https://snvea-bot.online/backend/api
+      CI: "1"
+    defaults:
+      run:
+        working-directory: apps/mobile-mirror
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Generate Android native project
+        run: npx expo prebuild --platform android --clean --no-install
+
+      - name: Build installable Android APK
+        run: |
+          chmod +x android/gradlew
+          ./android/gradlew -p android assembleDebug --no-daemon -PreactNativeArchitectures=arm64-v8a
+          cp android/app/build/outputs/apk/debug/app-debug.apk ./SCENOVA-Mirror.apk
+          test -s ./SCENOVA-Mirror.apk
+
+      - name: Create Android manifest
+        run: |
+          node - <<'NODE'
+          const fs = require("fs");
+          const { execFileSync } = require("child_process");
+          const sha256 = execFileSync("sha256sum", ["SCENOVA-Mirror.apk"], { encoding: "utf8" })
+            .trim().split(/\s+/)[0];
+          const manifest = {
+            platform: "android",
+            version: "1.0.0",
+            url: "https://snvea-bot.online/downloads/SCENOVA-Mirror.apk",
+            sha256,
+            builtAt: new Date().toISOString()
+          };
+          fs.writeFileSync("SCENOVA-Mirror.json", JSON.stringify(manifest, null, 2) + "\n");
+          NODE
+
+      - name: Upload Android artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SCENOVA-Mirror-Android
+          path: |
+            apps/mobile-mirror/SCENOVA-Mirror.apk
+            apps/mobile-mirror/SCENOVA-Mirror.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish Android APK to website
+        if: github.ref == 'refs/heads/main'
+        working-directory: ${{ github.workspace }}
+        run: |
+          mkdir -p apps/web/public/downloads
+          cp apps/mobile-mirror/SCENOVA-Mirror.apk apps/web/public/downloads/SCENOVA-Mirror.apk
+          cp apps/mobile-mirror/SCENOVA-Mirror.json apps/web/public/downloads/SCENOVA-Mirror.json
+
+          git config user.name "scenova-build"
+          git config user.email "actions@users.noreply.github.com"
+          git add apps/web/public/downloads/SCENOVA-Mirror.apk apps/web/public/downloads/SCENOVA-Mirror.json
+
+          if git diff --cached --quiet; then
+            echo "Published Mirror APK is already current."
+            exit 0
+          fi
+
+          git commit -m "build: publish SCENOVA Mirror Android [skip mirror build]"
+
+          for attempt in 1 2 3 4 5 6; do
+            git fetch origin main
+            git rebase origin/main
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+            sleep 2
+          done
+
+          echo "Failed to publish SCENOVA Mirror Android"
+          exit 1
