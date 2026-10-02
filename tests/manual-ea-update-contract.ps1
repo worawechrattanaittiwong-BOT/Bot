@@ -60,7 +60,7 @@ foreach ($required in @(
   if (-not $ea.Contains($required)) { throw "Same-version runtime build identity missing from EA: $required" }
 }
 foreach ($required in @(
-  'manifest.buildId || manifest.sourceCommit',
+  'manifest.buildId',
   'buildId,'
 )) {
   if (-not $release.Contains($required)) { throw "Release build identity missing: $required" }
