@@ -6542,7 +6542,7 @@ function BotSettingsModal(props:any) {
   const directionHelp = controlMode === "FLIP_LOCK"
     ? (entryMode === "AUTO_MOMENTUM"
         ? "ไม้แรกอ่านทิศจากแท่ง M1 · หลัง SL ถูกชน ระบบกลับฝั่งทันที BUY→SELL / SELL→BUY"
-        : "กำหนดทิศทางของไม้แรก · หลังจากไม้ปิด ระบบอ่านแท่ง M1 ใหม่ก่อนเข้า Market รอบถัดไป")
+        : "กำหนดทิศทางของไม้แรก · ถ้าชน SL ระบบกลับฝั่งทันที BUY↔SELL · ถ้าปิดด้วยเหตุอื่นจึงค่อยอ่าน M1 ใหม่")
     : (entryMode === "AUTO_MOMENTUM"
         ? "M1 / M5 / M15 / M30 / H1 วิเคราะห์ทิศทางอัตโนมัติ"
         : "บังคับทิศตามที่เลือกจนกว่าจะเปลี่ยนค่า");
