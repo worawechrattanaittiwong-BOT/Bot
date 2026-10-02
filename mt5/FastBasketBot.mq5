@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.1.14"
-#define SCENOVA_EA_VERSION "1.1.14"
-#define SCENOVA_PRODUCT_VERSION "1.1.14"
+#property version   "1.1.15"
+#define SCENOVA_EA_VERSION "1.1.15"
+#define SCENOVA_PRODUCT_VERSION "1.1.15"
 #define SCENOVA_BUILD_ID "SOURCE"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_CONFIGURED_LOSS_ONLY_V1"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
@@ -182,6 +182,9 @@ input double          InpRacePerPositionProfitMoney = 0.50;
 #define AUTO_V21_EXIT_LAST_FILL_GRACE_SECONDS 15
 #define AUTO_V21_EXIT_CONFIRM_SECONDS 10
 #define AUTO_V21_EXIT_SEVERE_CONFIRM_SECONDS 6
+#define RACE_LIVE_FLOW_WINDOW_MS 2000
+#define RACE_LIVE_FLOW_SAMPLE_MS 100
+#define RACE_LIVE_FLOW_HISTORY 48
 #define RACE_VOLUME_WINDOW_SECONDS 30
 #define RACE_SIGNAL_MAX_WAIT_SECONDS 60
 #define RACE_VOLUME_MIN_DOMINANCE 0.55
@@ -417,6 +420,13 @@ int      g_raceVolumeBucketSamples[RACE_VOLUME_HISTORY_SECONDS];
 datetime g_raceVolumeWarmupStartedAt = 0;
 datetime g_raceVolumeLastSampleAt = 0;
 double   g_raceVolumeLastMid = 0.0;
+// RACE entry direction is intentionally simple: compare live mid-price now
+// versus roughly two seconds ago. The older VNext/volume analyzers remain
+// available for telemetry/exit management but cannot choose the entry side.
+long     g_raceLiveFlowTimeMs[RACE_LIVE_FLOW_HISTORY];
+double   g_raceLiveFlowPrice[RACE_LIVE_FLOW_HISTORY];
+int      g_raceLiveFlowCount = 0;
+long     g_raceLiveFlowLastSampleMs = 0;
 // RACE VNext Phase 1 telemetry. These fields are isolated to RACE and never
 // participate in AUTO/MANUAL/FLIP/ZERO execution.
 double   g_raceVNextFlowScore = 0.0;
@@ -3428,10 +3438,8 @@ bool ManageRacePerPositionHedgeBasket(double momentum)
    int signalDirection=RaceAnalysisDirection(momentum);
    if(signalDirection==0)
    {
-      g_raceState="VOLUME_WAIT";
-      g_executionStatus=RaceVolumeWindowReady()
-         ? "RACE_VOLUME_BALANCED"
-         : "RACE_VOLUME_WARMUP";
+      g_raceState="PRICE_FLOW_WAIT";
+      g_executionStatus="RACE_PRICE_FLOW_WAIT";
       return true;
    }
 
@@ -3458,6 +3466,93 @@ void RaceResetVolumeWindow(datetime now)
    g_raceVolumeWarmupStartedAt=now;
    g_raceVolumeLastSampleAt=0;
    g_raceVolumeLastMid=0.0;
+}
+
+void RaceResetLivePriceFlow()
+{
+   g_raceLiveFlowCount=0;
+   g_raceLiveFlowLastSampleMs=0;
+}
+
+void RaceSampleLivePriceFlow()
+{
+   if(!RaceModeEnabled())
+   {
+      if(g_raceLiveFlowCount>0)
+         RaceResetLivePriceFlow();
+      return;
+   }
+
+   MqlTick tick;
+   if(!SymbolInfoTick(_Symbol,tick))
+      return;
+
+   long nowMs=tick.time_msc>0
+      ? tick.time_msc
+      : (long)TimeCurrent()*1000;
+   if(nowMs<=0)
+      return;
+
+   if(g_raceLiveFlowLastSampleMs>0 &&
+      nowMs-g_raceLiveFlowLastSampleMs>5000)
+      RaceResetLivePriceFlow();
+
+   if(g_raceLiveFlowLastSampleMs>0 &&
+      nowMs-g_raceLiveFlowLastSampleMs<RACE_LIVE_FLOW_SAMPLE_MS)
+      return;
+
+   double mid=(tick.bid+tick.ask)*0.5;
+   if(mid<=0.0)
+      return;
+
+   if(g_raceLiveFlowCount<RACE_LIVE_FLOW_HISTORY)
+   {
+      g_raceLiveFlowTimeMs[g_raceLiveFlowCount]=nowMs;
+      g_raceLiveFlowPrice[g_raceLiveFlowCount]=mid;
+      g_raceLiveFlowCount++;
+   }
+   else
+   {
+      for(int i=1;i<RACE_LIVE_FLOW_HISTORY;i++)
+      {
+         g_raceLiveFlowTimeMs[i-1]=g_raceLiveFlowTimeMs[i];
+         g_raceLiveFlowPrice[i-1]=g_raceLiveFlowPrice[i];
+      }
+      g_raceLiveFlowTimeMs[RACE_LIVE_FLOW_HISTORY-1]=nowMs;
+      g_raceLiveFlowPrice[RACE_LIVE_FLOW_HISTORY-1]=mid;
+   }
+
+   g_raceLiveFlowLastSampleMs=nowMs;
+}
+
+int RaceLivePriceDirection(double &movePointsOut)
+{
+   movePointsOut=0.0;
+   if(g_raceLiveFlowCount<2)
+      return 0;
+
+   int latest=g_raceLiveFlowCount-1;
+   long nowMs=g_raceLiveFlowTimeMs[latest];
+   int reference=-1;
+
+   for(int i=latest-1;i>=0;i--)
+   {
+      if(nowMs-g_raceLiveFlowTimeMs[i]>=RACE_LIVE_FLOW_WINDOW_MS)
+      {
+         reference=i;
+         break;
+      }
+   }
+
+   if(reference<0)
+      return 0;
+
+   movePointsOut=
+      (g_raceLiveFlowPrice[latest]-g_raceLiveFlowPrice[reference])/_Point;
+
+   if(movePointsOut>0.0) return 1;
+   if(movePointsOut<0.0) return -1;
+   return 0;
 }
 
 void RaceSampleVolumePressure()
@@ -3816,75 +3911,22 @@ bool RaceAntiChaseBlocked(int direction,string &reasonOut)
 
 int RaceAnalysisDirection(double momentum)
 {
-   // RACE analysis is directional, never a confidence/warmup gate. Rolling
-   // volume remains one input, but Flow/Structure/Rejection/momentum can choose
-   // a side immediately when the 30-second window is not ready or is balanced.
    if(g_entryMode == ENTRY_BUY_ONLY) return 1;
    if(g_entryMode == ENTRY_SELL_ONLY) return -1;
 
-   int volumeDirection=RaceVolumeDirection();
+   double liveMovePoints=0.0;
+   int direction=RaceLivePriceDirection(liveMovePoints);
 
-   g_raceVNextFlowScore=RaceV2FlowScore();
-   int flowDirection=RaceV2SignedDirection(g_raceVNextFlowScore);
-   g_raceVNextStructureDirection=RaceV2StructureDirection();
-   g_raceVNextRejectionDirection=RaceV2RejectionDirection();
+   g_raceVNextFlowScore=liveMovePoints;
+   g_raceVNextStructureDirection=0;
+   g_raceVNextRejectionDirection=0;
+   g_raceVNextDecisionScore=liveMovePoints;
+   g_raceVNextLegPhase=
+      direction>0 ? "LIVE_PRICE_UP" :
+      direction<0 ? "LIVE_PRICE_DOWN" :
+      "LIVE_PRICE_FLAT";
 
-   int anchorDirection=volumeDirection;
-   if(anchorDirection==0) anchorDirection=flowDirection;
-   if(anchorDirection==0) anchorDirection=g_raceVNextStructureDirection;
-   if(anchorDirection==0) anchorDirection=g_raceVNextRejectionDirection;
-   if(anchorDirection==0 && momentum>0.0) anchorDirection=1;
-   if(anchorDirection==0 && momentum<0.0) anchorDirection=-1;
-   if(anchorDirection==0) anchorDirection=RaceM5CandleDirection();
-
-   MqlTick tick;
-   if(SymbolInfoTick(_Symbol,tick))
-   {
-      double price=(tick.bid+tick.ask)*0.5;
-      double atrPrice=MathMax(
-         _Point*12.0,
-         AverageTrueRangePoints(PERIOD_M5,g_atrPeriod)*_Point
-      );
-
-      bool zoneBroken=false;
-      if(anchorDirection<0 &&
-         RaceZonePriorityActive(1,price,atrPrice,zoneBroken))
-      {
-         g_raceVNextDecisionScore=100.0;
-         g_raceVNextLegPhase="ZONE_PRIORITY";
-         return 1;
-      }
-
-      if(anchorDirection>0 &&
-         RaceZonePriorityActive(-1,price,atrPrice,zoneBroken))
-      {
-         g_raceVNextDecisionScore=-100.0;
-         g_raceVNextLegPhase="ZONE_PRIORITY";
-         return -1;
-      }
-   }
-
-   g_raceVNextLegPhase=RaceV2LegPhase(
-      anchorDirection,
-      flowDirection,
-      g_raceVNextStructureDirection,
-      g_raceVNextRejectionDirection
-   );
-
-   int decision=RaceV2DecisionDirection(
-      anchorDirection,
-      flowDirection,
-      g_raceVNextStructureDirection,
-      g_raceVNextRejectionDirection,
-      g_raceVNextLegPhase,
-      g_raceVNextDecisionScore
-   );
-
-   if(decision!=0) return decision;
-   if(anchorDirection!=0) return anchorDirection;
-   if(momentum>0.0) return 1;
-   if(momentum<0.0) return -1;
-   return RaceM5CandleDirection();
+   return direction;
 }
 
 double RaceMidProgressPoints(int direction)
@@ -4389,10 +4431,11 @@ bool ProcessRaceFill(int direction)
       g_executionStatus = "RACE_ORDER_RATE_LIMIT";
       return false;
    }
-   if(!AdaptiveSpreadAllowed())
+   // Only the explicit EXTREME spread safety state may veto RACE. Adaptive
+   // spread quality is not an entry-analysis gate in this fast mode.
+   if(g_spreadStatus == "EXTREME")
    {
-      g_executionStatus = g_spreadStatus == "EXTREME"
-         ? "RACE_EXTREME_SPREAD" : "RACE_SPREAD_WAIT";
+      g_executionStatus = "RACE_EXTREME_SPREAD";
       return false;
    }
    if(!OpenTradingAllowedForDirection(direction))
@@ -4430,8 +4473,8 @@ bool ProcessRaceFill(int direction)
       projectedLossLimit > 0.0 &&
       g_raceExposureNoiseMoney > projectedLossLimit * 0.80;
 
-   g_entryModel = "RACE_VOLUME_30S";
-   g_entryTrigger = direction > 0 ? "RACE_VOLUME_BUY" : "RACE_VOLUME_SELL";
+   g_entryModel = "RACE_LIVE_PRICE_2S";
+   g_entryTrigger = direction > 0 ? "RACE_PRICE_FLOW_BUY" : "RACE_PRICE_FLOW_SELL";
    g_entryQuality =
       raceNewsAdvisory ? "RACE_NEWS_ADVISORY" :
       raceAntiChaseAdvisory ? "RACE_ANTI_CHASE_ADVISORY" :
@@ -4482,13 +4525,11 @@ bool StartRaceCycle(double momentum)
 
    ResetRaceRuntime();
 
-   // No 30-second warmup gate. The analyzer uses volume when qualified and
-   // falls back to live Flow/Structure/Rejection/momentum/candle direction.
-   RefreshMarketContext(false);
+   // Entry side is only the net live-price move over roughly two seconds.
    int direction=RaceAnalysisDirection(momentum);
    if(direction==0)
    {
-      g_executionStatus="RACE_ANALYSIS_NO_DIRECTION";
+      g_executionStatus="RACE_PRICE_FLOW_WAIT";
       return false;
    }
 
@@ -4740,10 +4781,8 @@ bool ManageRaceBasket(double momentum)
    {
       if(volumeDirection==0)
       {
-         g_raceState="VOLUME_WAIT";
-         g_executionStatus=RaceVolumeWindowReady()
-            ? "RACE_VOLUME_BALANCED"
-            : "RACE_VOLUME_WARMUP";
+         g_raceState="PRICE_FLOW_WAIT";
+         g_executionStatus="RACE_PRICE_FLOW_WAIT";
          return true;
       }
 
@@ -4923,6 +4962,7 @@ void OnTick()
    g_lastMarketTickMs=GetTickCount64();
    SampleSpread();
    RaceSampleVolumePressure();
+   RaceSampleLivePriceFlow();
 
    // Profit target owns the tick before any non-close analysis.
    if(FastProfitClosePriority())
