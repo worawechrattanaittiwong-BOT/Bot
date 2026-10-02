@@ -162,19 +162,15 @@ Need $fill 'RaceV1UpdateExposureTelemetry(direction,g_adaptiveLot)' 'RACE must r
 Need $manage 'RaceV1UpdateExposureTelemetry(direction,0.0)' 'RACE must refresh live Basket exposure before loss classification'
 Need $ea '#include "include\\RaceExposureV1.mqh"' 'RACE Exposure V1 module missing'
 Need $ea '#include "include\\RaceLossV2.mqh"' 'RACE Loss V2 module missing'
-Need $ea '#include "include\\RaceReentryV1.mqh"' 'RACE Re-entry V1 module missing'
-Need $start 'RaceReentryDetectFlatTransition();' 'RACE must detect the previous Basket flat transition before starting a new cycle'
-Need $start 'RaceReentryObserveReady();' 'RACE must keep re-entry observation available without making it a gate'
-Need $fill 'RaceReentryMarkExposure();' 'RACE must remember accepted exposure for the next flat transition'
-Need $raceReentryV1 '#define RACE_REENTRY_PROFIT_OBSERVE_SECONDS 6' 'RACE profitable-cycle re-entry observation must stay fast'
-Need $raceReentryV1 '#define RACE_REENTRY_LOSS_OBSERVE_SECONDS 20' 'RACE losing-cycle re-entry must enforce a longer observation period'
-Need $raceReentryV1 'previousCycleWasLoss' 'RACE re-entry must distinguish losing cycles from profitable cycles'
-Need $raceReentryV1 'RaceResetVolumeWindow(now);' 'RACE losing-cycle re-entry must discard stale pressure and rebuild fresh 30-second flow'
-Need $raceReentryV1 'RACE_REENTRY_AFTER_LOSS' 'RACE losing-cycle re-entry state must be observable'
-Need $raceReentryV1 'RACE_REENTRY_AFTER_PROFIT' 'RACE profitable-cycle re-entry state must be observable'
-Need $manage 'g_raceLastObservedCycleProfit=cycleProfit;' 'RACE must preserve the last open-cycle P/L for post-flat re-entry classification'
-Need $ea '#include "include\\RaceNewsV1.mqh"' 'RACE News V1 module missing'
-Need $start 'RaceNewsPauseActive(raceNewsReason)' 'RACE must check high-impact news before a new cycle'
+Need $ea '#include "include\\RaceReentryV1.mqh"' 'RACE Re-entry V1 compatibility module missing'
+Need $fill 'RaceReentryMarkExposure();' 'RACE must still mark accepted exposure for telemetry/recovery accounting'
+Need $raceReentryV1 '#define RACE_REENTRY_PROFIT_OBSERVE_SECONDS 6' 'RACE legacy re-entry telemetry contract must remain readable'
+Need $raceReentryV1 '#define RACE_REENTRY_LOSS_OBSERVE_SECONDS 20' 'RACE legacy re-entry telemetry contract must remain readable'
+Need $manage 'g_raceLastObservedCycleProfit=cycleProfit;' 'RACE must preserve the last open-cycle P/L telemetry'
+Need $ea '#include "include\\RaceNewsV1.mqh"' 'RACE News V1 compatibility module missing'
+if($start.Contains('RaceNewsPauseActive(') -or $start.Contains('RaceReentryObserveReady(') -or $start.Contains('RaceReentryDetectFlatTransition(')){
+  throw 'RACE price-only entry must not run news or re-entry analyzers'
+}
 if($fill.Contains('RaceNewsPauseActive(')){throw 'RACE fill path must not run news analysis'}
 if($fill.Contains('RaceAntiChaseBlocked(')){throw 'RACE fill path must not run anti-chase analysis'}
 Need $fill 'g_entryQuality = "RACE_LIVE_PRICE";' 'RACE entry quality must identify the price-only path'
