@@ -2,10 +2,10 @@
 set -euo pipefail
 
 REPO_DIR="${REPO_DIR:-/opt/Bot}"
-REPO_FULL_NAME="${REPO_FULL_NAME:-SCENOVA-SNV/Bot}"
+REPO_FULL_NAME="${REPO_FULL_NAME:-worawechrattanaitthiwong-creator/Bot}"
 case "$REPO_FULL_NAME" in
-  SCENOVA-CPU/Bot|scenova-lang/Bot|scenova-sketch/Bot|scenava-sys/Bot|SCENOVA-EA/Bot|SCENOVA-AI/Bot)
-    REPO_FULL_NAME="SCENOVA-SNV/Bot"
+  SCENOVA-SNV/Bot|SCENOVA-CPU/Bot|scenova-lang/Bot|scenova-sketch/Bot|scenava-sys/Bot|SCENOVA-EA/Bot|SCENOVA-AI/Bot)
+    REPO_FULL_NAME="worawechrattanaitthiwong-creator/Bot"
     ;;
 esac
 LOCK_FILE="${SCENOVA_DEPLOY_LOCK_FILE:-/run/lock/scenova-auto-deploy.lock}"
@@ -29,23 +29,23 @@ git config --global --add safe.directory "$REPO_DIR" >/dev/null 2>&1 || true
 # Preserve the existing transport so VPS credentials/deploy keys keep working.
 ORIGIN_URL="$(git remote get-url origin 2>/dev/null || true)"
 case "$ORIGIN_URL" in
-  https://github.com/SCENOVA-SNV/Bot|https://github.com/SCENOVA-SNV/Bot.git|git@github.com:SCENOVA-SNV/Bot.git|ssh://git@github.com/SCENOVA-SNV/Bot.git)
+  https://github.com/worawechrattanaitthiwong-creator/Bot|https://github.com/worawechrattanaitthiwong-creator/Bot.git|git@github.com:worawechrattanaitthiwong-creator/Bot.git|ssh://git@github.com/worawechrattanaitthiwong-creator/Bot.git)
     ;;
-  https://github.com/SCENOVA-CPU/Bot|https://github.com/SCENOVA-CPU/Bot.git|https://github.com/scenova-lang/Bot|https://github.com/scenova-lang/Bot.git|https://github.com/scenova-sketch/Bot|https://github.com/scenova-sketch/Bot.git|https://github.com/scenava-sys/Bot|https://github.com/scenava-sys/Bot.git|https://github.com/SCENOVA-EA/Bot|https://github.com/SCENOVA-EA/Bot.git|https://github.com/SCENOVA-AI/Bot|https://github.com/SCENOVA-AI/Bot.git)
-    echo "[SCENOVA] migrating origin to https://github.com/SCENOVA-SNV/Bot.git"
-    git remote set-url origin "https://github.com/SCENOVA-SNV/Bot.git"
+  https://github.com/SCENOVA-SNV/Bot|https://github.com/SCENOVA-SNV/Bot.git|https://github.com/SCENOVA-CPU/Bot|https://github.com/SCENOVA-CPU/Bot.git|https://github.com/scenova-lang/Bot|https://github.com/scenova-lang/Bot.git|https://github.com/scenova-sketch/Bot|https://github.com/scenova-sketch/Bot.git|https://github.com/scenava-sys/Bot|https://github.com/scenava-sys/Bot.git|https://github.com/SCENOVA-EA/Bot|https://github.com/SCENOVA-EA/Bot.git|https://github.com/SCENOVA-AI/Bot|https://github.com/SCENOVA-AI/Bot.git)
+    echo "[SCENOVA] migrating origin to https://github.com/worawechrattanaitthiwong-creator/Bot.git"
+    git remote set-url origin "https://github.com/worawechrattanaitthiwong-creator/Bot.git"
     ;;
-  git@github.com:SCENOVA-CPU/Bot.git|git@github.com:scenova-lang/Bot.git|git@github.com:scenova-sketch/Bot.git|git@github.com:scenava-sys/Bot.git|git@github.com:SCENOVA-EA/Bot.git|git@github.com:SCENOVA-AI/Bot.git)
-    echo "[SCENOVA] migrating origin to git@github.com:SCENOVA-SNV/Bot.git"
-    git remote set-url origin "git@github.com:SCENOVA-SNV/Bot.git"
+  git@github.com:SCENOVA-SNV/Bot.git|git@github.com:SCENOVA-CPU/Bot.git|git@github.com:scenova-lang/Bot.git|git@github.com:scenova-sketch/Bot.git|git@github.com:scenava-sys/Bot.git|git@github.com:SCENOVA-EA/Bot.git|git@github.com:SCENOVA-AI/Bot.git)
+    echo "[SCENOVA] migrating origin to git@github.com:worawechrattanaitthiwong-creator/Bot.git"
+    git remote set-url origin "git@github.com:worawechrattanaitthiwong-creator/Bot.git"
     ;;
-  ssh://git@github.com/SCENOVA-CPU/Bot.git|ssh://git@github.com/scenova-lang/Bot.git|ssh://git@github.com/scenova-sketch/Bot.git|ssh://git@github.com:scenava-sys/Bot.git|ssh://git@github.com/SCENOVA-EA/Bot.git|ssh://git@github.com/SCENOVA-AI/Bot.git)
-    echo "[SCENOVA] migrating origin to ssh://git@github.com/SCENOVA-SNV/Bot.git"
-    git remote set-url origin "ssh://git@github.com/SCENOVA-SNV/Bot.git"
+  ssh://git@github.com/SCENOVA-SNV/Bot.git|ssh://git@github.com/SCENOVA-CPU/Bot.git|ssh://git@github.com/scenova-lang/Bot.git|ssh://git@github.com/scenova-sketch/Bot.git|ssh://git@github.com:scenava-sys/Bot.git|ssh://git@github.com/SCENOVA-EA/Bot.git|ssh://git@github.com/SCENOVA-AI/Bot.git)
+    echo "[SCENOVA] migrating origin to ssh://git@github.com/worawechrattanaitthiwong-creator/Bot.git"
+    git remote set-url origin "ssh://git@github.com/worawechrattanaitthiwong-creator/Bot.git"
     ;;
   *)
     echo "[SCENOVA] unexpected origin: ${ORIGIN_URL:-missing}"
-    echo "[SCENOVA] refusing to deploy from a repository other than SCENOVA-SNV/Bot"
+    echo "[SCENOVA] refusing to deploy from a repository other than worawechrattanaitthiwong-creator/Bot"
     exit 1
     ;;
 esac
