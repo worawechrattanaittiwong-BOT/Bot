@@ -120,7 +120,7 @@ Need $css 'border-bottom:0!important;' 'Internal settings section dividers must 
 
 
 Need $page 'alwaysShowInput' 'Always-visible optional setting controls missing'
-Need $page 'รูปแบบกำไร</span>' 'Aligned Basket/per-position selector missing'
+Need $page 'settingHelpLabel("profit-kind","รูปแบบกำไร"' 'Aligned Basket/per-position selector with tap help missing'
 Need $page 'cc-bot-v2-choice-inline' 'Aligned MANUAL profit selector missing'
 if($page.Contains('revealedOptional')) { throw 'Legacy global optional reveal state must stay removed' }
 Need $page 'cc-bot-manual-risk-add' 'MANUAL must provide a single optional-risk add control'
@@ -207,6 +207,15 @@ Need $css 'height:var(--desktop-form-control-h)!important;' 'Desktop risk amount
 if($css.Contains('Give the risk controls real vertical breathing room')) { throw 'Obsolete 44px / 6px desktop risk-row owner must not return' }
 if($css.Contains('Risk money box breathing room only')) { throw 'Obsolete risk-field margin shim must not return' }
 if($css.Contains('grid-auto-rows:52px!important;')) { throw 'Old 52px desktop risk-row owner must not return; risk rows now follow the MANUAL profit-target rhythm' }
+Need $page 'cc-bot-setting-help-label' 'Tap-to-explain Bot Settings labels missing'
+Need $page 'ขาดทุนถึงยอดนี้ EA จะปิดออเดอร์ของรอบทันที' 'Basket-loss plain-language help missing'
+Need $page 'ขาดทุนรวมถึงยอดนี้ บอทจะหยุดเทรดทั้งวัน' 'Daily-loss plain-language help missing'
+Need $page 'กำไรรวมถึงยอดนี้ บอทจะหยุดเพื่อเก็บกำไร' 'Daily-profit plain-language help missing'
+Need $page 'EA จะไม่เปิดออเดอร์เกินจำนวนนี้' 'Max-position plain-language help missing'
+Need $page 'กำหนดขนาด Lot ของแต่ละออเดอร์' 'Lot plain-language help missing'
+Need $css 'Control Center V60 · one-line tap help for Bot Settings' 'One-line Bot Settings help styling missing'
+Need $css '.cc-bot-setting-help-popover' 'Tap-help popover styling missing'
+
 Need $css 'Control Center V59 · mobile authoritative alignment' 'Current mobile authoritative alignment layer missing'
 Need $css '--mobile-form-control-width:66.666%' 'All mobile modes must share the same right-edge control width'
 Need $css '--mobile-form-row-h:52px' 'Standard mobile settings rows must share one vertical rhythm'

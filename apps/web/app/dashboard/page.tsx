@@ -6244,6 +6244,31 @@ function BotSettingsModal(props:any) {
   const [revealedManualRisk,setRevealedManualRisk] = useState<Record<string,boolean>>({});
   const [modeGuideOpen,setModeGuideOpen] = useState(false);
   const [modeGuideMode,setModeGuideMode] = useState("AUTO");
+  const [settingHelpKey,setSettingHelpKey] = useState("");
+
+  const settingHelpLabel = (key:string,title:string,help:string,icon?:string) => (
+    <span
+      className="cc-bot-setting-help-label"
+      role="button"
+      tabIndex={0}
+      aria-expanded={settingHelpKey===key}
+      onClick={event=>{
+        event.preventDefault();
+        event.stopPropagation();
+        setSettingHelpKey(current=>current===key?"":key);
+      }}
+      onKeyDown={event=>{
+        if(event.key!=="Enter" && event.key!==" ") return;
+        event.preventDefault();
+        event.stopPropagation();
+        setSettingHelpKey(current=>current===key?"":key);
+      }}
+    >
+      {icon?<ScenovaIcon name={icon} size={17}/>:null}
+      <b className="cc-bot-setting-help-title">{title}</b>
+      {settingHelpKey===key&&<span className="cc-bot-setting-help-popover" role="tooltip">{help}</span>}
+    </span>
+  );
 
   useEffect(()=>{
     if(!modeGuideOpen) return;
@@ -6637,7 +6662,7 @@ function BotSettingsModal(props:any) {
             {embedded ? (
               <div className="cc-bot-v12-mode-select-wrap">
                 <label>
-                  <span><ScenovaIcon name="brain" size={17}/>โหมดการเทรด <small>Trading Mode</small></span>
+                  {settingHelpLabel("mode","โหมดการเทรด","เลือกวิธีที่บอทจะเข้าและจัดการออเดอร์","brain")}
                   <select className={"input cc-bot-v12-mode-select cc-bot-v19-two-thirds-control "+(["RACE","FLIP_LOCK","ZERO_GRID"].includes(controlMode)?"is-rated-mode":"")} value={controlMode} disabled={props.locked} onChange={e=>applyControlMode(e.target.value)} style={{colorScheme:"dark"}}>
                     <option value="AUTO">AUTO</option>
                     <option value="RACE" className="cc-rated-mode-option">★★★ RACE</option>
@@ -6676,18 +6701,18 @@ function BotSettingsModal(props:any) {
                 <div className="cc-bot-v2-section-title compact"><span>02</span><div><b>การเปิดออเดอร์</b></div></div>
                 <div className="cc-bot-v2-fields">
                   {controlMode==="ZERO_GRID" ? <>
-                    <label className="cc-bot-v2-field"><span><ScenovaIcon name="layers" size={17}/>ระยะห่างกริด</span><select className="input" value={String(selectedZeroGridStep)} onChange={e=>props.onEdit?.("zeroGridStepPrice",Number(e.target.value))}><option value="0.5">0.50</option><option value="1">1.00</option><option value="2">2.00</option><option value="3">3.00</option></select></label>
-                    <label className="cc-bot-v2-field"><span><ScenovaIcon name="layers" size={17}/>จำนวนคำสั่งรอต่อฝั่ง</span><select className="input" value={String(Math.max(1,Math.min(30,Number(props.settings.zeroGridLevelsPerSide)||10)))} onChange={e=>props.onEdit?.("zeroGridLevelsPerSide",Number(e.target.value))}>{Array.from({length:30},(_,i)=>i+1).map(value=><option key={value} value={value}>{value} ระดับต่อฝั่ง</option>)}</select></label>
+                    <label className="cc-bot-v2-field">{settingHelpLabel("grid-step","ระยะห่างกริด","กำหนดระยะห่างระหว่างแต่ละระดับของกริด","layers")}<select className="input" value={String(selectedZeroGridStep)} onChange={e=>props.onEdit?.("zeroGridStepPrice",Number(e.target.value))}><option value="0.5">0.50</option><option value="1">1.00</option><option value="2">2.00</option><option value="3">3.00</option></select></label>
+                    <label className="cc-bot-v2-field">{settingHelpLabel("grid-levels","จำนวนคำสั่งรอต่อฝั่ง","กำหนดจำนวน BUY STOP และ SELL STOP ต่อฝั่ง","layers")}<select className="input" value={String(Math.max(1,Math.min(30,Number(props.settings.zeroGridLevelsPerSide)||10)))} onChange={e=>props.onEdit?.("zeroGridLevelsPerSide",Number(e.target.value))}>{Array.from({length:30},(_,i)=>i+1).map(value=><option key={value} value={value}>{value} ระดับต่อฝั่ง</option>)}</select></label>
                     <div className="cc-bot-v2-field"><span><ScenovaIcon name="lot" size={17}/>Lot เริ่มต้น</span><div className="cc-bot-v2-readonly-control"><b>0.03 Lot</b></div></div>
-                    <label className="cc-bot-v2-field"><span><ScenovaIcon name="profit" size={17}/>เป้ากำไรสุทธิ</span><MoneyInput value={props.settings.zeroGridMinNetProfitMoney || 0.5} currency={accountCurrency} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.("zeroGridMinNetProfitMoney",v)}/></label>
+                    <label className="cc-bot-v2-field">{settingHelpLabel("grid-profit","เป้ากำไรสุทธิ","กำไรรวมถึงยอดนี้ EA จะปิดทั้งรอบ","profit")}<MoneyInput value={props.settings.zeroGridMinNetProfitMoney || 0.5} currency={accountCurrency} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.("zeroGridMinNetProfitMoney",v)}/></label>
                   </> : controlMode==="COUNTER" ? <>
-                    <label className="cc-bot-v2-field"><span><ScenovaIcon name="lot" size={17}/>Lot ต่อไม้</span><select className="input cc-bot-v19-two-thirds-control" value={String(activeLot)} onChange={e=>editModeSizing("lot",e.target.value)}>{[0.01,0.02,0.03,0.05,0.1,0.2,0.3,0.5,1].map(v=><option key={v} value={v}>{Number(v).toFixed(2)} Lot</option>)}</select></label>
-                    <label className="cc-bot-v2-field"><span><ScenovaIcon name="layers" size={17}/>จำนวนไม้ต่อฝั่ง</span><select className="input cc-bot-v19-two-thirds-control" value={String(activeMaxPositions)} onChange={e=>editModeSizing("max",e.target.value)}>{[1,2,3,4,5,6,7,8,9,10,12,15,20,25,30,50,75,100].map(v=><option key={v} value={v}>{v} ไม้</option>)}</select></label>
-                    <label className="cc-bot-v2-field"><span><ScenovaIcon name="profit" size={17}/>กำไรต่อไม้</span><MoneyInput value={counterPerPositionProfitMoney} currency={accountCurrency} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.("counterPerPositionProfitMoney",v)}/></label>
+                    <label className="cc-bot-v2-field">{settingHelpLabel("lot-per-order","Lot ต่อไม้","กำหนดขนาด Lot ของแต่ละออเดอร์","lot")}<select className="input cc-bot-v19-two-thirds-control" value={String(activeLot)} onChange={e=>editModeSizing("lot",e.target.value)}>{[0.01,0.02,0.03,0.05,0.1,0.2,0.3,0.5,1].map(v=><option key={v} value={v}>{Number(v).toFixed(2)} Lot</option>)}</select></label>
+                    <label className="cc-bot-v2-field">{settingHelpLabel("counter-max","จำนวนไม้ต่อฝั่ง","กำหนดจำนวน BUY และ SELL สูงสุดแยกกัน","layers")}<select className="input cc-bot-v19-two-thirds-control" value={String(activeMaxPositions)} onChange={e=>editModeSizing("max",e.target.value)}>{[1,2,3,4,5,6,7,8,9,10,12,15,20,25,30,50,75,100].map(v=><option key={v} value={v}>{v} ไม้</option>)}</select></label>
+                    <label className="cc-bot-v2-field">{settingHelpLabel("counter-profit","กำไรต่อไม้","ไม้ไหนกำไรถึงยอดนี้ EA จะปิดไม้นั้น","profit")}<MoneyInput value={counterPerPositionProfitMoney} currency={accountCurrency} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.("counterPerPositionProfitMoney",v)}/></label>
                   </> : <>
-                    <label className="cc-bot-v2-field"><span><ScenovaIcon name="trend" size={17}/>ทิศทาง</span><select className="input cc-bot-v19-two-thirds-control" value={entryMode} onChange={e=>props.onEdit?.("entryMode",e.target.value)}><option value="AUTO_MOMENTUM">อัตโนมัติ</option><option value="BUY_ONLY">BUY</option><option value="SELL_ONLY">SELL</option></select></label>
-                    {controlMode!=="FLIP_LOCK"&&<label className="cc-bot-v2-field"><span><ScenovaIcon name="layers" size={17}/>จำนวนไม้สูงสุด</span><select className="input cc-bot-v19-two-thirds-control" value={String(activeMaxPositions)} onChange={e=>editModeSizing("max",e.target.value)}>{[1,2,3,4,5,6,7,8,9,10,12,15,20,25,30,50,75,100].map(v=><option key={v} value={v}>{v} ไม้</option>)}</select></label>}
-                    <label className="cc-bot-v2-field"><span><ScenovaIcon name="lot" size={17}/>Lot ต่อไม้</span><select className="input cc-bot-v19-two-thirds-control" value={String(activeLot)} onChange={e=>editModeSizing("lot",e.target.value)}>{[0.01,0.02,0.03,0.05,0.1,0.2,0.3,0.5,1].map(v=><option key={v} value={v}>{Number(v).toFixed(2)} Lot</option>)}</select></label>
+                    <label className="cc-bot-v2-field">{settingHelpLabel("direction","ทิศทาง","ให้ EA เลือกฝั่งเอง หรือบังคับ BUY / SELL","trend")}<select className="input cc-bot-v19-two-thirds-control" value={entryMode} onChange={e=>props.onEdit?.("entryMode",e.target.value)}><option value="AUTO_MOMENTUM">อัตโนมัติ</option><option value="BUY_ONLY">BUY</option><option value="SELL_ONLY">SELL</option></select></label>
+                    {controlMode!=="FLIP_LOCK"&&<label className="cc-bot-v2-field">{settingHelpLabel("max-positions","จำนวนไม้สูงสุด","EA จะไม่เปิดออเดอร์เกินจำนวนนี้","layers")}<select className="input cc-bot-v19-two-thirds-control" value={String(activeMaxPositions)} onChange={e=>editModeSizing("max",e.target.value)}>{[1,2,3,4,5,6,7,8,9,10,12,15,20,25,30,50,75,100].map(v=><option key={v} value={v}>{v} ไม้</option>)}</select></label>}
+                    <label className="cc-bot-v2-field">{settingHelpLabel("lot-per-order","Lot ต่อไม้","กำหนดขนาด Lot ของแต่ละออเดอร์","lot")}<select className="input cc-bot-v19-two-thirds-control" value={String(activeLot)} onChange={e=>editModeSizing("lot",e.target.value)}>{[0.01,0.02,0.03,0.05,0.1,0.2,0.3,0.5,1].map(v=><option key={v} value={v}>{Number(v).toFixed(2)} Lot</option>)}</select></label>
                   </>}
                 </div>
                 <div className="cc-bot-v17-hidden-engine">{controlMode!=="ZERO_GRID"&&(controlMode==="FLIP_LOCK"
@@ -6706,27 +6731,27 @@ function BotSettingsModal(props:any) {
                 <div className="cc-bot-v2-section-title compact"><span>03</span><div><b>กำไร / Stop Loss</b></div></div>
                 {controlMode==="RACE" ? <div className="cc-bot-v2-fields exit-fields">
                   <div className="cc-bot-v2-field cc-bot-profit-kind-field">
-                    <span><ScenovaIcon name="profit" size={17}/>รูปแบบกำไร</span>
+                    {settingHelpLabel("profit-kind","รูปแบบกำไร","เลือกปิดกำไรรวมทั้งชุด หรือปิดทีละไม้","profit")}
                     <div className="cc-bot-v2-choice-row cc-bot-v2-choice-inline">
                       <button type="button" className={raceProfitTargetMode==="BASKET"?"active":""} onClick={()=>{props.onEdit?.("raceProfitTargetMode","BASKET");props.onEdit?.("raceCloseAllProfitEnabled",true)}}><ScenovaIcon name="profit" size={16}/><span><b>ทั้งชุด</b></span></button>
                       <button type="button" className={raceProfitTargetMode==="POSITION"?"active":""} onClick={()=>{props.onEdit?.("raceProfitTargetMode","POSITION");props.onEdit?.("raceCloseAllProfitEnabled",false)}}><ScenovaIcon name="orders" size={16}/><span><b>ต่อไม้</b></span></button>
                     </div>
                   </div>
-                  <label className="cc-bot-v2-field"><span><ScenovaIcon name="profit" size={17}/>{raceProfitTargetMode==="POSITION"?"เป้ากำไรต่อไม้":"เป้ากำไรทั้งชุด"}</span><MoneyInput value={raceProfitTargetMode==="POSITION"?racePerPositionProfitMoney:raceCloseAllProfitMoney} currency={accountCurrency} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.(raceProfitTargetMode==="POSITION"?"racePerPositionProfitMoney":"raceCloseAllProfitMoney",v)}/><small>ใช้เฉพาะ RACE · ถึงเป้าที่เลือกแล้วจึงปิดกำไร</small></label>
+                  <label className="cc-bot-v2-field">{settingHelpLabel("race-profit-target",raceProfitTargetMode==="POSITION"?"เป้ากำไรต่อไม้":"เป้ากำไรทั้งชุด",raceProfitTargetMode==="POSITION"?"ไม้ไหนกำไรถึงยอดนี้ EA จะปิดไม้นั้น":"กำไรรวมถึงยอดนี้ EA จะปิดทั้งชุด","profit")}<MoneyInput value={raceProfitTargetMode==="POSITION"?racePerPositionProfitMoney:raceCloseAllProfitMoney} currency={accountCurrency} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.(raceProfitTargetMode==="POSITION"?"racePerPositionProfitMoney":"raceCloseAllProfitMoney",v)}/><small>ใช้เฉพาะ RACE · ถึงเป้าที่เลือกแล้วจึงปิดกำไร</small></label>
                 </div> : controlMode==="AUTO" ? <div className="cc-bot-v2-fields exit-fields">
-                  <label className="cc-bot-v2-field cc-bot-v19-auto-profit-field"><span><ScenovaIcon name="profit" size={17}/>เป้ากำไร AUTO</span><MoneyInput value={props.settings.autoProfitTargetMoney || 0} currency={accountCurrency} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.("autoProfitTargetMoney",v)}/><small>ใช้เฉพาะ AUTO · ถึงแล้วปิด Basket ทันที</small></label>
+                  <label className="cc-bot-v2-field cc-bot-v19-auto-profit-field">{settingHelpLabel("auto-profit-target","เป้ากำไร AUTO","กำไรรวมถึงยอดนี้ EA จะปิดทั้งชุดทันที","profit")}<MoneyInput value={props.settings.autoProfitTargetMoney || 0} currency={accountCurrency} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.("autoProfitTargetMoney",v)}/><small>ใช้เฉพาะ AUTO · ถึงแล้วปิด Basket ทันที</small></label>
                   <div className="cc-bot-v2-engine-line"><ScenovaIcon name="target" size={16}/><b>Hard Profit Target</b><span>ถึงจำนวนเงินที่ตั้งไว้แล้วปิดทั้งชุดทันที ไม่รอ Reversal / Giveback / EMA</span></div>
                 </div> : <div className="cc-bot-v2-fields exit-fields">
                   <div className="cc-bot-v2-field cc-bot-profit-kind-field">
-                    <span><ScenovaIcon name="profit" size={17}/>รูปแบบกำไร</span>
+                    {settingHelpLabel("profit-kind","รูปแบบกำไร","เลือกปิดกำไรรวมทั้งชุด หรือปิดทีละไม้","profit")}
                     <div className="cc-bot-v2-choice-row cc-bot-v2-choice-inline">
                       <button type="button" className={profitKind==="BASKET"?"active":""} onClick={()=>{props.onEdit?.("manualBasketProfitTargetMoney",Number(props.settings.manualBasketProfitTargetMoney||10));props.onEdit?.("manualPerPositionProfitMoney",0)}}><ScenovaIcon name="profit" size={16}/><span><b>ทั้งชุด</b></span></button>
                       <button type="button" className={profitKind==="POSITION"?"active":""} onClick={()=>{props.onEdit?.("manualPerPositionProfitMoney",Number(props.settings.manualPerPositionProfitMoney||2));props.onEdit?.("manualBasketProfitTargetMoney",0)}}><ScenovaIcon name="orders" size={16}/><span><b>ต่อไม้</b></span></button>
                     </div>
                   </div>
-                  <label className="cc-bot-v2-field"><span><ScenovaIcon name="profit" size={17}/>{profitKind==="BASKET"?"เป้ากำไร MANUAL ทั้งชุด":"เป้ากำไร MANUAL ต่อไม้"}</span><MoneyInput value={profitKind==="BASKET"?props.settings.manualBasketProfitTargetMoney:props.settings.manualPerPositionProfitMoney} currency={accountCurrency} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.(profitKind==="BASKET"?"manualBasketProfitTargetMoney":"manualPerPositionProfitMoney",v)}/><small>ใช้เฉพาะ MANUAL · ไม่เปลี่ยนค่า AUTO/RACE/COUNTER/ZERO</small></label>
+                  <label className="cc-bot-v2-field">{settingHelpLabel("manual-profit-target",profitKind==="BASKET"?"เป้ากำไร MANUAL ทั้งชุด":"เป้ากำไร MANUAL ต่อไม้",profitKind==="BASKET"?"กำไรรวมถึงยอดนี้ EA จะปิดทั้งชุด":"ไม้ไหนกำไรถึงยอดนี้ EA จะปิดไม้นั้น","profit")}<MoneyInput value={profitKind==="BASKET"?props.settings.manualBasketProfitTargetMoney:props.settings.manualPerPositionProfitMoney} currency={accountCurrency} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.(profitKind==="BASKET"?"manualBasketProfitTargetMoney":"manualPerPositionProfitMoney",v)}/><small>ใช้เฉพาะ MANUAL · ไม่เปลี่ยนค่า AUTO/RACE/COUNTER/ZERO</small></label>
                   <div className="cc-bot-v2-field">
-                    <span><ScenovaIcon name="shield" size={17}/>Stop Loss</span>
+                    {settingHelpLabel("manual-stop-loss","Stop Loss","เปิดแล้ว EA จะตัดขาดทุนตามระยะที่ตั้งไว้","shield")}
                     <ToggleNumberField alwaysShowInput label="เปิด" defaultValue={suggestedManualSl} value={props.settings.manualStopLossPoints} suffix="points" onChange={(v:string)=>updateOptionalValue("manualStopLossPoints",v)}/><small>ปิด = ไม่มี Broker Stop Loss · เปิด = ใช้ระยะ points ที่ตั้งไว้ตรง ๆ</small>
                   </div>
                 </div>}
@@ -6737,9 +6762,9 @@ function BotSettingsModal(props:any) {
               <section className="cc-bot-v2-panel">
                 <div className="cc-bot-v2-section-title compact"><span>04</span><div><b>Risk Controls</b></div></div>
                 <div className="cc-bot-v2-limit-grid">
-                  {(controlMode!=="MANUAL" || riskValue(riskProfile.basket,"maxBasketLossMoney")>0 || revealedManualRisk[riskProfile.basket])&&<div><div><ScenovaIcon name="risk" size={18}/><span><b>ขาดทุนสูงสุดต่อรอบ</b></span></div><ToggleMoneyField alwaysShowInput label="เปิด" defaultValue="10" value={riskValue(riskProfile.basket,"maxBasketLossMoney")} currency={accountCurrency} suffix="เงินบัญชี" onChange={(v:string)=>updateRiskValue(riskProfile.basket,"maxBasketLossMoney",v)}/></div>}
-                  {(controlMode!=="MANUAL" || riskValue(riskProfile.dailyLoss,"dailyLossMoney")>0 || revealedManualRisk[riskProfile.dailyLoss])&&<div><div><ScenovaIcon name="pnl" size={18}/><span><b>ขาดทุนสูงสุดต่อวัน</b></span></div><ToggleMoneyField alwaysShowInput label="เปิด" defaultValue="25" value={riskValue(riskProfile.dailyLoss,"dailyLossMoney")} currency={accountCurrency} suffix="เงินบัญชี" onChange={(v:string)=>updateRiskValue(riskProfile.dailyLoss,"dailyLossMoney",v)}/></div>}
-                  {(controlMode!=="MANUAL" || riskValue(riskProfile.dailyProfit,"dailyProfitTargetMoney")>0 || revealedManualRisk[riskProfile.dailyProfit])&&<div><div><ScenovaIcon name="target" size={18}/><span><b>เป้ากำไรต่อวัน</b></span></div><ToggleMoneyField alwaysShowInput label="เปิด" defaultValue="10" value={riskValue(riskProfile.dailyProfit,"dailyProfitTargetMoney")} currency={accountCurrency} suffix="เงินบัญชี" onChange={(v:string)=>updateRiskValue(riskProfile.dailyProfit,"dailyProfitTargetMoney",v)}/></div>}
+                  {(controlMode!=="MANUAL" || riskValue(riskProfile.basket,"maxBasketLossMoney")>0 || revealedManualRisk[riskProfile.basket])&&<div><div><ScenovaIcon name="risk" size={18}/>{settingHelpLabel("max-basket-loss","ขาดทุนสูงสุดต่อรอบ","ขาดทุนถึงยอดนี้ EA จะปิดออเดอร์ของรอบทันที")}</div><ToggleMoneyField alwaysShowInput label="เปิด" defaultValue="10" value={riskValue(riskProfile.basket,"maxBasketLossMoney")} currency={accountCurrency} suffix="เงินบัญชี" onChange={(v:string)=>updateRiskValue(riskProfile.basket,"maxBasketLossMoney",v)}/></div>}
+                  {(controlMode!=="MANUAL" || riskValue(riskProfile.dailyLoss,"dailyLossMoney")>0 || revealedManualRisk[riskProfile.dailyLoss])&&<div><div><ScenovaIcon name="pnl" size={18}/>{settingHelpLabel("daily-loss","ขาดทุนสูงสุดต่อวัน","ขาดทุนรวมถึงยอดนี้ บอทจะหยุดเทรดทั้งวัน")}</div><ToggleMoneyField alwaysShowInput label="เปิด" defaultValue="25" value={riskValue(riskProfile.dailyLoss,"dailyLossMoney")} currency={accountCurrency} suffix="เงินบัญชี" onChange={(v:string)=>updateRiskValue(riskProfile.dailyLoss,"dailyLossMoney",v)}/></div>}
+                  {(controlMode!=="MANUAL" || riskValue(riskProfile.dailyProfit,"dailyProfitTargetMoney")>0 || revealedManualRisk[riskProfile.dailyProfit])&&<div><div><ScenovaIcon name="target" size={18}/>{settingHelpLabel("daily-profit","เป้ากำไรต่อวัน","กำไรรวมถึงยอดนี้ บอทจะหยุดเพื่อเก็บกำไร")}</div><ToggleMoneyField alwaysShowInput label="เปิด" defaultValue="10" value={riskValue(riskProfile.dailyProfit,"dailyProfitTargetMoney")} currency={accountCurrency} suffix="เงินบัญชี" onChange={(v:string)=>updateRiskValue(riskProfile.dailyProfit,"dailyProfitTargetMoney",v)}/></div>}
                   {controlMode==="MANUAL"&&(
                     (riskValue(riskProfile.basket,"maxBasketLossMoney")<=0&&!revealedManualRisk[riskProfile.basket]) ||
                     (riskValue(riskProfile.dailyLoss,"dailyLossMoney")<=0&&!revealedManualRisk[riskProfile.dailyLoss]) ||
