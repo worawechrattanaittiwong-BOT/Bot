@@ -6315,7 +6315,7 @@ function BotSettingsModal(props:any) {
   ))));
   const modeCopy:Record<string,{title:string;subtitle:string}> = {
     AUTO:{title:"AUTO · VECTOR EDGE",subtitle:"Vector Edge / V20 เป็นเจ้าของเฉพาะ Position ที่ AUTO เปิดเอง · Lot ต่อไม้ใช้ค่าที่ตั้งแบบตายตัว · ไม่รับช่วง Position จากโหมดอื่น"},
-    FLIP_LOCK:{title:"FLIP LOCK",subtitle:"อ่านราคา MT5 โดยตรง · รอจน SL สามารถล็อกกำไรสุทธิอย่างน้อย 0.30 ได้ แล้วไล่ SL ตามราคาทุก Tick โดยเว้นระยะแค่ขั้นต่ำที่ Broker อนุญาต"},
+    FLIP_LOCK:{title:"FLIP LOCK",subtitle:"อ่านราคา MT5 โดยตรง · เมื่อ Position เริ่มมีกำไรและ Broker วาง SL ฝั่งกำไรได้ จะกระโดดเข้า Trailing จากราคาปัจจุบันทันที แล้วไล่ตามทุก Tick"},
     RACE:{title:"RACE",subtitle:"เพิ่มความถี่ในการเปิดสถานะเพื่อให้ครบจำนวนที่กำหนดเร็วขึ้น โดยแยกการบริหารรอบจากโหมดอัตโนมัติ"},
     ZERO_GRID:{title:"ZERO GRID",subtitle:"วางคำสั่ง BUY STOP และ SELL STOP แบบสมมาตร รองรับ 1–30 ระดับต่อฝั่ง"},
     MANUAL:{title:"MANUAL",subtitle:"ใช้สมองเข้าเดียวกับ AUTO: Demand/Supply + Reaction + โครงสร้างตลาด แต่ Lot / จำนวนไม้ / Stop / Profit ใช้ค่าที่ผู้ใช้กำหนดเอง"}
@@ -6572,7 +6572,7 @@ function BotSettingsModal(props:any) {
             <span>MANUAL Ownership</span>
             <span>MT5 Local Tick · Server ไม่กำหนดราคา SL</span>
             <span>ราคา / SL / TP / Exit บริหารใน MT5 โดยตรงทุกโหมด</span>
-            <span>Safety Stop → ล็อกกำไรสุทธิ ≥ 0.30 → Trailing SL แบบ Tick-on-Tick</span>
+            <span>Safety Stop → กำไรบวก + Broker วาง SL ฝั่งกำไรได้ → Trailing SL จากราคาปัจจุบันทันที</span>
             <span>ไม่มีการวาง BUY STOP / SELL STOP ล่วงหน้า</span>
           </div>
           <section className="cc-bot-v2-mode-section cc-mode-guide-anchor">
@@ -6636,7 +6636,7 @@ function BotSettingsModal(props:any) {
                   </>}
                 </div>
                 <div className="cc-bot-v17-hidden-engine">{controlMode!=="ZERO_GRID"&&(controlMode==="FLIP_LOCK"
-                  ? <div className="cc-bot-v2-engine-line"><ScenovaIcon name="trend" size={16}/><b>โครงสร้าง FLIP LOCK</b><span>1 Position เท่านั้น · ไม่มี Pending BUY/SELL STOP ล่วงหน้า · SL ต้องล็อกกำไรสุทธิ ≥ 0.30 ก่อน แล้วตามราคาแบบ Tick-on-Tick ใกล้สุดตามข้อจำกัด Broker · Server ควบคุมเฉพาะ Start/Stop/Settings</span></div>
+                  ? <div className="cc-bot-v2-engine-line"><ScenovaIcon name="trend" size={16}/><b>โครงสร้าง FLIP LOCK</b><span>1 Position เท่านั้น · ไม่มี Pending BUY/SELL STOP ล่วงหน้า · เมื่อกำไรบวกและ Broker วาง SL ฝั่งกำไรได้ ระบบย้าย SL เข้า Spread/ATR Trailing จากราคาปัจจุบันทันที · Server ควบคุมเฉพาะ Start/Stop/Settings</span></div>
                   : controlMode==="AUTO"
                     ? <div className="cc-bot-v2-engine-line"><ScenovaIcon name="spark" size={16}/><b>AUTO · Shared Zone Brain</b><span>Demand/Supply + Reaction เป็นแกนเข้าออเดอร์ร่วมกับ MANUAL · AUTO วาง SL/TP และจัดการ Position ของ AUTO เอง</span></div>
                     : controlMode==="MANUAL"
