@@ -1403,6 +1403,28 @@ export class AdminController {
     }
 
     const mode = String(slot.mode || "").toUpperCase();
+    if (mode === "CLOUD") {
+      if (!slot.runner_id) {
+        throw new ConflictException("Cloud VPS Slot นี้ยังไม่ได้เชื่อม Worker");
+      }
+      const runtimeStopState = String(slot.runtime_stop_state || "NONE").toUpperCase();
+      if (runtimeStopState !== "NONE") {
+        throw new ConflictException("Cloud VPS กำลังหยุด Runtime อยู่ กรุณารอให้สถานะกลับมาพร้อมก่อน");
+      }
+    } else if (mode === "LOCAL") {
+      const agentOnline = Boolean(
+        slot.agent_last_seen_at &&
+        Date.now() - new Date(slot.agent_last_seen_at).getTime() <= 90_000
+      );
+      if (!agentOnline) {
+        throw new ConflictException(
+          "Windows Agent ของ Slot นี้ยัง Offline กรุณาเปิด Agent ก่อนโหลด Symbol ใหม่"
+        );
+      }
+    } else {
+      throw new ConflictException("โหมด Slot ไม่ถูกต้อง");
+    }
+
     const requestedSymbol = this.canonicalSlotSymbol(slot.settings || {}, slot.metrics || {});
     const requestedAt = new Date().toISOString();
 
@@ -1442,14 +1464,6 @@ export class AdminController {
 
     let actionId: string | null = null;
     if (mode === "CLOUD") {
-      if (!slot.runner_id) {
-        throw new ConflictException("Cloud VPS Slot นี้ยังไม่ได้เชื่อม Worker");
-      }
-      const runtimeStopState = String(slot.runtime_stop_state || "NONE").toUpperCase();
-      if (!["NONE","STOP_CONFIRMED","LEASE_REVOKED"].includes(runtimeStopState)) {
-        throw new ConflictException("Cloud VPS กำลังหยุด Runtime อยู่ กรุณารอให้เสร็จก่อน");
-      }
-
       await this.db.query(
         `INSERT INTO worker_commands(
            runner_id,bot_instance_id,execution_generation,command,status
@@ -1465,16 +1479,6 @@ export class AdminController {
         [slot.runner_id, slot.instance_id, Number(slot.execution_generation || 1)]
       );
     } else if (mode === "LOCAL") {
-      const agentOnline = Boolean(
-        slot.agent_last_seen_at &&
-        Date.now() - new Date(slot.agent_last_seen_at).getTime() <= 90_000
-      );
-      if (!agentOnline) {
-        throw new ConflictException(
-          "Windows Agent ของ Slot นี้ยัง Offline กรุณาเปิด Agent ก่อนโหลด Symbol ใหม่"
-        );
-      }
-
       actionId = randomUUID();
       await this.db.query(
         `UPDATE bot_instances
