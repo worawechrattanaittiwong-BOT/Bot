@@ -19474,9 +19474,12 @@ void ManageDynamicProtection()
       bool counterPosition=StringFind(positionComment,"SaaSCounter")>=0;
       bool autoFamilyPosition=autoPosition || tacticalPosition;
 
-      // MANUAL and COUNTER are explicit owners. COUNTER's contract is stricter:
-      // it must never receive any Broker SL/TP from dynamic protection.
-      if(manualPosition || counterPosition)
+      // MANUAL means MANUAL: preserve its existing isolation contract exactly.
+      if(manualPosition)
+         continue;
+
+      // COUNTER is stricter: never add Broker SL/TP after the order is open.
+      if(counterPosition)
          continue;
 
       double marketPrice = direction > 0 ? tick.bid : tick.ask;
