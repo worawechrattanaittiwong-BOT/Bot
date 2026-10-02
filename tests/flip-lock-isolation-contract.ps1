@@ -62,6 +62,11 @@ Forbid $starterDirection 'PERIOD_H1' 'FLIP 1.1.0 starter must not use H1'
 Need $starter 'g_entryModel="FLIP_LOCK_M1_PROFIT_LOCK";' 'FLIP 1.2.0 profit-lock entry model missing'
 Need $manage 'FLIP_LOCK_WAIT_EXISTING_POSITION' 'FLIP LOCK must wait instead of seizing a foreign open position'
 Need $manage 'FlipLockSyncProfitLock' 'FLIP LOCK must manage its own broker SL profit-lock lifecycle'
+Need $flip 'bool FlipLockLastExitWasStop()' 'FLIP must detect broker SL exits explicitly before handoff'
+Need $flip 'latestReason!=DEAL_REASON_SL' 'FLIP must not treat manual/other exits as SL handoffs'
+Need $flip 'int nextDirection=-g_flipLockDirection;' 'FLIP SL handoff must always reverse the prior position side'
+Need $flip 'SL_HANDOFF_TO_BUY' 'SELL stop-out must hand off to BUY'
+Need $flip 'SL_HANDOFF_TO_SELL' 'BUY stop-out must hand off to SELL'
 
 $ownerIndex = $onTick.IndexOf('FLIP LOCK V4 owns every position')
 $genericIndex = $onTick.IndexOf('ManageDynamicProtection();')
@@ -102,6 +107,7 @@ Need $api 'clean.dailyProfitDrawdownPercent = 0;' 'API must disable FLIP LOCK da
 
 Need $web 'Trail กำไรห่างราคาปัจจุบัน 100 จุด' 'FLIP 1.2.0 UI must explain the fixed 100-point live profit trail'
 Need $web 'FLIP LOCK ไม่วาง Pending ฝั่งตรงข้าม' 'FLIP 1.2.0 UI must explain that no opposite pending baton is used'
+Need $web 'BUY→SELL / SELL→BUY' 'FLIP UI must explain immediate opposite-side handoff after SL'
 Need $web 'Lot ตาม Settings ไม่มี Martingale' 'FLIP 1.2.0 UI must preserve fixed configured Lot behavior'
 
 $eaVersionMatch = [regex]::Match($ea, '#property\s+version\s+"([^"]+)"')
