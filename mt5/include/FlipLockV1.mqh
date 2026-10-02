@@ -1,12 +1,13 @@
 #ifndef SCENOVA_FLIP_LOCK_V1_MQH
 #define SCENOVA_FLIP_LOCK_V1_MQH
 
-// FLIP LOCK V6 is a local tick-driven one-position profit-lock engine:
+// FLIP LOCK V6.2 is a local one-position protected-profit engine:
 //   1 FLIP-owned market position, no pre-placed opposite STOP order.
-// The starter uses a wide ATR/spread Safety Stop. As soon as the MT5 quote has
-// enough positive distance to place a broker-legal lock above/below entry, the
-// SL arms locally and then follows every meaningful price step without waiting
-// for SaaS price/commands. Server state controls NEW risk only.
+// The starter keeps its wide ATR/spread Safety Stop until estimated NET profit
+// reaches the configured +0.30 floor and that floor is broker-legal. The first
+// armed SL jumps only to that protected-profit price; subsequent SL movement
+// uses the normal Spread/ATR trail without SaaS price/commands. Server state
+// controls NEW risk only.
 #define FLIP_LOCK_V1_VERSION "6.2.0"
 #define FLIP_LOCK_PENDING_COMMENT "SCNFlipLock"
 #define FLIP_LOCK_LIVE_COMMENT "SCNFlipLockLive"
