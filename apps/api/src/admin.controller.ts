@@ -16,7 +16,7 @@ import { MaintenanceService } from "./maintenance.service";
 import { PartnerService } from "./partner.service";
 import { ReferralService } from "./referral.service";
 import { TrialAuthorizationService } from "./trial-authorization.service";
-import { createHash, randomBytes } from "crypto";
+import { createHash, randomBytes, randomUUID } from "crypto";
 
 @Controller("admin")
 @UseGuards(AdminGuard)
@@ -1330,6 +1330,363 @@ export class AdminController {
       queuedDirectShifted: Boolean(relation?.direct_subscription_id)
     });
     return row;
+  }
+
+  private canonicalSlotSymbol(settings: any, metrics: any) {
+    const raw = String(
+      settings?.startupSymbol ||
+      settings?.symbol ||
+      metrics?.symbol ||
+      "XAUUSD"
+    ).trim();
+    const upper = raw.toUpperCase();
+    if (upper.includes("XAUUSD")) return "XAUUSD";
+    if (upper.includes("BTCUSD") || upper.includes("XBTUSD")) return "BTCUSD";
+    return raw || "XAUUSD";
+  }
+
+  private async adminCustomerSlot(userId: string, slotId: string) {
+    return this.db.one(
+      `SELECT
+         ls.*,
+         u.user_code,
+         bi.id instance_id,
+         bi.mt5_account_id,
+         bi.actual_state,
+         bi.desired_state,
+         bi.runner_id,
+         bi.execution_generation,
+         bi.runtime_stop_state,
+         bi.metrics,
+         bi.agent_last_seen_at,
+         bs.settings,
+         a.account_number,
+         a.broker_server,
+         COALESCE(NULLIF(bi.metrics->>'positions','')::int,0) positions,
+         COALESCE(NULLIF(bi.metrics->>'accountScenovaPendingOrders','')::int,0) pending_orders
+       FROM license_slots ls
+       JOIN users u ON u.id=ls.assigned_user_id
+       LEFT JOIN bot_instances bi ON bi.slot_id=ls.id
+       LEFT JOIN bot_settings bs ON bs.bot_instance_id=bi.id
+       LEFT JOIN mt5_accounts a ON a.id=bi.mt5_account_id
+       WHERE ls.id=$1
+         AND ls.assigned_user_id=$2
+         AND ls.status<>'DELETED'
+       LIMIT 1`,
+      [slotId, userId]
+    );
+  }
+
+  @Post("slots/refresh-symbol")
+  async refreshCustomerSlotSymbol(
+    @Req() req: any,
+    @Body() body: { userId: string; slotId: string }
+  ) {
+    const slot = await this.adminCustomerSlot(body.userId, body.slotId);
+    if (!slot) throw new ConflictException("ไม่พบ Slot ของลูกค้ารายนี้");
+    if (!slot.instance_id || !slot.mt5_account_id) {
+      throw new ConflictException("Slot นี้ยังไม่ได้เชื่อมบัญชี MT5");
+    }
+
+    const positions = Math.max(0, Number(slot.positions || 0));
+    const pendingOrders = Math.max(0, Number(slot.pending_orders || 0));
+    if (
+      positions > 0 ||
+      pendingOrders > 0 ||
+      String(slot.actual_state || "").toUpperCase() === "RUNNING" ||
+      String(slot.desired_state || "").toUpperCase() === "RUNNING"
+    ) {
+      throw new ConflictException(
+        "กรุณาหยุดบอทและให้ Position / Pending Order เป็น 0 ก่อนโหลด Symbol ใหม่"
+      );
+    }
+
+    const mode = String(slot.mode || "").toUpperCase();
+    if (mode === "CLOUD") {
+      if (!slot.runner_id) {
+        throw new ConflictException("Cloud VPS Slot นี้ยังไม่ได้เชื่อม Worker");
+      }
+      const runtimeStopState = String(slot.runtime_stop_state || "NONE").toUpperCase();
+      if (runtimeStopState !== "NONE") {
+        throw new ConflictException("Cloud VPS กำลังหยุด Runtime อยู่ กรุณารอให้สถานะกลับมาพร้อมก่อน");
+      }
+    } else if (mode === "LOCAL") {
+      const agentOnline = Boolean(
+        slot.agent_last_seen_at &&
+        Date.now() - new Date(slot.agent_last_seen_at).getTime() <= 90_000
+      );
+      if (!agentOnline) {
+        throw new ConflictException(
+          "Windows Agent ของ Slot นี้ยัง Offline กรุณาเปิด Agent ก่อนโหลด Symbol ใหม่"
+        );
+      }
+    } else {
+      throw new ConflictException("โหมด Slot ไม่ถูกต้อง");
+    }
+
+    const requestedSymbol = this.canonicalSlotSymbol(slot.settings || {}, slot.metrics || {});
+    const requestedAt = new Date().toISOString();
+
+    await this.db.query(
+      `INSERT INTO bot_settings(bot_instance_id,settings,updated_at)
+       VALUES($1,jsonb_build_object('startupSymbol',$2::text,'symbol',$2::text),now())
+       ON CONFLICT(bot_instance_id)
+       DO UPDATE SET
+         settings=jsonb_set(
+           jsonb_set(COALESCE(bot_settings.settings,'{}'::jsonb),'{startupSymbol}',to_jsonb($2::text),true),
+           '{symbol}',to_jsonb($2::text),true
+         ),
+         updated_at=now()`,
+      [slot.instance_id, requestedSymbol]
+    );
+
+    await this.db.query(
+      `UPDATE bot_instances
+       SET desired_state='STOPPED',
+           metrics=(
+             COALESCE(metrics,'{}'::jsonb)
+             - 'symbol'
+             - 'symbolTradeMode'
+             - 'marketWatchSymbols'
+             - 'marketWatchCapturedAt'
+             - 'requestedStartupSymbol'
+             - 'symbolChangeStatus'
+           ) || jsonb_build_object(
+             'symbolRefreshStatus','QUEUED',
+             'symbolRefreshRequestedAt',$2::text,
+             'symbolRefreshRequestedSymbol',$3::text,
+             'symbolRefreshSource','ADMIN_SLOT'
+           )
+       WHERE id=$1`,
+      [slot.instance_id, requestedAt, requestedSymbol]
+    );
+
+    let actionId: string | null = null;
+    if (mode === "CLOUD") {
+      await this.db.query(
+        `INSERT INTO worker_commands(
+           runner_id,bot_instance_id,execution_generation,command,status
+         )
+         SELECT $1,$2,$3,'RELOAD_INSTANCE','PENDING'
+         WHERE NOT EXISTS (
+           SELECT 1 FROM worker_commands
+           WHERE bot_instance_id=$2
+             AND execution_generation=$3
+             AND command='RELOAD_INSTANCE'
+             AND status IN ('PENDING','DELIVERED')
+         )`,
+        [slot.runner_id, slot.instance_id, Number(slot.execution_generation || 1)]
+      );
+    } else if (mode === "LOCAL") {
+      actionId = randomUUID();
+      await this.db.query(
+        `UPDATE bot_instances
+         SET desired_state='SAFE_STOP',
+             metrics=COALESCE(metrics,'{}'::jsonb) || jsonb_build_object(
+               'manualMt5ActionName','CONNECT_MT5',
+               'manualMt5ActionId',$2::text,
+               'manualMt5ActionRequestedAt',$3::text,
+               'manualMt5ActionStatus','PENDING',
+               'manualMt5ActionSource','ADMIN_SYMBOL_REFRESH',
+               'manualMt5ActionMessage','Admin สั่งเชื่อม MT5 ใหม่เพื่อดึง Market Watch / Symbol ล่าสุด'
+             )
+         WHERE id=$1`,
+        [slot.instance_id, actionId, requestedAt]
+      );
+      await this.db.query(
+        "UPDATE bot_commands SET status='ACKED',acked_at=now() WHERE bot_instance_id=$1 AND status IN ('PENDING','DELIVERED') AND command IN ('START','SAFE_STOP')",
+        [slot.instance_id]
+      );
+      await this.db.query(
+        "INSERT INTO bot_commands(bot_instance_id,command) VALUES($1,'SAFE_STOP')",
+        [slot.instance_id]
+      );
+    } else {
+      throw new ConflictException("โหมด Slot ไม่ถูกต้อง");
+    }
+
+    const actor = req.user?.sub ? "OWNER:" + String(req.user.sub) : "ADMIN_KEY";
+    await this.audit(actor, "ADMIN_REFRESH_SLOT_SYMBOL", "bot_instance", slot.instance_id, {
+      userId: body.userId,
+      userCode: slot.user_code,
+      slotId: slot.id,
+      mode,
+      mt5AccountId: slot.mt5_account_id,
+      accountNumber: slot.account_number || null,
+      brokerServer: slot.broker_server || null,
+      requestedSymbol,
+      actionId
+    });
+
+    return {
+      ok: true,
+      slotId: slot.id,
+      mode,
+      requestedSymbol,
+      actionId,
+      message: mode === "CLOUD"
+        ? "สั่ง Cloud VPS รีโหลด MT5 แล้ว ระบบจะดึง Market Watch และ Symbol ใหม่จากบัญชีนี้"
+        : "สั่ง Local MT5 เชื่อมใหม่แล้ว ระบบจะดึง Market Watch และ Symbol ใหม่จากบัญชีนี้"
+    };
+  }
+
+  @Post("slots/disconnect-mt5")
+  async disconnectCustomerSlotMt5(
+    @Req() req: any,
+    @Body() body: { userId: string; slotId: string }
+  ) {
+    const slot = await this.adminCustomerSlot(body.userId, body.slotId);
+    if (!slot) throw new ConflictException("ไม่พบ Slot ของลูกค้ารายนี้");
+    if (!slot.instance_id || !slot.mt5_account_id) {
+      return {
+        ok: true,
+        disconnected: false,
+        slotId: slot.id,
+        message: "Slot นี้ไม่ได้เชื่อมบัญชี MT5 อยู่แล้ว"
+      };
+    }
+
+    const positions = Math.max(0, Number(slot.positions || 0));
+    const pendingOrders = Math.max(0, Number(slot.pending_orders || 0));
+    if (
+      positions > 0 ||
+      pendingOrders > 0 ||
+      String(slot.actual_state || "").toUpperCase() === "RUNNING" ||
+      String(slot.desired_state || "").toUpperCase() === "RUNNING"
+    ) {
+      throw new ConflictException(
+        "กรุณาหยุดบอทและให้ Position / Pending Order เป็น 0 ก่อนตัดการเชื่อมต่อ MT5"
+      );
+    }
+
+    const mode = String(slot.mode || "").toUpperCase();
+    if (mode === "CLOUD" && slot.runner_id) {
+      const stopState = String(slot.runtime_stop_state || "NONE").toUpperCase();
+      if (!["STOP_CONFIRMED","LEASE_REVOKED"].includes(stopState)) {
+        const activeStop = await this.db.one(
+          `SELECT id
+           FROM worker_commands
+           WHERE bot_instance_id=$1
+             AND execution_generation=$2
+             AND command='STOP_INSTANCE'
+             AND status IN ('PENDING','DELIVERED')
+           ORDER BY id DESC
+           LIMIT 1`,
+          [slot.instance_id, Number(slot.execution_generation || 1)]
+        );
+        if (!activeStop) {
+          await this.db.query(
+            `INSERT INTO worker_commands(
+               runner_id,bot_instance_id,execution_generation,command,status
+             ) VALUES($1,$2,$3,'STOP_INSTANCE','PENDING')`,
+            [slot.runner_id, slot.instance_id, Number(slot.execution_generation || 1)]
+          );
+        }
+        await this.db.query(
+          `UPDATE bot_instances SET
+             desired_state='STOPPED',
+             runtime_stop_state='STOP_REQUESTED',
+             runtime_stop_requested_at=now(),
+             runtime_stop_confirmed_at=NULL,
+             runtime_stop_error=NULL
+           WHERE id=$1`,
+          [slot.instance_id]
+        );
+        return {
+          ok: false,
+          pendingCloudStop: true,
+          slotId: slot.id,
+          message: "กำลังปิด MT5 ของ Slot นี้บน VPS ก่อนตัดการเชื่อมต่อ"
+        };
+      }
+    }
+
+    const requestedSymbol = this.canonicalSlotSymbol(slot.settings || {}, slot.metrics || {});
+    const oldAccountId = slot.mt5_account_id;
+
+    await this.db.transaction(async tx => {
+      await tx.query(
+        "UPDATE mt5_accounts SET status='INACTIVE' WHERE id=$1",
+        [oldAccountId]
+      );
+      if (mode === "CLOUD") {
+        await tx.query(
+          "DELETE FROM mt5_credentials WHERE mt5_account_id=$1",
+          [oldAccountId]
+        );
+      }
+
+      await tx.query(
+        `INSERT INTO bot_settings(bot_instance_id,settings,updated_at)
+         VALUES($1,jsonb_build_object('startupSymbol',$2::text,'symbol',$2::text),now())
+         ON CONFLICT(bot_instance_id)
+         DO UPDATE SET
+           settings=jsonb_set(
+             jsonb_set(COALESCE(bot_settings.settings,'{}'::jsonb),'{startupSymbol}',to_jsonb($2::text),true),
+             '{symbol}',to_jsonb($2::text),true
+           ),
+           updated_at=now()`,
+        [slot.instance_id, requestedSymbol]
+      );
+
+      await tx.query(
+        `UPDATE bot_instances SET
+           mt5_account_id=NULL,
+           desired_state='STOPPED',
+           actual_state='OFFLINE',
+           last_seen_at=NULL,
+           metrics=CASE
+             WHEN mode='CLOUD' THEN '{}'::jsonb
+             ELSE (
+               COALESCE(metrics,'{}'::jsonb)
+               - 'symbol'
+               - 'symbolTradeMode'
+               - 'marketWatchSymbols'
+               - 'marketWatchCapturedAt'
+               - 'requestedStartupSymbol'
+               - 'symbolChangeStatus'
+             )
+           END,
+           pending_account_number=NULL,
+           pending_broker=NULL,
+           pending_broker_server=NULL,
+           pending_account_ip=NULL,
+           pending_account_seen_at=NULL,
+           account_change_requested_at=NULL
+         WHERE id=$1`,
+        [slot.instance_id]
+      );
+      await tx.query(
+        "UPDATE bot_commands SET status='ACKED',acked_at=COALESCE(acked_at,now()) WHERE bot_instance_id=$1 AND status IN ('PENDING','DELIVERED')",
+        [slot.instance_id]
+      );
+      await tx.query(
+        "UPDATE worker_commands SET status='CANCELLED',result_code='ADMIN_MT5_DISCONNECTED',acked_at=COALESCE(acked_at,now()) WHERE bot_instance_id=$1 AND command='RELOAD_INSTANCE' AND status IN ('PENDING','DELIVERED')",
+        [slot.instance_id]
+      );
+    });
+
+    const actor = req.user?.sub ? "OWNER:" + String(req.user.sub) : "ADMIN_KEY";
+    await this.audit(actor, "ADMIN_DISCONNECT_SLOT_MT5", "bot_instance", slot.instance_id, {
+      userId: body.userId,
+      userCode: slot.user_code,
+      slotId: slot.id,
+      mode,
+      oldMt5AccountId: oldAccountId,
+      accountNumber: slot.account_number || null,
+      brokerServer: slot.broker_server || null,
+      preservedTrialHistory: true,
+      requestedSymbol
+    });
+
+    return {
+      ok: true,
+      disconnected: true,
+      slotId: slot.id,
+      mode,
+      preservedTrialHistory: true,
+      message: "ตัดการเชื่อมต่อ MT5 ของ Slot นี้แล้ว ลูกค้าต้องเชื่อม MT5 ใหม่เพื่อให้ระบบดึง Symbol จากบัญชีจริงอีกครั้ง"
+    };
   }
 
   @Post("slots/delete")

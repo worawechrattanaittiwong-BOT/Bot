@@ -106,6 +106,15 @@ assert.match(adminPage, /ส่งลิงก์ตั้งรหัสผ่�
 assert.match(adminPage, /\/admin\/slots\/delete/);
 assert.match(adminPage, /canonicalCustomerSlot/);
 assert.match(adminApi, /@Post\("slots\/delete"\)/);
+assert.match(adminApi, /@Post\("slots\/refresh-symbol"\)/);
+assert.match(adminApi, /@Post\("slots\/disconnect-mt5"\)/);
+assert.match(adminApi, /ADMIN_REFRESH_SLOT_SYMBOL/);
+assert.match(adminApi, /ADMIN_DISCONNECT_SLOT_MT5/);
+assert.match(adminApi, /marketWatchSymbols/);
+assert.match(adminPage, /\/admin\/slots\/refresh-symbol/);
+assert.match(adminPage, /\/admin\/slots\/disconnect-mt5/);
+assert.match(adminPage, /โหลด Symbol ใหม่/);
+assert.match(adminPage, /ตัดการเชื่อมต่อ/);
 assert.match(adminApi, /Local MT5 ใช้ได้ 1 Slot/);
 assert.doesNotMatch(adminPage, /ค้นหาบัญชี → เลือกลูกค้า/);
 assert.doesNotMatch(adminPage, /ใช้สำหรับสิทธิ์ทดลองชั่วคราวเท่านั้น/);
