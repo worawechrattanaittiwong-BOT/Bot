@@ -13,15 +13,19 @@ project = Xcodeproj::Project.open(project_path)
 removed = 0
 
 project.targets.each do |target|
-  phase = target.resources_build_phase
-  next unless phase
+  target.build_phases.each do |phase|
+    next unless phase.respond_to?(:files)
 
-  phase.files.dup.each do |build_file|
-    path = build_file.file_ref&.path.to_s
-    next unless path.end_with?(".entitlements")
+    phase.files.dup.each do |build_file|
+      path = build_file.file_ref&.path.to_s
+      next unless path.end_with?(".entitlements")
 
-    build_file.remove_from_project
-    removed += 1
+      # Entitlements belong in CODE_SIGN_ENTITLEMENTS, never in a Resources /
+      # Copy Files / other build phase. Removing only the build-file entry keeps
+      # the file reference and signing configuration intact.
+      build_file.remove_from_project
+      removed += 1
+    end
   end
 end
 
