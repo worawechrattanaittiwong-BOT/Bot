@@ -170,7 +170,7 @@ export default function App() {
         });
       }
 
-      peer.addEventListener?.("connectionstatechange", () => {
+      (peer as any).onconnectionstatechange = () => {
         if (peer.connectionState === "connected") {
           setConnected(true);
           setBusy(false);
@@ -178,7 +178,7 @@ export default function App() {
         } else if (peer.connectionState === "failed" || peer.connectionState === "closed") {
           void stopSharing("การเชื่อมต่อสิ้นสุดแล้ว");
         }
-      });
+      };
 
       const offer = await peer.createOffer();
       await peer.setLocalDescription(offer);
@@ -234,7 +234,9 @@ export default function App() {
         </Text>
 
         {Platform.OS === "ios" && (
-          <ScreenCapturePickerView ref={pickerRef} style={styles.hiddenPicker} />
+          <View style={styles.hiddenPicker}>
+            <ScreenCapturePickerView ref={pickerRef} />
+          </View>
         )}
 
         <TouchableOpacity
