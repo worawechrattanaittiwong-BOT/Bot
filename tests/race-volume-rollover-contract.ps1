@@ -58,14 +58,14 @@ if($raceSyncGate -lt 0 -or $dailyControl -lt 0 -or $raceManager -lt 0 -or
    $raceSyncGate -gt $dailyControl -or $raceSyncGate -gt $raceManager){
   throw 'RACE settings-sync guard must execute before daily money controls and RACE Basket management'
 }
-Need $analysis 'int volumeDirection=RaceVolumeDirection();' 'RACE analysis must keep rolling 30-second volume as an input'
-Need $analysis 'RaceZonePriorityActive(' 'RACE analysis may protect an intact opposing Demand/Supply boundary'
-Need $analysis 'RaceV2DecisionDirection(' 'RACE must keep Flow/Structure/Leg/Rejection analysis'
-Need $analysis 'if(anchorDirection==0) anchorDirection=flowDirection;' 'RACE must fall back to candle flow when volume is not qualified'
-Need $analysis 'if(anchorDirection==0) anchorDirection=g_raceVNextStructureDirection;' 'RACE must fall back to market structure without waiting'
-Need $analysis 'if(anchorDirection==0 && momentum>0.0) anchorDirection=1;' 'RACE must use live positive momentum as a non-blocking fallback'
-Need $analysis 'return RaceM5CandleDirection();' 'RACE must retain a final closed-candle direction fallback'
-if($analysis.Contains('g_trend') -or $analysis.Contains('g_ema')){throw 'RACE entry direction must not leak trend/EMA into the RACE VNext decision'}
+Need $ea 'int RaceLivePriceDirection()' 'RACE live-price direction helper missing'
+Need $analysis 'int direction=RaceLivePriceDirection();' 'RACE entry must follow live price flow directly'
+Need $analysis 'g_raceVNextLegPhase="LIVE_PRICE";' 'RACE telemetry must identify live-price entry mode'
+if($analysis.Contains('RaceVolumeDirection()')){throw 'RACE entry direction must not use rolling volume'}
+if($analysis.Contains('RaceZonePriorityActive(')){throw 'RACE entry direction must not be overridden by Demand/Supply zones'}
+if($analysis.Contains('RaceV2DecisionDirection(')){throw 'RACE entry direction must not use weighted Flow/Structure/Rejection decisions'}
+if($analysis.Contains('RaceM5CandleDirection()')){throw 'RACE entry direction must not wait for closed M5 candles'}
+if($analysis.Contains('g_trend') -or $analysis.Contains('g_ema')){throw 'RACE entry direction must not use trend/EMA'}
 Need $ea '#include "include\\RaceFlowV2.mqh"' 'RACE Flow V2 module missing'
 Need $ea '#include "include\\RaceStructureV2.mqh"' 'RACE Structure V2 module missing'
 Need $ea '#include "include\\RaceLegPhaseV2.mqh"' 'RACE Leg Phase V2 module missing'
@@ -206,4 +206,4 @@ if($eaVersionMatch.Groups[1].Value -ne $releaseVersionMatch.Groups[1].Value){
 }
 Need $release 'EA_RUNTIME_CONTRACT = "RACE_CONFIGURED_LOSS_ONLY_V1"' 'API runtime contract must match EA'
 
-Write-Host 'RACE 1.1.14 open-flow analysis + dual-direction POSITION + hard safety isolation: PASS'
+Write-Host 'RACE 1.1.15 live-price direction + dual-direction POSITION + hard safety isolation: PASS'

@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.1.14"
-#define SCENOVA_EA_VERSION "1.1.14"
-#define SCENOVA_PRODUCT_VERSION "1.1.14"
+#property version   "1.1.15"
+#define SCENOVA_EA_VERSION "1.1.15"
+#define SCENOVA_PRODUCT_VERSION "1.1.15"
 #define SCENOVA_BUILD_ID "SOURCE"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_CONFIGURED_LOSS_ONLY_V1"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
@@ -3814,77 +3814,69 @@ bool RaceAntiChaseBlocked(int direction,string &reasonOut)
    return true;
 }
 
-int RaceAnalysisDirection(double momentum)
+int RaceLivePriceDirection()
 {
-   // RACE analysis is directional, never a confidence/warmup gate. Rolling
-   // volume remains one input, but Flow/Structure/Rejection/momentum can choose
-   // a side immediately when the 30-second window is not ready or is balanced.
-   if(g_entryMode == ENTRY_BUY_ONLY) return 1;
-   if(g_entryMode == ENTRY_SELL_ONLY) return -1;
+   // RACE entry direction follows only the live chart flow. Compare the newest
+   // midpoint with the oldest valid midpoint from roughly the last 2.5 seconds.
+   MqlTick nowTick;
+   if(!SymbolInfoTick(_Symbol,nowTick))
+      return 0;
 
-   int volumeDirection=RaceVolumeDirection();
+   MqlTick ticks[];
+   ulong fromMsc=nowTick.time_msc>2500 ? (ulong)nowTick.time_msc-2500 : 0;
+   int copied=CopyTicks(_Symbol,ticks,COPY_TICKS_INFO,fromMsc,0);
 
-   g_raceVNextFlowScore=RaceV2FlowScore();
-   int flowDirection=RaceV2SignedDirection(g_raceVNextFlowScore);
-   g_raceVNextStructureDirection=RaceV2StructureDirection();
-   g_raceVNextRejectionDirection=RaceV2RejectionDirection();
-
-   int anchorDirection=volumeDirection;
-   if(anchorDirection==0) anchorDirection=flowDirection;
-   if(anchorDirection==0) anchorDirection=g_raceVNextStructureDirection;
-   if(anchorDirection==0) anchorDirection=g_raceVNextRejectionDirection;
-   if(anchorDirection==0 && momentum>0.0) anchorDirection=1;
-   if(anchorDirection==0 && momentum<0.0) anchorDirection=-1;
-   if(anchorDirection==0) anchorDirection=RaceM5CandleDirection();
-
-   MqlTick tick;
-   if(SymbolInfoTick(_Symbol,tick))
+   if(copied>=2)
    {
-      double price=(tick.bid+tick.ask)*0.5;
-      double atrPrice=MathMax(
-         _Point*12.0,
-         AverageTrueRangePoints(PERIOD_M5,g_atrPeriod)*_Point
-      );
+      double firstMid=0.0;
+      double lastMid=0.0;
 
-      bool zoneBroken=false;
-      if(anchorDirection<0 &&
-         RaceZonePriorityActive(1,price,atrPrice,zoneBroken))
+      for(int i=0;i<copied;i++)
       {
-         g_raceVNextDecisionScore=100.0;
-         g_raceVNextLegPhase="ZONE_PRIORITY";
-         return 1;
+         if(ticks[i].bid<=0.0 || ticks[i].ask<=0.0)
+            continue;
+         double mid=(ticks[i].bid+ticks[i].ask)*0.5;
+         if(firstMid<=0.0)
+            firstMid=mid;
+         lastMid=mid;
       }
 
-      if(anchorDirection>0 &&
-         RaceZonePriorityActive(-1,price,atrPrice,zoneBroken))
+      if(firstMid>0.0 && lastMid>0.0)
       {
-         g_raceVNextDecisionScore=-100.0;
-         g_raceVNextLegPhase="ZONE_PRIORITY";
-         return -1;
+         double delta=lastMid-firstMid;
+         if(delta>0.0) return 1;
+         if(delta<0.0) return -1;
       }
    }
 
-   g_raceVNextLegPhase=RaceV2LegPhase(
-      anchorDirection,
-      flowDirection,
-      g_raceVNextStructureDirection,
-      g_raceVNextRejectionDirection
-   );
+   // Sparse-feed fallback: use only the already-captured live tick buffer.
+   int count=MathMin(g_tickCount,RequiredMomentumTicks());
+   if(count>=2)
+   {
+      double delta=g_ticks[count-1]-g_ticks[count-2];
+      if(delta>0.0) return 1;
+      if(delta<0.0) return -1;
+   }
 
-   int decision=RaceV2DecisionDirection(
-      anchorDirection,
-      flowDirection,
-      g_raceVNextStructureDirection,
-      g_raceVNextRejectionDirection,
-      g_raceVNextLegPhase,
-      g_raceVNextDecisionScore
-   );
+   return 0;
+}
 
-   if(decision!=0) return decision;
-   if(anchorDirection!=0) return anchorDirection;
-   if(momentum>0.0) return 1;
-   if(momentum<0.0) return -1;
-   return RaceM5CandleDirection();
+int RaceAnalysisDirection(double momentum)
+{
+   if(g_entryMode == ENTRY_BUY_ONLY) return 1;
+   if(g_entryMode == ENTRY_SELL_ONLY) return -1;
+
+   int direction=RaceLivePriceDirection();
+
+   // Keep the old analysis modules in the codebase for telemetry/exit logic,
+   // but they no longer participate in RACE entry side selection.
+   g_raceVNextFlowScore=0.0;
+   g_raceVNextStructureDirection=0;
+   g_raceVNextRejectionDirection=0;
+   g_raceVNextDecisionScore=(double)direction;
+   g_raceVNextLegPhase="LIVE_PRICE";
+
+   return direction;
 }
 
 double RaceMidProgressPoints(int direction)
