@@ -103,7 +103,7 @@ Assert-Contains $dashboard '/packages?system=cloud&renew=primary' 'primary renew
 # Fleet EA update must be a real delta, never a repeat button for an already-current Server.
 Assert-Contains $cloudUpdate 'fleetReleaseState(' 'Fleet update release-state classifier missing'
 Assert-Contains $cloudUpdate 'status.updateAvailable = status.outdated > 0' 'Fleet update availability must require at least one outdated EA'
-Assert-Contains $cloudUpdate '!instance.current_release_completed &&' 'Fleet update queue must exclude instances that already completed the exact version/hash release'
+Assert-NotContains $cloudUpdate 'current_release_completed' 'Historical completed Fleet jobs must not mask a rollback or same-version Build change'
 Assert-Contains $cloudUpdate 'this.fleetReleaseState(instance.metrics || {}, release) === "OUTDATED"' 'Fleet update queue must target only outdated EA instances'
 Assert-Contains $cloudUpdate 'EA บน Server นี้เป็นเวอร์ชันล่าสุดแล้ว ไม่มีอัปเดตที่ต้องปล่อย' 'Fleet update no-op server guard missing'
 Assert-Contains $cloudUpdate 'SUPERSEDED_BY_NEW_RELEASE' 'New Production EA must supersede stale WAITING_SAFE Fleet jobs'
