@@ -4058,14 +4058,22 @@ int CounterHarvestProfitablePositions()
       if(closeVolume<=0.0)
          continue;
 
-      if(ClosePositionVolumeByTicket(ticket,closeVolume,"SCNCounterProfit"))
+      // Closing is a broker request too. Pace it with the same COUNTER queue so
+      // many profitable tickets can never be dumped onto the trade server at once.
+      if(!CounterCanSendOrder())
+         return harvested;
+
+      bool closed=ClosePositionVolumeByTicket(ticket,closeVolume,"SCNCounterProfit");
+      CounterRegisterOrderRequest();
+      if(closed)
       {
          harvested++;
          g_executionStatus="COUNTER_PROFIT_CLOSE";
          g_lastCloseReason="COUNTER_PROFIT_CLOSE";
-         if(!hedging)
-            break;
       }
+
+      // One close request per pass, on both Hedging and Netting accounts.
+      break;
    }
 
    return harvested;
@@ -19453,11 +19461,12 @@ void ManageDynamicProtection()
       bool manualPosition=
          StringFind(positionComment,MANUAL_LIVE_COMMENT)>=0 ||
          StringFind(positionComment,LEGACY_BASKET_COMMENT)>=0;
+      bool counterPosition=StringFind(positionComment,"SaaSCounter")>=0;
       bool autoFamilyPosition=autoPosition || tacticalPosition;
 
-      // MANUAL means MANUAL: its broker SL, explicit money targets and explicit
-      // risk controls are the only owners. Never add hidden BE/ATR/EMA trailing.
-      if(manualPosition)
+      // MANUAL and COUNTER are explicit owners. COUNTER's contract is stricter:
+      // it must never receive any Broker SL/TP from dynamic protection.
+      if(manualPosition || counterPosition)
          continue;
 
       double marketPrice = direction > 0 ? tick.bid : tick.ask;
