@@ -63,6 +63,9 @@ Assert-Contains $service 'Worker STOP_CONFIRMED is required before rotating a bo
 # Worker commands and acknowledgements must carry the same generation.
 Assert-Contains $workerApi 'wc.execution_generation=bi.execution_generation' 'worker command generation filter missing'
 Assert-Contains $workerApi 'STALE_GENERATION' 'stale generation cancellation missing'
+Assert-Contains $schema "'STOP_INSTANCE','RELOAD_INSTANCE','REBUILD_INSTANCE'" 'Cloud runtime rebuild command schema missing'
+Assert-Contains $workerApi '"REBUILD_INSTANCE"' 'Worker API rebuild command support missing'
+Assert-Contains $workerApi '"REBUILD_CONFIRMED"' 'Worker API rebuild acknowledgement missing'
 Assert-Contains $workerApi "runtime_stop_state='STOP_CONFIRMED'" 'server STOP_CONFIRMED transition missing'
 Assert-Contains $workerApi 'Automatic release is disabled' 'automatic runner release must remain disabled in Phase 2'
 Assert-Contains $workerApi 'CLOUD_MEMBERSHIP_EXPIRED_RUNTIME_STOP' 'membership expiry hard-stop audit is missing'
