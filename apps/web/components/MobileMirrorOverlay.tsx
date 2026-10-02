@@ -67,6 +67,7 @@ export function MobileMirrorOverlay() {
   const [message, setMessage] = useState("");
   const [frame, setFrame] = useState<CardFrame>({ x: 24, y: 90, width: 260, height: 460 });
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const remoteStreamRef = useRef<MediaStream | null>(null);
   const peerRef = useRef<RTCPeerConnection | null>(null);
   const sessionRef = useRef<MirrorSession | null>(null);
   const handledOfferRevisionRef = useRef(0);
@@ -97,6 +98,12 @@ export function MobileMirrorOverlay() {
   useEffect(() => {
     sessionRef.current = session;
   }, [session]);
+
+  useEffect(() => {
+    if (!live || !videoRef.current || !remoteStreamRef.current) return;
+    videoRef.current.srcObject = remoteStreamRef.current;
+    void videoRef.current.play().catch(() => {});
+  }, [live]);
 
   useEffect(() => {
     if (!enabled || !pairing || !session) return;
@@ -131,10 +138,7 @@ export function MobileMirrorOverlay() {
           peer.ontrack = event => {
             if (cancelled) return;
             const stream = event.streams[0] || new MediaStream([event.track]);
-            if (videoRef.current) {
-              videoRef.current.srcObject = stream;
-              void videoRef.current.play().catch(() => {});
-            }
+            remoteStreamRef.current = stream;
             setLive(true);
             setPairing(false);
             setMessage("");
@@ -215,8 +219,8 @@ export function MobileMirrorOverlay() {
     setMessage("");
     handledOfferRevisionRef.current = 0;
 
-    const stream = videoRef.current?.srcObject as MediaStream | null;
-    stream?.getTracks().forEach(track => track.stop());
+    remoteStreamRef.current?.getTracks().forEach(track => track.stop());
+    remoteStreamRef.current = null;
     if (videoRef.current) videoRef.current.srcObject = null;
 
     peerRef.current?.close();
