@@ -1003,7 +1003,7 @@ export class BotController {
       drawdownMoney: 0,
       drawdownPercent: 0
     });
-    const controlModes = ["AUTO", "RACE", "FLIP_LOCK", "ZERO_GRID", "MANUAL"];
+    const controlModes = ["AUTO", "RACE", "COUNTER", "FLIP_LOCK", "ZERO_GRID", "MANUAL"];
 
     let tradeJournal = {
       stats: {
@@ -2931,7 +2931,7 @@ export class BotController {
         isBitcoinTradingSymbol(savedTradingSymbol)
       ) {
         throw new ConflictException(
-          "BTC/XBT รองรับ AUTO, RACE, FLIP LOCK และ MANUAL เท่านั้น · ZERO GRID ถูกบล็อกสำหรับ BTC"
+          "BTC/XBT รองรับ AUTO, RACE, COUNTER, FLIP LOCK และ MANUAL เท่านั้น · ZERO GRID ถูกบล็อกสำหรับ BTC"
         );
       }
       if (savedControlMode === "ZERO_GRID") {
@@ -3104,6 +3104,7 @@ export class BotController {
       "autoProfitTargetMoney",
       "raceCloseAllProfitMoney",
       "racePerPositionProfitMoney",
+      "counterPerPositionProfitMoney",
       "manualBasketProfitTargetMoney",
       "manualPerPositionProfitMoney",
       "zeroGridMinNetProfitMoney"
@@ -3172,6 +3173,8 @@ export class BotController {
     numberSetting("autoMaxPositions", 1, 100, true);
     numberSetting("raceLot", 0.01, 100);
     numberSetting("raceMaxPositions", 1, 100, true);
+    numberSetting("counterLot", 0.01, 100);
+    numberSetting("counterMaxPositions", 1, 100, true);
     numberSetting("flipLockLot", 0.01, 100);
     numberSetting("manualLot", 0.01, 100);
     numberSetting("manualMaxPositions", 1, 100, true);
@@ -3239,6 +3242,7 @@ export class BotController {
     booleanSetting("raceCloseAllProfitEnabled");
     numberSetting("raceCloseAllProfitMoney", 0.01, maxAccountMoney);
     numberSetting("racePerPositionProfitMoney", 0.01, maxAccountMoney);
+    numberSetting("counterPerPositionProfitMoney", 0.01, maxAccountMoney);
     if (body.raceProfitTargetMode !== undefined) {
       const raceProfitTargetMode = String(body.raceProfitTargetMode || "").toUpperCase();
       if (!["BASKET", "POSITION", "OFF"].includes(raceProfitTargetMode)) {
@@ -3346,6 +3350,7 @@ export class BotController {
     ).toUpperCase();
     const effectiveProfitProfileMode = requestedControlMode || (
       requestedEngineMode === "RACE" ? "RACE" :
+      requestedEngineMode === "COUNTER" ? "COUNTER" :
       requestedEngineMode === "ZERO_GRID" ? "ZERO_GRID" :
       requestedEngineMode === "AUTO" ? "AUTO" :
       storedControlMode === "ASSISTED" ? "MANUAL" : storedControlMode
@@ -3393,32 +3398,37 @@ export class BotController {
     clean.manualBasketProfitTargetMoney = manualBasketProfitTargetMoney;
     clean.manualPerPositionProfitMoney = manualPerPositionProfitMoney;
 
-    if (requestedControlMode !== null && !["AUTO", "RACE", "ZERO_GRID", "FLIP_LOCK", "ASSISTED", "MANUAL"].includes(requestedControlMode)) {
+    if (requestedControlMode !== null && !["AUTO", "RACE", "COUNTER", "ZERO_GRID", "FLIP_LOCK", "ASSISTED", "MANUAL"].includes(requestedControlMode)) {
       throw new BadRequestException("Control Mode ไม่ถูกต้อง");
     }
-    if (requestedEngineMode !== null && !["AUTO", "RACE", "ZERO_GRID"].includes(requestedEngineMode)) {
+    if (requestedEngineMode !== null && !["AUTO", "RACE", "COUNTER", "ZERO_GRID"].includes(requestedEngineMode)) {
       throw new BadRequestException("Engine Mode ไม่ถูกต้อง");
     }
 
-    // Canonical DB pair: never persist a stale ZERO/RACE engine next to another mode.
+    // Canonical DB pair: never persist a stale ZERO/RACE/COUNTER engine next to another mode.
     if (requestedControlMode !== null) {
       clean.controlMode = requestedControlMode;
       clean.engineMode = requestedControlMode === "ZERO_GRID"
         ? "ZERO_GRID"
         : requestedControlMode === "RACE"
           ? "RACE"
-          : "AUTO";
+          : requestedControlMode === "COUNTER"
+            ? "COUNTER"
+            : "AUTO";
     } else if (requestedEngineMode !== null) {
       clean.engineMode = requestedEngineMode;
       clean.controlMode = requestedEngineMode === "ZERO_GRID"
         ? "ZERO_GRID"
         : requestedEngineMode === "RACE"
           ? "RACE"
-          : "AUTO";
+          : requestedEngineMode === "COUNTER"
+            ? "COUNTER"
+            : "AUTO";
     }
 
     const activeProfileMode = requestedControlMode || (
       requestedEngineMode === "RACE" ? "RACE" :
+      requestedEngineMode === "COUNTER" ? "COUNTER" :
       requestedEngineMode === "ZERO_GRID" ? "ZERO_GRID" :
       requestedEngineMode === "AUTO" ? "AUTO" : null
     );
@@ -3450,6 +3460,15 @@ export class BotController {
         Number(currentSettings.dailyProfitTargetMoney || 0));
       // RACE owns ATR Stop only. The saved MANUAL points profile is preserved
       // but is ignored by the isolated RACE engine.
+    } else if (activeProfileMode === "COUNTER") {
+      clean.lot = storedNumber("counterLot", "lot", 0.01);
+      clean.maxPositions = Math.max(1, Math.trunc(storedNumber("counterMaxPositions", "maxPositions", 1)));
+      // COUNTER has no basket/daily risk controls. Runtime exits are per-position profit only.
+      clean.maxBasketLossMoney = 0;
+      clean.dailyLossMoney = 0;
+      clean.dailyProfitTargetMoney = 0;
+      clean.dailyProfitContinueAfterTarget = false;
+      clean.dailyProfitDrawdownPercent = 0;
     } else if (activeProfileMode === "FLIP_LOCK") {
       clean.lot = storedNumber("flipLockLot", "lot", 0.01);
       clean.maxPositions = 1;
@@ -3472,7 +3491,7 @@ export class BotController {
       (requestedControlMode === null && requestedEngineMode === "ZERO_GRID");
     if (zeroGridSelected && bitcoinTradingSymbol) {
       throw new BadRequestException(
-        "ZERO GRID ไม่รองรับ BTC/XBT · ใช้ AUTO, RACE, FLIP LOCK หรือ MANUAL"
+        "ZERO GRID ไม่รองรับ BTC/XBT · ใช้ AUTO, RACE, COUNTER, FLIP LOCK หรือ MANUAL"
       );
     }
     if (zeroGridSelected) {
@@ -3513,6 +3532,15 @@ export class BotController {
         clean.racePerPositionProfitMoney = 0.5;
     }
 
+    const counterSelected =
+      requestedControlMode === "COUNTER" ||
+      (requestedControlMode === null && requestedEngineMode === "COUNTER");
+    if (counterSelected &&
+        body.counterPerPositionProfitMoney === undefined &&
+        currentSettings.counterPerPositionProfitMoney === undefined) {
+      clean.counterPerPositionProfitMoney = 0.5;
+    }
+
     const autoSelected = effectiveProfitProfileMode === "AUTO";
     if (autoSelected) {
       // Runtime mirror: AUTO reads only its own persisted target.
@@ -3535,9 +3563,10 @@ export class BotController {
       clean.profitRunTrailPercent = 0;
     }
 
-    // RACE and ZERO GRID own their dedicated target fields. Clear the generic
+    // RACE, COUNTER and ZERO GRID own dedicated exit contracts. Clear the generic
     // mirror so a target from AUTO/MANUAL can never leak into those engines.
     if (effectiveProfitProfileMode === "RACE" ||
+        effectiveProfitProfileMode === "COUNTER" ||
         effectiveProfitProfileMode === "ZERO_GRID" ||
         effectiveProfitProfileMode === "FLIP_LOCK") {
       clean.profitTargetMode = "OFF";
