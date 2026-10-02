@@ -14307,7 +14307,12 @@ string TradeModeFromComment(string comment)
    if(StringFind(comment,AUTO_V20_LIVE_COMMENT)>=0 ||
       StringFind(comment,"SaaSTactical")>=0)
       return "AUTO";
+   if(StringFind(comment,"SaaSCounter")>=0)
+
+      return "COUNTER";
+
    if(StringFind(comment,"SaaSRace")>=0)
+
       return "RACE";
    if(StringFind(comment,FLIP_LOCK_LIVE_COMMENT)>=0 ||
       StringFind(comment,FLIP_LOCK_PENDING_COMMENT)>=0)
@@ -14365,13 +14370,14 @@ string TradeModeForDeal(ulong dealTicket)
 string DailyRiskMode()
 {
    if(BasketHasFlipLockPosition()) return "FLIP_LOCK";
+   if(BasketHasCounterPosition()) return "COUNTER";
    if(BasketHasRacePosition()) return "RACE";
    if(BasketHasAutoFamilyPosition()) return "AUTO";
    if(BasketHasManualPosition()) return "MANUAL";
    if(ZeroGridPositionCount()>0) return "ZERO_GRID";
 
    string mode=EffectiveExecutionMode();
-   if(mode=="RACE" || mode=="FLIP_LOCK" ||
+   if(mode=="RACE" || mode=="COUNTER" || mode=="FLIP_LOCK" ||
       mode=="MANUAL" || mode=="ZERO_GRID")
       return mode;
    return "AUTO";
@@ -14410,6 +14416,7 @@ double DailyClosedProfitForMode(string mode)
 {
    if(mode=="AUTO") return g_dailyClosedProfitAuto;
    if(mode=="RACE") return g_dailyClosedProfitRace;
+   if(mode=="COUNTER") return g_dailyClosedProfitCounter;
    if(mode=="FLIP_LOCK") return g_dailyClosedProfitFlipLock;
    if(mode=="MANUAL") return g_dailyClosedProfitManual;
    return 0.0;
@@ -17868,6 +17875,7 @@ void RecalculateDailyClosedProfit()
 {
    g_dailyClosedProfitAuto=0.0;
    g_dailyClosedProfitRace=0.0;
+   g_dailyClosedProfitCounter=0.0;
    g_dailyClosedProfitFlipLock=0.0;
    g_dailyClosedProfitManual=0.0;
    g_dailyClosedProfit=0.0;
@@ -17915,6 +17923,7 @@ void RecalculateDailyClosedProfit()
       string mode=TradeModeForDeal(deal);
       if(mode=="AUTO") g_dailyClosedProfitAuto+=net;
       else if(mode=="RACE") g_dailyClosedProfitRace+=net;
+      else if(mode=="COUNTER") g_dailyClosedProfitCounter+=net;
       else if(mode=="FLIP_LOCK") g_dailyClosedProfitFlipLock+=net;
       else if(mode=="MANUAL") g_dailyClosedProfitManual+=net;
    }
