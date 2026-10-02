@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.1.17"
-#define SCENOVA_EA_VERSION "1.1.17"
-#define SCENOVA_PRODUCT_VERSION "1.1.17"
+#property version   "1.1.18"
+#define SCENOVA_EA_VERSION "1.1.18"
+#define SCENOVA_PRODUCT_VERSION "1.1.18"
 #define SCENOVA_BUILD_ID "SOURCE"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_CONFIGURED_LOSS_ONLY_V1"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
@@ -3896,14 +3896,16 @@ int CounterPositionCount()
    return count;
 }
 
-int CounterFilledUnits()
+int CounterFilledUnitsByDirection(int direction)
 {
-   double baseVolume=NormalizeTradeVolume(g_lot);
-   if(baseVolume<=0.0)
-      return CounterPositionCount();
+   if(direction==0)
+      return 0;
 
+   long expectedType=direction>0 ? POSITION_TYPE_BUY : POSITION_TYPE_SELL;
+   double baseVolume=NormalizeTradeVolume(g_lot);
    double totalVolume=0.0;
    int positions=0;
+
    for(int i=PositionsTotal()-1;i>=0;i--)
    {
       ulong ticket=PositionGetTicket(i);
@@ -3911,11 +3913,16 @@ int CounterFilledUnits()
          continue;
       if(PositionGetString(POSITION_SYMBOL)!=_Symbol ||
          PositionGetInteger(POSITION_MAGIC)!=InpMagic ||
-         StringFind(PositionGetString(POSITION_COMMENT),"SaaSCounter")<0)
+         StringFind(PositionGetString(POSITION_COMMENT),"SaaSCounter")<0 ||
+         PositionGetInteger(POSITION_TYPE)!=expectedType)
          continue;
+
       totalVolume+=PositionGetDouble(POSITION_VOLUME);
       positions++;
    }
+
+   if(baseVolume<=0.0)
+      return positions;
 
    int volumeUnits=(int)MathRound(totalVolume/baseVolume);
    return MathMax(positions,MathMax(0,volumeUnits));
@@ -4084,9 +4091,11 @@ bool ProcessCounterFill(int direction)
    if(direction==0)
       return false;
 
-   if(CounterFilledUnits()>=g_maxPositions)
+   if(CounterFilledUnitsByDirection(direction)>=g_maxPositions)
    {
-      g_executionStatus="COUNTER_TARGET_FILLED";
+      g_executionStatus=direction>0
+         ? "COUNTER_BUY_SLOT_FULL"
+         : "COUNTER_SELL_SLOT_FULL";
       return true;
    }
 
@@ -4118,9 +4127,17 @@ bool ProcessCounterFill(int direction)
    bool accepted=SendCounterMarketOrder(direction);
    CounterRegisterOrderRequest();
    if(accepted)
-      g_executionStatus=CounterFilledUnits()>=g_maxPositions
-         ? "COUNTER_TARGET_FILLED"
-         : "COUNTER_FILLING";
+   {
+      int sideFilled=CounterFilledUnitsByDirection(direction);
+      if(sideFilled>=g_maxPositions)
+         g_executionStatus=direction>0
+            ? "COUNTER_BUY_SLOT_FULL"
+            : "COUNTER_SELL_SLOT_FULL";
+      else
+         g_executionStatus=direction>0
+            ? "COUNTER_FILLING_BUY"
+            : "COUNTER_FILLING_SELL";
+   }
    return accepted;
 }
 
@@ -4138,16 +4155,20 @@ bool ManageCounterMode()
       return true;
    }
 
-   if(CounterFilledUnits()>=g_maxPositions)
-   {
-      g_executionStatus="COUNTER_FULL_WAIT_PROFIT";
-      return true;
-   }
-
    int direction=CounterSignalDirection();
    if(direction==0)
    {
       g_executionStatus="COUNTER_PRICE_FLOW_WAIT";
+      return true;
+   }
+
+   // BUY and SELL own independent capacity. A full BUY side must never block
+   // a SELL fill, and a full SELL side must never block a BUY fill.
+   if(CounterFilledUnitsByDirection(direction)>=g_maxPositions)
+   {
+      g_executionStatus=direction>0
+         ? "COUNTER_BUY_SLOT_FULL"
+         : "COUNTER_SELL_SLOT_FULL";
       return true;
    }
 
