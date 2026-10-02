@@ -6679,6 +6679,10 @@ function BotSettingsModal(props:any) {
                     <label className="cc-bot-v2-field"><span><ScenovaIcon name="layers" size={17}/>จำนวนคำสั่งรอต่อฝั่ง</span><select className="input" value={String(Math.max(1,Math.min(30,Number(props.settings.zeroGridLevelsPerSide)||10)))} onChange={e=>props.onEdit?.("zeroGridLevelsPerSide",Number(e.target.value))}>{Array.from({length:30},(_,i)=>i+1).map(value=><option key={value} value={value}>{value} ระดับต่อฝั่ง</option>)}</select></label>
                     <div className="cc-bot-v2-field"><span><ScenovaIcon name="lot" size={17}/>Lot เริ่มต้น</span><div className="cc-bot-v2-readonly-control"><b>0.03 Lot</b></div></div>
                     <label className="cc-bot-v2-field"><span><ScenovaIcon name="profit" size={17}/>เป้ากำไรสุทธิ</span><MoneyInput value={props.settings.zeroGridMinNetProfitMoney || 0.5} currency={accountCurrency} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.("zeroGridMinNetProfitMoney",v)}/></label>
+                  </> : controlMode==="COUNTER" ? <>
+                    <label className="cc-bot-v2-field"><span><ScenovaIcon name="lot" size={17}/>Lot ต่อไม้</span><select className="input cc-bot-v19-two-thirds-control" value={String(activeLot)} onChange={e=>editModeSizing("lot",e.target.value)}>{[0.01,0.02,0.03,0.05,0.1,0.2,0.3,0.5,1].map(v=><option key={v} value={v}>{Number(v).toFixed(2)} Lot</option>)}</select></label>
+                    <label className="cc-bot-v2-field"><span><ScenovaIcon name="layers" size={17}/>จำนวนไม้</span><select className="input cc-bot-v19-two-thirds-control" value={String(activeMaxPositions)} onChange={e=>editModeSizing("max",e.target.value)}>{[1,2,3,4,5,6,7,8,9,10,12,15,20,25,30,50,75,100].map(v=><option key={v} value={v}>{v} ไม้</option>)}</select></label>
+                    <label className="cc-bot-v2-field"><span><ScenovaIcon name="profit" size={17}/>กำไรต่อไม้</span><MoneyInput value={counterPerPositionProfitMoney} currency={accountCurrency} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.("counterPerPositionProfitMoney",v)}/></label>
                   </> : <>
                     <label className="cc-bot-v2-field"><span><ScenovaIcon name="trend" size={17}/>ทิศทาง</span><select className="input cc-bot-v19-two-thirds-control" value={entryMode} onChange={e=>props.onEdit?.("entryMode",e.target.value)}><option value="AUTO_MOMENTUM">อัตโนมัติ</option><option value="BUY_ONLY">BUY</option><option value="SELL_ONLY">SELL</option></select></label>
                     {controlMode!=="FLIP_LOCK"&&<label className="cc-bot-v2-field"><span><ScenovaIcon name="layers" size={17}/>จำนวนไม้สูงสุด</span><select className="input cc-bot-v19-two-thirds-control" value={String(activeMaxPositions)} onChange={e=>editModeSizing("max",e.target.value)}>{[1,2,3,4,5,6,7,8,9,10,12,15,20,25,30,50,75,100].map(v=><option key={v} value={v}>{v} ไม้</option>)}</select></label>}
@@ -6691,7 +6695,9 @@ function BotSettingsModal(props:any) {
                     ? <div className="cc-bot-v2-engine-line"><ScenovaIcon name="spark" size={16}/><b>AUTO · Shared Zone Brain</b><span>Demand/Supply + Reaction เป็นแกนเข้าออเดอร์ร่วมกับ MANUAL · AUTO วาง SL/TP และจัดการ Position ของ AUTO เอง</span></div>
                     : controlMode==="MANUAL"
                       ? <div className="cc-bot-v2-engine-line"><ScenovaIcon name="settings" size={16}/><b>MANUAL · Shared Zone Brain</b><span>ใช้สมองเข้าเดียวกับ AUTO แต่ Lot / จำนวนไม้ / Stop / Profit เป็นค่าของ MANUAL · AUTO V20 จะไม่เข้ามาแก้ Position นี้</span></div>
-                      : <div className="cc-bot-v2-engine-line"><ScenovaIcon name="spark" size={16}/><b>การเพิ่มสถานะอัตโนมัติ</b><span>EA กระจายจังหวะเพิ่มสถานะตาม ATR และแรงเคลื่อนไหวของตลาด</span></div>)}</div>
+                      : controlMode==="COUNTER"
+                        ? <div className="cc-bot-v2-engine-line"><ScenovaIcon name="trend" size={16}/><b>COUNTER · กฎเดียว</b><span>กราฟขึ้นเปิด SELL · กราฟลงเปิด BUY · ค่อย ๆ เติมทีละไม้ตามระบบ pacing · ไม่มีตัวกรองการตัดสินใจอื่น</span></div>
+                        : <div className="cc-bot-v2-engine-line"><ScenovaIcon name="spark" size={16}/><b>การเพิ่มสถานะอัตโนมัติ</b><span>EA กระจายจังหวะเพิ่มสถานะตาม ATR และแรงเคลื่อนไหวของตลาด</span></div>)}</div>
               </section>
 
               {(controlMode==="AUTO"||controlMode==="RACE"||controlMode==="MANUAL")&&(
@@ -6726,7 +6732,7 @@ function BotSettingsModal(props:any) {
               </section>
               )}
 
-              {controlMode!=="ZERO_GRID"&&(
+              {controlMode!=="ZERO_GRID"&&controlMode!=="COUNTER"&&(
               <section className="cc-bot-v2-panel">
                 <div className="cc-bot-v2-section-title compact"><span>04</span><div><b>Risk Controls</b></div></div>
                 <div className="cc-bot-v2-limit-grid">
@@ -6755,14 +6761,15 @@ function BotSettingsModal(props:any) {
               </dl> : (
               <dl>
                 <div><dt>Symbol</dt><dd>{props.symbol || "—"}</dd></div>
-                <div><dt>ทิศทาง</dt><dd>{directionLabel}</dd></div>
+                <div><dt>ทิศทาง</dt><dd>{controlMode==="COUNTER" ? "กราฟขึ้น → SELL · กราฟลง → BUY" : directionLabel}</dd></div>
                 <div><dt>การเปิดไม้</dt><dd>{controlMode==="FLIP_LOCK" ? "1 Position · "+activeLot.toFixed(2)+" Lot" : activeMaxPositions+" × "+activeLot.toFixed(2)+" Lot"}</dd></div>
                 <div><dt>เป้ากำไร</dt><dd>{exitLabel}</dd></div>
                 <div><dt>Stop Loss</dt><dd>{slLabel}</dd></div>
                 <div><dt>EA Sync</dt><dd className="good">{props.syncLabel || "พร้อมส่งค่า"}</dd></div>
               </dl>
               )}
-              {controlMode!=="ZERO_GRID"&&<div className="cc-bot-v2-summary-note"><ScenovaIcon name="brain" size={17}/><span><b>การวิเคราะห์ 5 กรอบเวลา</b><small>แนวรับ–แนวต้าน · Order Block · Fibonacci · Momentum</small></span></div>}
+              {controlMode!=="ZERO_GRID"&&controlMode!=="COUNTER"&&<div className="cc-bot-v2-summary-note"><ScenovaIcon name="brain" size={17}/><span><b>การวิเคราะห์ 5 กรอบเวลา</b><small>แนวรับ–แนวต้าน · Order Block · Fibonacci · Momentum</small></span></div>}
+              {controlMode==="COUNTER"&&<div className="cc-bot-v2-summary-note"><ScenovaIcon name="trend" size={17}/><span><b>กฎเดียว</b><small>กราฟขึ้น SELL · กราฟลง BUY · เติมทีละไม้ · ปิดแต่ละไม้เมื่อถึงกำไรที่ตั้ง</small></span></div>}
             </aside>
           </div>
         </div>
