@@ -1,14 +1,13 @@
 #ifndef SCENOVA_FLIP_LOCK_V1_MQH
 #define SCENOVA_FLIP_LOCK_V1_MQH
 
-// FLIP LOCK V6.2 is a local one-position protected-profit engine:
+// FLIP LOCK V6.2.1 is a local one-position protected-profit engine:
 //   1 FLIP-owned market position, no pre-placed opposite STOP order.
-// The starter keeps its wide ATR/spread Safety Stop until estimated NET profit
-// reaches the configured +0.30 floor and that floor is broker-legal. The first
-// armed SL jumps only to that protected-profit price; subsequent SL movement
-// uses the normal Spread/ATR trail without SaaS price/commands. Server state
-// controls NEW risk only.
-#define FLIP_LOCK_V1_VERSION "6.2.0"
+// The starter keeps its wide ATR/spread Safety Stop until estimated current NET
+// profit reaches +0.30. That threshold only ARMS protection: the first SL moves
+// to a cost-aware entry lock just beyond breakeven, then normal Spread/ATR
+// trailing continues without SaaS price/commands. Server state controls NEW risk.
+#define FLIP_LOCK_V1_VERSION "6.2.1"
 #define FLIP_LOCK_PENDING_COMMENT "SCNFlipLock"
 #define FLIP_LOCK_LIVE_COMMENT "SCNFlipLockLive"
 #define FLIP_LOCK_FLAT_PENDING_GRACE_SECONDS 2
@@ -216,7 +215,7 @@ double FlipLockEntryCommissionCost(const ulong positionTicket)
    return cost;
 }
 
-double FlipLockMinimumNetProfitStopPrice(
+double FlipLockProtectedEntryStopPrice(
    const ulong positionTicket,
    const int direction,
    const double volume,
@@ -230,10 +229,6 @@ double FlipLockMinimumNetProfitStopPrice(
 
    double swap=PositionGetDouble(POSITION_SWAP);
    double entryCommission=FlipLockEntryCommissionCost(positionTicket);
-
-   // Most commission brokers charge the closing side similarly to the entry
-   // side. Reserving the observed entry commission again prevents a chart-level
-   // "winner" from closing negative after the exit commission is booked.
    double estimatedExitCommission=entryCommission;
 
    double tickSize=SymbolInfoDouble(_Symbol,SYMBOL_TRADE_TICK_SIZE);
@@ -258,18 +253,17 @@ double FlipLockMinimumNetProfitStopPrice(
    if(oneTickGross<=0.0)
       return 0.0;
 
-   // Guarantee the requested +0.30 in account currency after observed entry
-   // commission, estimated closing commission, current Swap and a small
-   // adverse-fill allowance. This is a protection floor, not a profit target.
+   // +0.30 is only the ARM trigger. The first broker SL itself needs only to
+   // clear trading costs, current swap, the slippage reserve and one extra
+   // tradable tick so it sits beyond entry without forcing a tight +0.30 stop.
    double requiredGross=
-      FLIP_LOCK_MIN_NET_PROFIT_MONEY+
       entryCommission+
       estimatedExitCommission-
       swap;
-   requiredGross=MathMax(FLIP_LOCK_MIN_NET_PROFIT_MONEY,requiredGross);
+   requiredGross=MathMax(0.0,requiredGross);
 
    double requiredTicks=MathCeil(requiredGross/oneTickGross);
-   requiredTicks+=FLIP_LOCK_SLIPPAGE_BUFFER_TICKS;
+   requiredTicks+=FLIP_LOCK_SLIPPAGE_BUFFER_TICKS+1.0;
    requiredTicks=MathMax(1.0,requiredTicks);
 
    double floorPrice=direction>0
@@ -299,7 +293,7 @@ bool FlipLockProfitLockReady(
    if(estimatedNet+0.00000001<FLIP_LOCK_MIN_NET_PROFIT_MONEY)
       return false;
 
-   double floor=FlipLockMinimumNetProfitStopPrice(
+   double floor=FlipLockProtectedEntryStopPrice(
       positionTicket,
       direction,
       volume,
@@ -308,8 +302,8 @@ bool FlipLockProfitLockReady(
    if(floor<=0.0)
       return false;
 
-   // Arm only when the trade is already above the requested NET threshold and
-   // the broker can legally place that protected-profit floor beyond entry.
+   // +0.30 is the current-profit trigger only. Once reached, arm as soon as
+   // the broker can legally place the cost-aware stop just beyond entry.
    double minimum=FlipLockBrokerMinDistancePoints()*_Point;
    if(direction>0)
       return floor>openPrice && floor<=tick.bid-minimum;
@@ -672,15 +666,15 @@ bool FlipLockSyncBaton(
    if(!PositionSelectByTicket(positionTicket)) return false;
 
    double openPrice=PositionGetDouble(POSITION_PRICE_OPEN);
-   double netProfitFloor=FlipLockMinimumNetProfitStopPrice(
+   double protectedEntryFloor=FlipLockProtectedEntryStopPrice(
       positionTicket,
       direction,
       positionVolume,
       openPrice
    );
-   if(netProfitFloor<=0.0)
+   if(protectedEntryFloor<=0.0)
    {
-      g_flipLockReason="WAIT_NET_PROFIT_FLOOR";
+      g_flipLockReason="WAIT_ENTRY_PROTECTION_FLOOR";
       g_executionStatus="FLIP_LOCK_WAIT_NET_PROFIT_LOCK";
       return true;
    }
@@ -705,10 +699,10 @@ bool FlipLockSyncBaton(
          return true;
       }
 
-      // First arm: jump only to the protected NET +0.30 floor above/below entry.
-      // Do not hug the current quote. Normal Spread/ATR trailing starts after
-      // this floor has been placed successfully.
-      candidate=netProfitFloor;
+      // First arm: +0.30 has already been reached at the current quote.
+      // Move only to the cost-aware entry lock; normal Spread/ATR trailing
+      // begins after this first broker-side protection is placed.
+      candidate=protectedEntryFloor;
    }
    else
    {
@@ -720,12 +714,12 @@ bool FlipLockSyncBaton(
          return false;
       }
 
-      // Once armed, never allow the normal trail to give back the protected
-      // NET-profit floor.
+      // Once armed, never allow the normal trail to fall back through the
+      // protected entry lock.
       if(direction>0)
-         candidate=MathMax(candidate,netProfitFloor);
+         candidate=MathMax(candidate,protectedEntryFloor);
       else
-         candidate=MathMin(candidate,netProfitFloor);
+         candidate=MathMin(candidate,protectedEntryFloor);
    }
 
    if(!FlipLockTriggerIsLegal(direction,candidate,tick))
@@ -761,7 +755,7 @@ bool FlipLockSyncBaton(
 
    // No artificial time throttle: when the normal Spread/ATR trail improves by
    // a tradable tick, synchronize the broker SL. The first arm above uses only
-   // the protected-profit floor and therefore cannot jump unnecessarily close.
+   // the protected entry lock and therefore cannot jump unnecessarily close.
    if(stopImproved)
    {
       if(!FlipLockSetPositionStop(positionTicket,trigger))
