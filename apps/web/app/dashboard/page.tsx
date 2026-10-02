@@ -6335,7 +6335,7 @@ function BotSettingsModal(props:any) {
     AUTO:{title:"AUTO · VECTOR EDGE",subtitle:"Vector Edge / V20 เป็นเจ้าของเฉพาะ Position ที่ AUTO เปิดเอง · Lot ต่อไม้ใช้ค่าที่ตั้งแบบตายตัว · ไม่รับช่วง Position จากโหมดอื่น"},
     FLIP_LOCK:{title:"FLIP LOCK",subtitle:"M1 เท่านั้น · เปิด 1 Position พร้อม Safety SL · พอล็อกกำไรได้แล้ว SL จะตามราคาปัจจุบันห่าง 100 จุดและไม่ถอยกลับ · Lot คงที่ ไม่มี Martingale"},
     RACE:{title:"RACE",subtitle:"เพิ่มความถี่ในการเปิดสถานะเพื่อให้ครบจำนวนที่กำหนดเร็วขึ้น โดยแยกการบริหารรอบจากโหมดอัตโนมัติ"},
-    COUNTER:{title:"COUNTER",subtitle:"กราฟขึ้นเปิด SELL · กราฟลงเปิด BUY · ค่อย ๆ เติมทีละไม้ · ไม่มี Stop Loss"},
+    COUNTER:{title:"COUNTER",subtitle:"กราฟขึ้นเปิด SELL · กราฟลงเปิด BUY · BUY/SELL แยก Slot กัน · ไม่มี Stop Loss"},
     ZERO_GRID:{title:"ZERO GRID",subtitle:"วางคำสั่ง BUY STOP และ SELL STOP แบบสมมาตร รองรับ 1–30 ระดับต่อฝั่ง"},
     MANUAL:{title:"MANUAL",subtitle:"ใช้สมองเข้าเดียวกับ AUTO: Demand/Supply + Reaction + โครงสร้างตลาด แต่ Lot / จำนวนไม้ / Stop / Profit ใช้ค่าที่ผู้ใช้กำหนดเอง"}
   };
@@ -6395,12 +6395,12 @@ function BotSettingsModal(props:any) {
       title:"COUNTER",
       icon:"trend",
       systemType:"Inverse Live Price Flow · ไม่มีตัวกรองกลยุทธ์อื่น",
-      sizing:"Fixed Lot ต่อไม้ · เติมทีละคำสั่งด้วย pacing ภายในระบบ",
+      sizing:"Fixed Lot ต่อไม้ · BUY/SELL มีจำนวนไม้ต่อฝั่งแยกกัน · เติมทีละคำสั่งด้วย pacing ภายในระบบ",
       exitStyle:"Per-position Profit เท่านั้น · ไม่มี Stop Loss / Basket Exit",
-      workflow:"ดูการเคลื่อนของราคา Bid แบบเดียวกับ live flow ของ RACE แต่กลับด้านตรง ๆ: กราฟขึ้นเปิด SELL และกราฟลงเปิด BUY จากนั้นค่อย ๆ เติมจนถึงจำนวนไม้ที่ตั้ง",
+      workflow:"ดูการเคลื่อนของราคา Bid แบบเดียวกับ live flow ของ RACE แต่กลับด้านตรง ๆ: กราฟขึ้นเปิด SELL และกราฟลงเปิด BUY · แต่ละฝั่งเติมได้ถึงจำนวนไม้ต่อฝั่งที่ตั้ง ดังนั้น BUY เต็มจะไม่บล็อก SELL และ SELL เต็มจะไม่บล็อก BUY",
       good:"โหมดนี้ทำตามกฎสวนราคาแบบตรง ๆ โดยไม่มี EMA, ATR, Structure, Volume หรือ Confidence มาช่วยเลือกทิศ",
       caution:"ไม่มี Stop Loss และไม่มีตัวกรองความเสี่ยงของโหมดอื่น ขาดทุนของไม้ที่ยังไม่ถึงกำไรสามารถค้างและเพิ่มขึ้นได้",
-      remember:"COUNTER = ขึ้น SELL · ลง BUY · ปิดเมื่อกำไรต่อไม้ถึงเป้า",
+      remember:"COUNTER = ขึ้น SELL · ลง BUY · BUY/SELL แยก Slot · ปิดเมื่อกำไรต่อไม้ถึงเป้า",
       capital:{
         minimum:"—",
         balanced:"—",
@@ -6681,7 +6681,7 @@ function BotSettingsModal(props:any) {
                     <label className="cc-bot-v2-field"><span><ScenovaIcon name="profit" size={17}/>เป้ากำไรสุทธิ</span><MoneyInput value={props.settings.zeroGridMinNetProfitMoney || 0.5} currency={accountCurrency} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.("zeroGridMinNetProfitMoney",v)}/></label>
                   </> : controlMode==="COUNTER" ? <>
                     <label className="cc-bot-v2-field"><span><ScenovaIcon name="lot" size={17}/>Lot ต่อไม้</span><select className="input cc-bot-v19-two-thirds-control" value={String(activeLot)} onChange={e=>editModeSizing("lot",e.target.value)}>{[0.01,0.02,0.03,0.05,0.1,0.2,0.3,0.5,1].map(v=><option key={v} value={v}>{Number(v).toFixed(2)} Lot</option>)}</select></label>
-                    <label className="cc-bot-v2-field"><span><ScenovaIcon name="layers" size={17}/>จำนวนไม้</span><select className="input cc-bot-v19-two-thirds-control" value={String(activeMaxPositions)} onChange={e=>editModeSizing("max",e.target.value)}>{[1,2,3,4,5,6,7,8,9,10,12,15,20,25,30,50,75,100].map(v=><option key={v} value={v}>{v} ไม้</option>)}</select></label>
+                    <label className="cc-bot-v2-field"><span><ScenovaIcon name="layers" size={17}/>จำนวนไม้ต่อฝั่ง</span><select className="input cc-bot-v19-two-thirds-control" value={String(activeMaxPositions)} onChange={e=>editModeSizing("max",e.target.value)}>{[1,2,3,4,5,6,7,8,9,10,12,15,20,25,30,50,75,100].map(v=><option key={v} value={v}>{v} ไม้</option>)}</select></label>
                     <label className="cc-bot-v2-field"><span><ScenovaIcon name="profit" size={17}/>กำไรต่อไม้</span><MoneyInput value={counterPerPositionProfitMoney} currency={accountCurrency} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.("counterPerPositionProfitMoney",v)}/></label>
                   </> : <>
                     <label className="cc-bot-v2-field"><span><ScenovaIcon name="trend" size={17}/>ทิศทาง</span><select className="input cc-bot-v19-two-thirds-control" value={entryMode} onChange={e=>props.onEdit?.("entryMode",e.target.value)}><option value="AUTO_MOMENTUM">อัตโนมัติ</option><option value="BUY_ONLY">BUY</option><option value="SELL_ONLY">SELL</option></select></label>
@@ -6696,7 +6696,7 @@ function BotSettingsModal(props:any) {
                     : controlMode==="MANUAL"
                       ? <div className="cc-bot-v2-engine-line"><ScenovaIcon name="settings" size={16}/><b>MANUAL · Shared Zone Brain</b><span>ใช้สมองเข้าเดียวกับ AUTO แต่ Lot / จำนวนไม้ / Stop / Profit เป็นค่าของ MANUAL · AUTO V20 จะไม่เข้ามาแก้ Position นี้</span></div>
                       : controlMode==="COUNTER"
-                        ? <div className="cc-bot-v2-engine-line"><ScenovaIcon name="trend" size={16}/><b>COUNTER · กฎเดียว</b><span>กราฟขึ้นเปิด SELL · กราฟลงเปิด BUY · ค่อย ๆ เติมทีละไม้ตามระบบ pacing · ไม่มีตัวกรองการตัดสินใจอื่น</span></div>
+                        ? <div className="cc-bot-v2-engine-line"><ScenovaIcon name="trend" size={16}/><b>COUNTER · กฎเดียว</b><span>กราฟขึ้นเปิด SELL · กราฟลงเปิด BUY · BUY/SELL แยก Slot ตามจำนวนไม้ต่อฝั่ง · ค่อย ๆ เติมทีละไม้ตามระบบ pacing · ไม่มีตัวกรองการตัดสินใจอื่น</span></div>
                         : <div className="cc-bot-v2-engine-line"><ScenovaIcon name="spark" size={16}/><b>การเพิ่มสถานะอัตโนมัติ</b><span>EA กระจายจังหวะเพิ่มสถานะตาม ATR และแรงเคลื่อนไหวของตลาด</span></div>)}</div>
               </section>
 
@@ -6769,7 +6769,7 @@ function BotSettingsModal(props:any) {
               </dl>
               )}
               {controlMode!=="ZERO_GRID"&&controlMode!=="COUNTER"&&<div className="cc-bot-v2-summary-note"><ScenovaIcon name="brain" size={17}/><span><b>การวิเคราะห์ 5 กรอบเวลา</b><small>แนวรับ–แนวต้าน · Order Block · Fibonacci · Momentum</small></span></div>}
-              {controlMode==="COUNTER"&&<div className="cc-bot-v2-summary-note"><ScenovaIcon name="trend" size={17}/><span><b>กฎเดียว</b><small>กราฟขึ้น SELL · กราฟลง BUY · เติมทีละไม้ · ปิดแต่ละไม้เมื่อถึงกำไรที่ตั้ง</small></span></div>}
+              {controlMode==="COUNTER"&&<div className="cc-bot-v2-summary-note"><ScenovaIcon name="trend" size={17}/><span><b>กฎเดียว</b><small>กราฟขึ้น SELL · กราฟลง BUY · BUY/SELL แยก Slot · เติมทีละไม้ · ปิดแต่ละไม้เมื่อถึงกำไรที่ตั้ง</small></span></div>}
             </aside>
           </div>
         </div>
