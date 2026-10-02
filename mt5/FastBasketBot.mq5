@@ -13730,6 +13730,40 @@ bool SharedZoneReactionCandidate(
    return true;
 }
 
+bool AutoV20ZoneStructureIntact(int direction)
+{
+   if(direction==0)
+      return false;
+
+   MqlTick tick;
+   if(!SymbolInfoTick(_Symbol,tick))
+      return false;
+
+   double atrPrice=MathMax(
+      _Point*12.0,
+      AverageTrueRangePoints(PERIOD_M5,g_atrPeriod)*_Point
+   );
+   double price=(tick.bid+tick.ask)*0.5;
+   double breakTolerance=atrPrice*0.18;
+
+   // For the first four AUTO positions, Demand/Supply is the structural guard,
+   // not a stack of confidence/progress filters. If no active zone is available,
+   // preserve the shared-brain opportunity instead of inventing a new veto.
+   if(direction>0 &&
+      g_demandZoneScore>=50.0 &&
+      g_demandZoneLow>0.0 &&
+      g_demandZoneHigh>=g_demandZoneLow)
+      return price>=g_demandZoneLow-breakTolerance;
+
+   if(direction<0 &&
+      g_supplyZoneScore>=50.0 &&
+      g_supplyZoneLow>0.0 &&
+      g_supplyZoneHigh>=g_supplyZoneLow)
+      return price<=g_supplyZoneHigh+breakTolerance;
+
+   return true;
+}
+
 void PublishSharedZoneEntry(int direction,double score)
 {
    g_entryModel=direction>0 ? "ZONE_FIRST_DEMAND" : "ZONE_FIRST_SUPPLY";
@@ -14801,6 +14835,7 @@ int AutoV20PrecisionDirection(double momentum)
    g_autoV20LastMomentum=momentum;
 
    int count=BasketPositionCount();
+   bool relaxedFirstFour=count<4;
    int basketDirection=count>0 ? BasketDirection() : 0;
    int preliminary=
       g_autoV20Buy.confidence>g_autoV20Sell.confidence ? 1 :
@@ -14836,24 +14871,27 @@ int AutoV20PrecisionDirection(double momentum)
       selected=direction>0 ? g_autoV20Buy : g_autoV20Sell;
    }
 
-   // Demand/Supply + reaction is a direct first-entry trigger. Away from a
-   // live zone, keep a moderate quality floor. Adds remain strict.
-   double minimumConfidence=count>0 ? 62.0 : 54.0;
-   double minimumRank=count>0 ? 66.0 : 56.0;
-   if(g_marketRegime=="HIGH_VOLATILITY")
+   // Positions 1-4 are intentionally opportunity-first. Demand/Supply plus the
+   // shared brain provides the direction, while confidence/rank remains
+   // telemetry. Position 5+ keeps the previous stricter quality policy.
+   if(!relaxedFirstFour)
    {
-      minimumConfidence+=count>0 ? 3.0 : 2.0;
-      minimumRank+=count>0 ? 3.0 : 2.0;
-   }
-   else if(g_marketRegime=="RANGE")
-      minimumRank+=count>0 ? 2.0 : 1.0;
+      double minimumConfidence=62.0;
+      double minimumRank=66.0;
+      if(g_marketRegime=="HIGH_VOLATILITY")
+      {
+         minimumConfidence+=3.0;
+         minimumRank+=3.0;
+      }
+      else if(g_marketRegime=="RANGE")
+         minimumRank+=2.0;
 
-   if(!sharedZoneFirst &&
-      (selected.confidence<minimumConfidence || selected.rankScore<minimumRank))
-   {
-      g_autoV20RejectReason="CENTRAL_SCORE_NOT_READY";
-      g_adaptiveBlockReason="AUTO_V20_WAIT_QUALITY";
-      return 0;
+      if(selected.confidence<minimumConfidence || selected.rankScore<minimumRank)
+      {
+         g_autoV20RejectReason="CENTRAL_SCORE_NOT_READY";
+         g_adaptiveBlockReason="AUTO_V20_WAIT_QUALITY";
+         return 0;
+      }
    }
 
    if(sharedZoneFirst)
@@ -14872,26 +14910,39 @@ int AutoV20PrecisionDirection(double momentum)
    {
       AutoV21ApplyNoIncreaseLotCap(selected);
       if(direction>0) g_autoV20Buy=selected; else g_autoV20Sell=selected;
-      double atrPoints=MathMax(10.0,
-         AverageTrueRangePoints(PERIOD_M5,g_atrPeriod));
-      double progress=BasketFavorableProgressPoints(direction);
-      AUTO_V20_PULLBACK pb;
-      AutoV20EvaluatePullback(direction,momentum,pb);
-      double required=MathMax(2.0,atrPoints*0.08);
 
-      // Never average down in Precision AUTO. An add requires either favorable
-      // progress from the latest fill or a completed pullback that has resumed,
-      // and the current price may not be meaningfully adverse to the last fill.
-      if(progress<0.0 || (progress<required && !pb.resumed))
+      if(relaxedFirstFour)
       {
-         g_autoV20RejectReason="ADD_NEEDS_FAVORABLE_PROGRESS";
-         g_autoV20AddReason="WAIT_PROGRESS_OR_PULLBACK_RESUME";
-         g_adaptiveBlockReason="AUTO_V20_WAIT_ADD";
-         return 0;
+         if(!AutoV20ZoneStructureIntact(direction))
+         {
+            g_autoV20RejectReason="ACTIVE_ZONE_STRUCTURE_BROKEN";
+            g_autoV20AddReason="WAIT_ZONE_STRUCTURE";
+            g_adaptiveBlockReason="AUTO_V20_WAIT_ZONE_STRUCTURE";
+            return 0;
+         }
+         g_autoV20AddReason="ZONE_STRUCTURE_INTACT_RELAXED_1_4";
       }
-      g_autoV20AddReason=progress>=required
-         ? "FAVORABLE_PROGRESS"
-         : "UNIFIED_PULLBACK_RESUME";
+      else
+      {
+         double atrPoints=MathMax(10.0,
+            AverageTrueRangePoints(PERIOD_M5,g_atrPeriod));
+         double progress=BasketFavorableProgressPoints(direction);
+         AUTO_V20_PULLBACK pb;
+         AutoV20EvaluatePullback(direction,momentum,pb);
+         double required=MathMax(2.0,atrPoints*0.08);
+
+         // Position 5+ keeps the previous anti-average-down behavior.
+         if(progress<0.0 || (progress<required && !pb.resumed))
+         {
+            g_autoV20RejectReason="ADD_NEEDS_FAVORABLE_PROGRESS";
+            g_autoV20AddReason="WAIT_PROGRESS_OR_PULLBACK_RESUME";
+            g_adaptiveBlockReason="AUTO_V20_WAIT_ADD";
+            return 0;
+         }
+         g_autoV20AddReason=progress>=required
+            ? "FAVORABLE_PROGRESS"
+            : "UNIFIED_PULLBACK_RESUME";
+      }
 
       selected.aggregateRiskMoney=AutoV20AggregateRiskAtStop(
          direction,
@@ -14920,10 +14971,10 @@ int AutoV20PrecisionDirection(double momentum)
 
    string vectorLiveReason="NONE";
    bool vectorLiveAllowed=AutoVectorEdgeLiveAllow(direction,vectorLiveReason);
-   if(!vectorLiveAllowed && count>0)
+   if(!vectorLiveAllowed && !relaxedFirstFour)
    {
-      // Vector Edge remains a hard guard for additional positions, but does
-      // not veto a valid first entry already confirmed by the shared brain.
+      // Vector Edge stays a strict add guard from position 5 onward. Positions
+      // 1-4 follow the shared Demand/Supply structure without duplicate vetoes.
       g_autoV20RejectReason=vectorLiveReason;
       g_adaptiveBlockReason="AUTO_VECTOR_EDGE_WAIT";
       g_cachedAdaptiveDirection=0;
@@ -15040,6 +15091,22 @@ double AutoV21PerOrderRiskBudgetMoney()
 bool AutoV21RiskBudgetAllows(AUTO_V20_SIDE &side,int existingCount,string &reasonOut)
 {
    reasonOut="NONE";
+
+   if(existingCount<4)
+   {
+      double visibleBasketLimit=EffectiveBasketLossLimit();
+      double projectedRisk=existingCount>0
+         ? side.aggregateRiskMoney
+         : side.expectedLossMoney;
+      if(visibleBasketLimit>0.0 &&
+         projectedRisk>visibleBasketLimit+0.0000001)
+      {
+         reasonOut="AUTO_VISIBLE_BASKET_RISK_LIMIT";
+         return false;
+      }
+      return true;
+   }
+
    double perOrderBudget=AutoV21PerOrderRiskBudgetMoney();
    if(side.expectedLossMoney>perOrderBudget+0.0000001)
    {
@@ -19230,13 +19297,39 @@ bool SendMarketOrder(int direction) /* V9_RETRY */
          _Point*2.0,
          MathMax((tick.ask-tick.bid)*1.50,atrPrice*0.18)
       );
+      bool hardMoneyProfitTarget=g_basketProfitTarget>0.0;
       if(MathAbs(entryPrice-autoPlan.entryPrice)>executionMoveTolerance)
       {
+         // Do one bounded AUTO-only re-plan at the live quote. This keeps the
+         // Broker SL/TP tied to the current price instead of discarding a valid
+         // Demand/Supply opportunity just because the quote moved quickly.
          g_executionStatus="AUTO_V20_PRICE_MOVED_REEVALUATE";
-         return false;
+         AutoV20PlanPrices(autoPlan,g_autoV20Levels);
+         AutoV21ApplyNoIncreaseLotCap(autoPlan);
+         if(positionsBefore>0)
+         {
+            autoPlan.aggregateRiskMoney=AutoV20AggregateRiskAtStop(
+               direction,
+               g_autoV20BasketStopPrice>0.0
+                  ? g_autoV20BasketStopPrice
+                  : autoPlan.slPrice,
+               autoPlan.plannedLot
+            )+autoPlan.knownCostMoney;
+         }
+
+         string replanRiskReason="NONE";
+         if(!AutoV21RiskBudgetAllows(autoPlan,positionsBefore,replanRiskReason))
+         {
+            g_autoV20RejectReason=replanRiskReason;
+            g_adaptiveBlockReason="AUTO_V21_RISK_BUDGET";
+            return false;
+         }
+
+         if(direction>0) g_autoV20Buy=autoPlan;
+         else g_autoV20Sell=autoPlan;
+         request.volume=autoPlan.plannedLot;
       }
 
-      bool hardMoneyProfitTarget=g_basketProfitTarget>0.0;
       request.sl=autoPlan.slPrice;
       request.tp=hardMoneyProfitTarget ? 0.0 : autoPlan.tpPrice;
       if(positionsBefore>0)
