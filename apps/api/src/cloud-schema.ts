@@ -441,12 +441,14 @@ CREATE TABLE IF NOT EXISTS ea_releases (
  version varchar(32) NOT NULL,
  sha256 varchar(64) NOT NULL,
  runtime_contract varchar(96),
+ build_id varchar(64),
  artifact_name varchar(120) NOT NULL DEFAULT 'FastBasketBot.ex5',
  source_commit varchar(64),
  created_at timestamptz NOT NULL DEFAULT now(),
  UNIQUE(version,sha256)
 );
 ALTER TABLE ea_releases ADD COLUMN IF NOT EXISTS artifact_bytes bytea;
+ALTER TABLE ea_releases ADD COLUMN IF NOT EXISTS build_id varchar(64);
 CREATE TABLE IF NOT EXISTS server_update_jobs (
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
  runner_id varchar(120) NOT NULL REFERENCES worker_nodes(runner_id) ON DELETE CASCADE,
@@ -471,8 +473,10 @@ CREATE TABLE IF NOT EXISTS instance_update_jobs (
  source_instance_update_id uuid REFERENCES instance_update_jobs(id) ON DELETE SET NULL,
  target_version varchar(32) NOT NULL,
  target_sha256 varchar(64),
+ target_build_id varchar(64),
  previous_version varchar(32),
  previous_sha256 varchar(64),
+ previous_build_id varchar(64),
  original_desired_state varchar(24) NOT NULL DEFAULT 'STOPPED',
  state varchar(24) NOT NULL DEFAULT 'WAITING_SAFE'
    CHECK(state IN ('WAITING_SAFE','DELIVERED','VERIFYING','COMPLETED','FAILED','CANCELLED')),
@@ -482,6 +486,8 @@ CREATE TABLE IF NOT EXISTS instance_update_jobs (
  applied_at timestamptz,
  completed_at timestamptz
 );
+ALTER TABLE instance_update_jobs ADD COLUMN IF NOT EXISTS target_build_id varchar(64);
+ALTER TABLE instance_update_jobs ADD COLUMN IF NOT EXISTS previous_build_id varchar(64);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_instance_update_one_active
  ON instance_update_jobs(bot_instance_id)
  WHERE state IN ('WAITING_SAFE','DELIVERED','VERIFYING');
