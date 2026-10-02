@@ -120,7 +120,7 @@ Need $css 'border-bottom:0!important;' 'Internal settings section dividers must 
 
 
 Need $page 'alwaysShowInput' 'Always-visible optional setting controls missing'
-Need $page 'รูปแบบกำไร</span>' 'Aligned Basket/per-position selector missing'
+Need $page 'settingHelpLabel("profit-kind","รูปแบบกำไร"' 'Aligned Basket/per-position selector with tap help missing'
 Need $page 'cc-bot-v2-choice-inline' 'Aligned MANUAL profit selector missing'
 if($page.Contains('revealedOptional')) { throw 'Legacy global optional reveal state must stay removed' }
 Need $page 'cc-bot-manual-risk-add' 'MANUAL must provide a single optional-risk add control'
