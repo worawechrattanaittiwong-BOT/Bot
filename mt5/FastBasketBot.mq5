@@ -3363,6 +3363,94 @@ int RaceFilledUnits()
    return MathMax(positions, MathMax(0, volumeUnits));
 }
 
+bool RacePerPositionDualDirectionEnabled()
+{
+   if(g_raceProfitTargetMode!="POSITION" ||
+      g_racePerPositionProfitMoney<=0.0)
+      return false;
+
+   ENUM_ACCOUNT_MARGIN_MODE marginMode=
+      (ENUM_ACCOUNT_MARGIN_MODE)AccountInfoInteger(ACCOUNT_MARGIN_MODE);
+   return marginMode==ACCOUNT_MARGIN_MODE_RETAIL_HEDGING;
+}
+
+bool ManageRacePerPositionHedgeBasket(double momentum)
+{
+   if(!RacePerPositionDualDirectionEnabled())
+      return false;
+
+   int positions=BasketPositionCount();
+   if(positions<=0)
+      return false;
+
+   int filledUnits=RaceFilledUnits();
+   double floatingProfit=BasketProfit();
+   double cycleProfit=BasketCycleProfit();
+   g_raceLastObservedCycleProfit=cycleProfit;
+
+   // Keep the existing hard Basket loss exactly as-is even when POSITION mode
+   // contains both BUY and SELL tickets.
+   double lossLimit=EffectiveBasketLossLimit();
+   if(lossLimit>0.0 && cycleProfit<=-lossLimit)
+   {
+      RaceCloseCycle("RACE_MAX_BASKET_LOSS");
+      return true;
+   }
+
+   // POSITION mode still owns profit exits ticket-by-ticket.
+   int harvested=RaceHarvestProfitablePositions();
+   if(harvested>0)
+   {
+      g_raceProfitArmed=false;
+      g_racePeakProfit=0.0;
+
+      if(BasketPositionCount()<=0)
+      {
+         ResetRaceRuntime();
+         g_executionStatus="RACE_PROFIT_HARVEST_FLAT";
+         return true;
+      }
+
+      g_raceState="HARVESTED_PROFIT";
+      g_executionStatus="RACE_PROFIT_HARVEST";
+      return true;
+   }
+
+   filledUnits=RaceFilledUnits();
+   bool filling=filledUnits<g_maxPositions;
+   if(!filling)
+   {
+      g_raceState="FULL_WAIT_PROFIT";
+      g_executionStatus="RACE_WAIT_PER_POSITION_TARGET";
+      return true;
+   }
+
+   int signalDirection=RaceAnalysisDirection(momentum);
+   if(signalDirection==0)
+   {
+      g_raceState="VOLUME_WAIT";
+      g_executionStatus=RaceVolumeWindowReady()
+         ? "RACE_VOLUME_BALANCED"
+         : "RACE_VOLUME_WARMUP";
+      return true;
+   }
+
+   // Preserve the existing pyramid rule: a new ticket is added only while the
+   // open Basket and the full cycle are positive. The only change here is that
+   // the new ticket may follow the current BUY or SELL signal independently.
+   if(floatingProfit<=0.0 || cycleProfit<=0.0)
+   {
+      g_raceState="ADD_WAIT_PROFIT";
+      g_executionStatus="RACE_ADD_WAIT_PROFIT";
+      return true;
+   }
+
+   g_raceState="FILLING";
+   RefreshMarketContext(false);
+   ProcessRaceFill(signalDirection);
+   return true;
+}
+
 
 void RaceResetVolumeWindow(datetime now)
 {
@@ -4245,14 +4333,15 @@ bool ProcessRaceFill(int direction)
    if(direction == 0)
       return false;
 
-   // One-way cycle lock: once a RACE cycle has any open position, every new
-   // fill must stay on that same side. A new BUY/SELL decision is allowed only
-   // after the entire RACE basket is flat.
+   // One-way cycle lock remains unchanged for BASKET/OFF and for Netting.
+   // Only POSITION profit mode on an MT5 Hedging account may hold independent
+   // BUY and SELL tickets inside the same RACE cycle.
    int existingPositions = BasketPositionCount();
    if(existingPositions<=0)
       g_raceLastObservedCycleProfit=0.0;
 
-   if(existingPositions > 0)
+   bool dualDirection=RacePerPositionDualDirectionEnabled();
+   if(existingPositions > 0 && !dualDirection)
    {
       int existingDirection = BasketDirection();
       if(existingDirection == 0)
@@ -4478,6 +4567,12 @@ bool ManageRaceBasket(double momentum)
       return true;
    }
 
+   // RACE POSITION on a Hedging account may intentionally contain both BUY
+   // and SELL tickets. Route that case to the isolated ticket-level manager.
+   if(RacePerPositionDualDirectionEnabled() && BasketDirection()==0)
+      return ManageRacePerPositionHedgeBasket(momentum);
+
+   // All other RACE modes retain the existing one-way Basket contract.
    // RACE close decisions use direct P/L, current price and completed M5 data.
    // Defer expensive market-context refresh to non-close paths only.
    int direction = BasketDirection();
@@ -4656,6 +4751,27 @@ bool ManageRaceBasket(double momentum)
    int volumeDirection = RaceAnalysisDirection(momentum);
    if(volumeDirection != 0 && volumeDirection != direction)
    {
+      if(RacePerPositionDualDirectionEnabled())
+      {
+         if(!filling)
+         {
+            g_raceState="FULL_WAIT_PROFIT";
+            g_executionStatus="RACE_WAIT_PER_POSITION_TARGET";
+            return true;
+         }
+         if(floatingProfit<=0.0 || cycleProfit<=0.0)
+         {
+            g_raceState="ADD_WAIT_PROFIT";
+            g_executionStatus="RACE_ADD_WAIT_PROFIT";
+            return true;
+         }
+
+         g_raceState="FILLING";
+         RefreshMarketContext(false);
+         ProcessRaceFill(volumeDirection);
+         return true;
+      }
+
       if(cycleProfit >= 0.0 && !raceStrictProfitTarget)
       {
          RaceCloseCycle("RACE_VOLUME_ROLLOVER");
