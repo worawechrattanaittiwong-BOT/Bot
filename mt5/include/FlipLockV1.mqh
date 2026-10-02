@@ -1,13 +1,14 @@
 #ifndef SCENOVA_FLIP_LOCK_V1_MQH
 #define SCENOVA_FLIP_LOCK_V1_MQH
 
-// FLIP LOCK V6 is a local tick-driven one-position profit-lock engine:
+// FLIP LOCK V6.2 is a local one-position protected-profit engine:
 //   1 FLIP-owned market position, no pre-placed opposite STOP order.
-// The starter uses a wide ATR/spread Safety Stop. As soon as the MT5 quote has
-// enough positive distance to place a broker-legal lock above/below entry, the
-// SL arms locally and then follows every meaningful price step without waiting
-// for SaaS price/commands. Server state controls NEW risk only.
-#define FLIP_LOCK_V1_VERSION "6.1.0"
+// The starter keeps its wide ATR/spread Safety Stop until estimated NET profit
+// reaches the configured +0.30 floor and that floor is broker-legal. The first
+// armed SL jumps only to that protected-profit price; subsequent SL movement
+// uses the normal Spread/ATR trail without SaaS price/commands. Server state
+// controls NEW risk only.
+#define FLIP_LOCK_V1_VERSION "6.2.0"
 #define FLIP_LOCK_PENDING_COMMENT "SCNFlipLock"
 #define FLIP_LOCK_LIVE_COMMENT "SCNFlipLockLive"
 #define FLIP_LOCK_FLAT_PENDING_GRACE_SECONDS 2
@@ -87,15 +88,18 @@ bool FlipLockStartReady()
 
 double FlipLockTrailDistancePoints()
 {
-   double tickSize=SymbolInfoDouble(_Symbol,SYMBOL_TRADE_TICK_SIZE);
-   if(tickSize<=0.0) tickSize=_Point;
-   double tickPoints=MathMax(1.0,tickSize/_Point);
+   double spread=CurrentSpreadPoints();
+   if(spread<=0.0 || spread>=999999.0) return 0.0;
 
-   // Tick-on-Tick FLIP: trail as tightly as the broker legally allows.
-   // Broker stops/freeze level is the real lower bound; keep just one extra
-   // tradable tick so a quote change between calculation and SLTP submission
-   // does not make the request unnecessarily fragile.
-   return FlipLockBrokerMinDistancePoints()+tickPoints;
+   double atr=FlipLockAtrPoints();
+   if(atr<=0.0) return 0.0;
+
+   // After the first protected-profit lock, keep the normal FLIP breathing
+   // room. The trail follows live price but does not hug the broker minimum.
+   return MathMax(
+      FlipLockBrokerMinDistancePoints(),
+      MathMax(spread*3.0,atr*0.35)
+   );
 }
 
 double FlipLockSafetyDistancePoints()
@@ -138,6 +142,49 @@ double FlipLockPositionProfitMoney(const ulong positionTicket)
    if(positionTicket==0 || !PositionSelectByTicket(positionTicket))
       return -DBL_MAX;
    return PositionGetDouble(POSITION_PROFIT)+PositionGetDouble(POSITION_SWAP);
+}
+
+double FlipLockEstimatedNetProfitMoney(
+   const ulong positionTicket,
+   const int direction,
+   const double volume,
+   const double openPrice,
+   const MqlTick &tick
+)
+{
+   if(positionTicket==0 || direction==0 || volume<=0.0 || openPrice<=0.0)
+      return -DBL_MAX;
+   if(!PositionSelectByTicket(positionTicket))
+      return -DBL_MAX;
+
+   double swap=PositionGetDouble(POSITION_SWAP);
+   double entryCommission=FlipLockEntryCommissionCost(positionTicket);
+   double estimatedExitCommission=entryCommission;
+
+   ENUM_ORDER_TYPE orderType=direction>0 ? ORDER_TYPE_BUY : ORDER_TYPE_SELL;
+   double closePrice=direction>0 ? tick.bid : tick.ask;
+   double gross=0.0;
+   if(closePrice<=0.0 ||
+      !OrderCalcProfit(orderType,_Symbol,volume,openPrice,closePrice,gross))
+      return -DBL_MAX;
+
+   double tickSize=SymbolInfoDouble(_Symbol,SYMBOL_TRADE_TICK_SIZE);
+   if(tickSize<=0.0) tickSize=_Point;
+   double oneTickGross=0.0;
+   double oneTickClose=direction>0
+      ? openPrice+tickSize
+      : openPrice-tickSize;
+   if(!OrderCalcProfit(orderType,_Symbol,volume,openPrice,oneTickClose,oneTickGross))
+      return -DBL_MAX;
+
+   double slippageReserve=
+      MathAbs(oneTickGross)*FLIP_LOCK_SLIPPAGE_BUFFER_TICKS;
+
+   return gross+
+      swap-
+      entryCommission-
+      estimatedExitCommission-
+      slippageReserve;
 }
 
 double FlipLockEntryCommissionCost(const ulong positionTicket)
@@ -242,6 +289,16 @@ bool FlipLockProfitLockReady(
    if(positionTicket==0 || direction==0 || volume<=0.0 || openPrice<=0.0)
       return false;
 
+   double estimatedNet=FlipLockEstimatedNetProfitMoney(
+      positionTicket,
+      direction,
+      volume,
+      openPrice,
+      tick
+   );
+   if(estimatedNet+0.00000001<FLIP_LOCK_MIN_NET_PROFIT_MONEY)
+      return false;
+
    double floor=FlipLockMinimumNetProfitStopPrice(
       positionTicket,
       direction,
@@ -251,9 +308,8 @@ bool FlipLockProfitLockReady(
    if(floor<=0.0)
       return false;
 
-   // Arm only when the +0.30 NET floor itself is broker-legal. Until then the
-   // wide starter Safety Stop remains in place; merely showing floating profit
-   // is not enough to declare the trade protected.
+   // Arm only when the trade is already above the requested NET threshold and
+   // the broker can legally place that protected-profit floor beyond entry.
    double minimum=FlipLockBrokerMinDistancePoints()*_Point;
    if(direction>0)
       return floor>openPrice && floor<=tick.bid-minimum;
@@ -616,36 +672,6 @@ bool FlipLockSyncBaton(
    if(!PositionSelectByTicket(positionTicket)) return false;
 
    double openPrice=PositionGetDouble(POSITION_PRICE_OPEN);
-   double candidate=FlipLockCandidateTrigger(direction,tick);
-   if(candidate<=0.0)
-   {
-      g_flipLockReason="WAIT_ATR";
-      g_executionStatus="FLIP_LOCK_WAIT_ATR";
-      return false;
-   }
-
-   if(!g_flipLockArmed)
-   {
-      if(!FlipLockProfitLockReady(
-         positionTicket,
-         direction,
-         positionVolume,
-         openPrice,
-         tick
-      ))
-      {
-         // Safety Stop stays broker-side until the current MT5 quote can support
-         // an estimated NET +0.30 stop after commission/swap/slippage reserve.
-         FlipLockRemoveAllPending();
-         g_flipLockTriggerPrice=0.0;
-         g_flipLockReason="WAIT_NET_PROFIT_LOCK";
-         g_executionStatus="FLIP_LOCK_WAIT_NET_PROFIT_LOCK";
-         return true;
-      }
-   }
-
-   // Recalculate the floor on every tick so Swap/cost changes cannot make the
-   // trailing stop drift back below the protected NET-profit contract.
    double netProfitFloor=FlipLockMinimumNetProfitStopPrice(
       positionTicket,
       direction,
@@ -659,10 +685,48 @@ bool FlipLockSyncBaton(
       return true;
    }
 
-   if(direction>0)
-      candidate=MathMax(candidate,netProfitFloor);
+   double candidate=0.0;
+   if(!g_flipLockArmed)
+   {
+      if(!FlipLockProfitLockReady(
+         positionTicket,
+         direction,
+         positionVolume,
+         openPrice,
+         tick
+      ))
+      {
+         // Before the protected-profit threshold is actually available, leave
+         // the original broker Safety Stop alone.
+         FlipLockRemoveAllPending();
+         g_flipLockTriggerPrice=0.0;
+         g_flipLockReason="WAIT_NET_PROFIT_LOCK";
+         g_executionStatus="FLIP_LOCK_WAIT_NET_PROFIT_LOCK";
+         return true;
+      }
+
+      // First arm: jump only to the protected NET +0.30 floor above/below entry.
+      // Do not hug the current quote. Normal Spread/ATR trailing starts after
+      // this floor has been placed successfully.
+      candidate=netProfitFloor;
+   }
    else
-      candidate=MathMin(candidate,netProfitFloor);
+   {
+      candidate=FlipLockCandidateTrigger(direction,tick);
+      if(candidate<=0.0)
+      {
+         g_flipLockReason="WAIT_ATR";
+         g_executionStatus="FLIP_LOCK_WAIT_ATR";
+         return false;
+      }
+
+      // Once armed, never allow the normal trail to give back the protected
+      // NET-profit floor.
+      if(direction>0)
+         candidate=MathMax(candidate,netProfitFloor);
+      else
+         candidate=MathMin(candidate,netProfitFloor);
+   }
 
    if(!FlipLockTriggerIsLegal(direction,candidate,tick))
    {
@@ -695,9 +759,9 @@ bool FlipLockSyncBaton(
          ? trigger>=currentSl+moveThreshold-1e-12
          : trigger<=currentSl-moveThreshold+1e-12);
 
-   // Tick-on-Tick means there is no artificial time throttle. Submit a new SL
-   // whenever the broker quote has advanced enough to improve the stop by one
-   // tradable tick. Broker retcodes remain the final rate/legality authority.
+   // No artificial time throttle: when the normal Spread/ATR trail improves by
+   // a tradable tick, synchronize the broker SL. The first arm above uses only
+   // the protected-profit floor and therefore cannot jump unnecessarily close.
    if(stopImproved)
    {
       if(!FlipLockSetPositionStop(positionTicket,trigger))
