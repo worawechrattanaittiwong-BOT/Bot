@@ -58,22 +58,26 @@ if($raceSyncGate -lt 0 -or $dailyControl -lt 0 -or $raceManager -lt 0 -or
    $raceSyncGate -gt $dailyControl -or $raceSyncGate -gt $raceManager){
   throw 'RACE settings-sync guard must execute before daily money controls and RACE Basket management'
 }
-Need $analysis 'int volumeDirection=RaceVolumeDirection();' 'AUTO RACE primary direction must start from rolling 30-second volume'
-Need $analysis 'RaceZonePriorityActive(' 'AUTO RACE may protect an intact opposing Demand/Supply boundary'
-Need $analysis 'RaceV2DecisionDirection(' 'AUTO RACE must combine 30-second volume with RACE-local Flow/Structure/Leg context after zone handling'
-Need $analysis 'return decision==0 ? volumeDirection : decision;' 'AUTO RACE tie may fall back to the qualified 30-second volume side'
-if($analysis.Contains('RaceM5CandleDirection()')){throw 'RACE entry must not use M5 candle direction'}
+Need $analysis 'int volumeDirection=RaceVolumeDirection();' 'RACE analysis must keep rolling 30-second volume as an input'
+Need $analysis 'RaceZonePriorityActive(' 'RACE analysis may protect an intact opposing Demand/Supply boundary'
+Need $analysis 'RaceV2DecisionDirection(' 'RACE must keep Flow/Structure/Leg/Rejection analysis'
+Need $analysis 'if(anchorDirection==0) anchorDirection=flowDirection;' 'RACE must fall back to candle flow when volume is not qualified'
+Need $analysis 'if(anchorDirection==0) anchorDirection=g_raceVNextStructureDirection;' 'RACE must fall back to market structure without waiting'
+Need $analysis 'if(anchorDirection==0 && momentum>0.0) anchorDirection=1;' 'RACE must use live positive momentum as a non-blocking fallback'
+Need $analysis 'return RaceM5CandleDirection();' 'RACE must retain a final closed-candle direction fallback'
 if($analysis.Contains('g_trend') -or $analysis.Contains('g_ema')){throw 'RACE entry direction must not leak trend/EMA into the RACE VNext decision'}
 Need $ea '#include "include\\RaceFlowV2.mqh"' 'RACE Flow V2 module missing'
 Need $ea '#include "include\\RaceStructureV2.mqh"' 'RACE Structure V2 module missing'
 Need $ea '#include "include\\RaceLegPhaseV2.mqh"' 'RACE Leg Phase V2 module missing'
 Need $ea '#include "include\\RaceDecisionV2.mqh"' 'RACE Decision V2 module missing'
 Need $flow 'RaceVolumeDirection() == direction' 'RACE profit flow must follow qualified 30-second volume side'
-Need $start 'RACE_VOLUME_WARMUP' 'RACE must wait for the 30-second warmup before first AUTO entry'
-Need $start 'RACE_SIGNAL_MAX_WAIT_SECONDS' 'RACE start cycle must enforce the 60-second maximum signal wait'
-Need $start 'RACE_SIGNAL_TIMEOUT_RESET' 'RACE must skip and reset an unresolved 60-second signal window'
-Need $start 'bool started=ProcessRaceFill(direction);' 'RACE must attempt a valid signal before expiring the 60-second window'
-Need $start 'if(!started &&' 'RACE must reset a blocked unresolved entry after the 60-second maximum wait'
+if($start.Contains('if(!RaceVolumeWindowReady())')){throw 'RACE first entry must not wait for the 30-second volume warmup'}
+if($start.Contains('RACE_SIGNAL_TIMEOUT_RESET')){throw 'RACE first entry must not be held/reset by an unresolved volume window'}
+Need $start 'RaceReentryObserveReady();' 'RACE re-entry observation must remain available as advisory telemetry'
+if($start.Contains('if(!RaceReentryObserveReady())')){throw 'RACE re-entry observation must not block a fresh entry'}
+Need $start 'RaceNewsPauseActive(raceNewsReason)' 'RACE news analysis must remain available'
+if($start.Contains('if(RaceNewsPauseActive(raceNewsReason))')){throw 'RACE news analysis must not block a fresh entry'}
+Need $start 'bool started=ProcessRaceFill(direction);' 'RACE must immediately attempt the analyzed direction'
 Need $ea '#define SCENOVA_RUNTIME_CONTRACT "RACE_CONFIGURED_LOSS_ONLY_V1"' 'RACE compatibility runtime marker missing'
 Need $manage 'volumeDirection != direction' 'RACE must detect a volume-side flip'
 Need $manage 'cycleProfit >= 0.0' 'ordinary RACE rollover must not close a negative net cycle'
@@ -83,8 +87,8 @@ Need $manage 'RaceWrongDirectionConfirmed(' 'RACE negative Basket must pass the 
 Need $manage 'RaceCloseCycle(wrongDirectionReason)' 'RACE confirmed soft exit must close through the RACE-only cycle closer'
 Need $manage 'RACE_ADVERSE_WATCH' 'RACE must stop adding exposure while adverse evidence builds'
 Need $manage 'RACE_STRUCTURE_INVALID_HOLD' 'RACE unconfirmed structure invalidation must remain a hold state'
-Need $manage 'RACE_ADD_WAIT_PROFIT' 'RACE must block additional fills while the open Basket or full cycle is not profitable'
-Need $manage 'if(floatingProfit<=0.0 || cycleProfit<=0.0)' 'RACE pyramid gate must forbid adding while the net cycle is still losing'
+if($manage.Contains('RACE_ADD_WAIT_PROFIT')){throw 'RACE must not require existing Basket/cycle profit before adding'}
+if($manage.Contains('if(floatingProfit<=0.0 || cycleProfit<=0.0)')){throw 'RACE existing P/L must not be an entry gate'}
 Need $wrong 'RaceV2StructureBroken(direction)' 'RACE soft exit must require broken M5 structure'
 Need $wrong 'RaceVolumeDirection()' 'RACE soft exit must require the 30-second order-flow side'
 Need $wrong 'oppositeVolume' 'RACE soft exit must require opposite order flow'
@@ -120,14 +124,15 @@ Need $dualDirection 'ACCOUNT_MARGIN_MODE_RETAIL_HEDGING' 'Dual-direction RACE mu
 Need $fill 'bool dualDirection=RacePerPositionDualDirectionEnabled();' 'RACE fill must resolve the POSITION/Hedging exception explicitly'
 Need $fill 'if(existingPositions > 0 && !dualDirection)' 'BASKET/OFF and Netting must retain the one-way cycle lock'
 Need $fill 'RACE_DIRECTION_LOCK' 'One-way RACE modes must keep the direction lock'
-Need $manage 'RacePerPositionDualDirectionEnabled() && BasketDirection()==0' 'Intentional mixed RACE POSITION baskets must use the isolated manager'
+Need $manage 'if(RacePerPositionDualDirectionEnabled())' 'RACE POSITION/Hedging must use ticket-level management from the first open ticket'
 Need $manage 'ProcessRaceFill(volumeDirection);' 'RACE POSITION must be able to follow a flipped BUY/SELL signal'
 Need $manage 'RACE_VOLUME_ROLLOVER' 'Non-POSITION RACE rollover behavior must remain unchanged'
 Need $dualManager 'RaceHarvestProfitablePositions()' 'Mixed RACE POSITION must preserve per-ticket profit harvesting'
 Need $dualManager 'EffectiveBasketLossLimit()' 'Mixed RACE POSITION must preserve Max Basket Loss'
 Need $dualManager 'filledUnits<g_maxPositions' 'Mixed RACE POSITION must preserve Max Positions'
-Need $dualManager 'if(floatingProfit<=0.0 || cycleProfit<=0.0)' 'Mixed RACE POSITION must preserve the existing profitable-add gate'
-Need $dualManager 'ProcessRaceFill(signalDirection);' 'Mixed RACE POSITION must open the current qualified BUY/SELL side'
+if($dualManager.Contains('if(floatingProfit<=0.0 || cycleProfit<=0.0)')){throw 'RACE POSITION must not wait for existing tickets/cycle to become profitable'}
+if($dualManager.Contains('RACE_ADD_WAIT_PROFIT')){throw 'RACE POSITION profitable-add wait state must be removed'}
+Need $dualManager 'ProcessRaceFill(signalDirection);' 'RACE POSITION must open the current analyzed BUY/SELL side'
 Need $raceAtr 'AverageTrueRangePoints(PERIOD_M5,g_atrPeriod)' 'RACE 1.1.10 automatic stop must use M5 ATR'
 Need $raceStop 'RaceV2StructureInvalidPrice(direction)' 'RACE stop must use M5 structure as the primary invalidation reference'
 Need $raceStop 'double minDistancePoints' 'RACE stop must keep a minimum anti-noise distance'
@@ -139,7 +144,7 @@ Need $ea '#include "include\\RaceExposureV1.mqh"' 'RACE Exposure V1 module missi
 Need $ea '#include "include\\RaceLossV2.mqh"' 'RACE Loss V2 module missing'
 Need $ea '#include "include\\RaceReentryV1.mqh"' 'RACE Re-entry V1 module missing'
 Need $start 'RaceReentryDetectFlatTransition();' 'RACE must detect the previous Basket flat transition before starting a new cycle'
-Need $start 'if(!RaceReentryObserveReady())' 'RACE must wait through the re-entry observation window'
+Need $start 'RaceReentryObserveReady();' 'RACE must keep re-entry observation available without making it a gate'
 Need $fill 'RaceReentryMarkExposure();' 'RACE must remember accepted exposure for the next flat transition'
 Need $raceReentryV1 '#define RACE_REENTRY_PROFIT_OBSERVE_SECONDS 6' 'RACE profitable-cycle re-entry observation must stay fast'
 Need $raceReentryV1 '#define RACE_REENTRY_LOSS_OBSERVE_SECONDS 20' 'RACE losing-cycle re-entry must enforce a longer observation period'
@@ -150,7 +155,10 @@ Need $raceReentryV1 'RACE_REENTRY_AFTER_PROFIT' 'RACE profitable-cycle re-entry 
 Need $manage 'g_raceLastObservedCycleProfit=cycleProfit;' 'RACE must preserve the last open-cycle P/L for post-flat re-entry classification'
 Need $ea '#include "include\\RaceNewsV1.mqh"' 'RACE News V1 module missing'
 Need $start 'RaceNewsPauseActive(raceNewsReason)' 'RACE must check high-impact news before a new cycle'
-Need $fill 'RaceNewsPauseActive(raceNewsReason)' 'RACE must stop additional fills during an active news window'
+Need $fill 'RaceNewsPauseActive(raceNewsReason)' 'RACE must keep news analysis available during fills'
+if($fill.Contains('if(RaceNewsPauseActive(raceNewsReason))')){throw 'RACE news analysis must not veto additional fills'}
+Need $fill 'bool raceAntiChaseAdvisory=RaceAntiChaseBlocked(direction,raceAntiChaseReason);' 'RACE anti-chase analysis must remain advisory'
+if($fill.Contains('if(RaceAntiChaseBlocked(direction,raceAntiChaseReason))')){throw 'RACE anti-chase must not veto a fill'}
 Need $raceNewsV1 'RACE_NEWS_BEFORE_MAJOR_MINUTES 15' 'RACE major-news pre-window must be 15 minutes'
 Need $raceNewsV1 'RACE_NEWS_AFTER_MAJOR_MINUTES 15' 'RACE major-news post-window must be 15 minutes'
 Need $raceNewsV1 'CALENDAR_IMPORTANCE_HIGH' 'RACE news pause must remain limited to high-impact calendar events'
@@ -198,4 +206,4 @@ if($eaVersionMatch.Groups[1].Value -ne $releaseVersionMatch.Groups[1].Value){
 }
 Need $release 'EA_RUNTIME_CONTRACT = "RACE_CONFIGURED_LOSS_ONLY_V1"' 'API runtime contract must match EA'
 
-Write-Host 'RACE 1.1.10 30-second flow + persistent soft exit + net-cycle pyramids + hard-capped auto SL + requote refresh: PASS'
+Write-Host 'RACE 1.1.14 open-flow analysis + dual-direction POSITION + hard safety isolation: PASS'
