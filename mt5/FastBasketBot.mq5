@@ -3858,6 +3858,295 @@ int RaceLivePriceDirection()
    return 0;
 }
 
+bool CounterModeEnabled()
+{
+   return EffectiveExecutionMode() == "COUNTER";
+}
+
+bool BasketHasCounterPosition()
+{
+   for(int i=PositionsTotal()-1;i>=0;i--)
+   {
+      ulong ticket=PositionGetTicket(i);
+      if(ticket==0 || !PositionSelectByTicket(ticket))
+         continue;
+      if(PositionGetString(POSITION_SYMBOL)!=_Symbol ||
+         PositionGetInteger(POSITION_MAGIC)!=InpMagic)
+         continue;
+      if(StringFind(PositionGetString(POSITION_COMMENT),"SaaSCounter")>=0)
+         return true;
+   }
+   return false;
+}
+
+int CounterPositionCount()
+{
+   int count=0;
+   for(int i=PositionsTotal()-1;i>=0;i--)
+   {
+      ulong ticket=PositionGetTicket(i);
+      if(ticket==0 || !PositionSelectByTicket(ticket))
+         continue;
+      if(PositionGetString(POSITION_SYMBOL)!=_Symbol ||
+         PositionGetInteger(POSITION_MAGIC)!=InpMagic)
+         continue;
+      if(StringFind(PositionGetString(POSITION_COMMENT),"SaaSCounter")>=0)
+         count++;
+   }
+   return count;
+}
+
+int CounterFilledUnits()
+{
+   double baseVolume=NormalizeTradeVolume(g_lot);
+   if(baseVolume<=0.0)
+      return CounterPositionCount();
+
+   double totalVolume=0.0;
+   int positions=0;
+   for(int i=PositionsTotal()-1;i>=0;i--)
+   {
+      ulong ticket=PositionGetTicket(i);
+      if(ticket==0 || !PositionSelectByTicket(ticket))
+         continue;
+      if(PositionGetString(POSITION_SYMBOL)!=_Symbol ||
+         PositionGetInteger(POSITION_MAGIC)!=InpMagic ||
+         StringFind(PositionGetString(POSITION_COMMENT),"SaaSCounter")<0)
+         continue;
+      totalVolume+=PositionGetDouble(POSITION_VOLUME);
+      positions++;
+   }
+
+   int volumeUnits=(int)MathRound(totalVolume/baseVolume);
+   return MathMax(positions,MathMax(0,volumeUnits));
+}
+
+bool CounterCanSendOrder()
+{
+   ulong nowMs=GetTickCount64();
+   if(nowMs-g_lastOrderMs<(ulong)COUNTER_FILL_INTERVAL_MS)
+      return false;
+
+   datetime now=TimeCurrent();
+   if(g_counterOrderWindowStart==0 || now-g_counterOrderWindowStart>=60)
+   {
+      g_counterOrderWindowStart=now;
+      g_counterOrdersInWindow=0;
+   }
+
+   if(g_counterOrdersInWindow>=COUNTER_MAX_ORDERS_PER_MINUTE)
+      return false;
+
+   return CanSendOrder();
+}
+
+void CounterRegisterOrderRequest()
+{
+   RegisterOrderRequest();
+   if(g_counterOrderWindowStart==0)
+      g_counterOrderWindowStart=TimeCurrent();
+   g_counterOrdersInWindow++;
+}
+
+int CounterSignalDirection()
+{
+   // Exactly one decision rule: visible Bid flow up => SELL, down => BUY.
+   int graphDirection=RaceLivePriceDirection();
+   if(graphDirection>0) return -1;
+   if(graphDirection<0) return 1;
+   return 0;
+}
+
+bool SendCounterMarketOrder(int direction)
+{
+   if(direction==0)
+      return false;
+
+   MqlTick tick;
+   if(!SymbolInfoTick(_Symbol,tick))
+   {
+      g_lastOrderError=GetLastError();
+      g_lastOrderRetcode=0;
+      g_lastOrderAt=TimeCurrent();
+      g_executionStatus="COUNTER_NO_TICK";
+      return false;
+   }
+
+   MqlTradeRequest request={};
+   MqlTradeResult result={};
+   request.action=TRADE_ACTION_DEAL;
+   request.magic=InpMagic;
+   request.symbol=_Symbol;
+   request.volume=NormalizeTradeVolume(g_lot);
+   request.deviation=DynamicDeviationPoints();
+   request.type_filling=AllowedFillingMode();
+   request.comment="SaaSCounter";
+   request.sl=0.0;
+   request.tp=0.0;
+
+   if(request.volume<=0.0)
+   {
+      g_executionStatus="COUNTER_INVALID_LOT";
+      return false;
+   }
+
+   if(direction>0)
+   {
+      request.type=ORDER_TYPE_BUY;
+      request.price=tick.ask;
+   }
+   else
+   {
+      request.type=ORDER_TYPE_SELL;
+      request.price=tick.bid;
+   }
+
+   ResetLastError();
+   bool sent=OrderSendWithPriceRetry(request,result);
+   g_lastOrderRetcode=(long)result.retcode;
+   g_lastOrderError=GetLastError();
+   g_lastOrderAt=TimeCurrent();
+
+   if(!sent || !TradeResultAccepted(result))
+   {
+      RecordExecutionQuality(false,0.0);
+      g_executionStatus=RetcodeExecutionStatus((long)result.retcode);
+      Print("COUNTER order rejected. retcode=",result.retcode," comment=",result.comment);
+      return false;
+   }
+
+   double fillPrice=result.price>0.0 ? result.price : request.price;
+   double slippagePoints=MathAbs(fillPrice-request.price)/_Point;
+   RecordExecutionQuality(true,slippagePoints);
+   g_adaptiveLot=request.volume;
+   g_lastEntryReason=direction>0 ? "COUNTER_BUY" : "COUNTER_SELL";
+   g_lastEntryAt=TimeCurrent();
+   g_executionStatus="COUNTER_ORDER_ACCEPTED";
+   return true;
+}
+
+int CounterHarvestProfitablePositions()
+{
+   int harvested=0;
+   bool hedging=((ENUM_ACCOUNT_MARGIN_MODE)AccountInfoInteger(ACCOUNT_MARGIN_MODE)==
+                 ACCOUNT_MARGIN_MODE_RETAIL_HEDGING);
+   double baseVolume=NormalizeTradeVolume(g_lot);
+   double target=MathMax(0.01,g_counterPerPositionProfitMoney);
+
+   for(int i=PositionsTotal()-1;i>=0;i--)
+   {
+      ulong ticket=PositionGetTicket(i);
+      if(ticket==0 || !PositionSelectByTicket(ticket))
+         continue;
+      if(PositionGetString(POSITION_SYMBOL)!=_Symbol ||
+         PositionGetInteger(POSITION_MAGIC)!=InpMagic ||
+         StringFind(PositionGetString(POSITION_COMMENT),"SaaSCounter")<0)
+         continue;
+
+      double displayedProfit=PositionGetDouble(POSITION_PROFIT);
+      double positionVolume=PositionGetDouble(POSITION_VOLUME);
+      double comparableProfit=displayedProfit;
+      if(!hedging && positionVolume>0.0 && baseVolume>0.0)
+         comparableProfit=displayedProfit*MathMin(1.0,baseVolume/positionVolume);
+
+      if(comparableProfit+0.00000001<target)
+         continue;
+
+      double closeVolume=hedging
+         ? positionVolume
+         : MathMin(positionVolume,baseVolume);
+      if(closeVolume<=0.0)
+         continue;
+
+      if(ClosePositionVolumeByTicket(ticket,closeVolume,"SCNCounterProfit"))
+      {
+         harvested++;
+         g_executionStatus="COUNTER_PROFIT_CLOSE";
+         g_lastCloseReason="COUNTER_PROFIT_CLOSE";
+         if(!hedging)
+            break;
+      }
+   }
+
+   return harvested;
+}
+
+bool ProcessCounterFill(int direction)
+{
+   if(direction==0)
+      return false;
+
+   if(CounterFilledUnits()>=g_maxPositions)
+   {
+      g_executionStatus="COUNTER_TARGET_FILLED";
+      return true;
+   }
+
+   if(g_state!=STATE_RUNNING || !g_access ||
+      (!MQLInfoInteger(MQL_TESTER) && !EntryLeaseValid()))
+   {
+      g_executionStatus="COUNTER_CONTROL_NOT_FRESH";
+      return false;
+   }
+
+   if(TradePermissionStatus()!="OK")
+   {
+      g_executionStatus="COUNTER_TRADE_PERMISSION";
+      return false;
+   }
+
+   if(!OpenTradingAllowedForDirection(direction))
+   {
+      g_executionStatus="COUNTER_SYMBOL_DIRECTION_BLOCKED";
+      return false;
+   }
+
+   if(!CounterCanSendOrder())
+   {
+      g_executionStatus="COUNTER_FILL_PACING";
+      return false;
+   }
+
+   bool accepted=SendCounterMarketOrder(direction);
+   CounterRegisterOrderRequest();
+   if(accepted)
+      g_executionStatus=CounterFilledUnits()>=g_maxPositions
+         ? "COUNTER_TARGET_FILLED"
+         : "COUNTER_FILLING";
+   return accepted;
+}
+
+bool ManageCounterMode()
+{
+   // Profit is used only as the per-position exit trigger. It never selects side.
+   CounterHarvestProfitablePositions();
+
+   if(g_state!=STATE_RUNNING || !g_access ||
+      (!MQLInfoInteger(MQL_TESTER) && !EntryLeaseValid()))
+   {
+      g_executionStatus=CounterPositionCount()>0
+         ? "COUNTER_MANAGE_ONLY"
+         : "COUNTER_CONTROL_NOT_FRESH";
+      return true;
+   }
+
+   if(CounterFilledUnits()>=g_maxPositions)
+   {
+      g_executionStatus="COUNTER_FULL_WAIT_PROFIT";
+      return true;
+   }
+
+   int direction=CounterSignalDirection();
+   if(direction==0)
+   {
+      g_executionStatus="COUNTER_PRICE_FLOW_WAIT";
+      return true;
+   }
+
+   ProcessCounterFill(direction);
+   return true;
+}
+
 int RaceAnalysisDirection(double momentum)
 {
    if(g_entryMode == ENTRY_BUY_ONLY) return 1;
@@ -4973,6 +5262,28 @@ void OnTick()
    if(zeroGridOwnsRuntime || zeroGridCanStart)
    {
       ManageZeroGrid();
+      return;
+   }
+
+   // COUNTER is routed before every generic daily/basket risk path. Its only
+   // position exit is its configured per-position profit target; explicit user
+   // Close All above remains authoritative.
+   if(!MQLInfoInteger(MQL_TESTER) &&
+      !g_settingsSynchronized &&
+      count>0 &&
+      BasketHasCounterPosition())
+   {
+      g_executionStatus="COUNTER_WAIT_SETTINGS_SYNC";
+      return;
+   }
+
+   bool counterCanStart=
+      CounterModeEnabled() &&
+      BasketPositionCount()<=0 &&
+      RescuePositionCount()<=0;
+   if((count>0 && BasketHasCounterPosition()) || counterCanStart)
+   {
+      ManageCounterMode();
       return;
    }
 
