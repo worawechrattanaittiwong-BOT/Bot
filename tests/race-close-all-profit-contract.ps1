@@ -76,7 +76,7 @@ Need $api 'clean.raceCloseAllProfitEnabled = raceMode === "BASKET"' 'Legacy RACE
 
 Need $web 'raceProfitTargetMode: "BASKET"' 'Dashboard default RACE target mode must be Basket'
 Need $web 'racePerPositionProfitMoney: 0.5' 'Dashboard default RACE per-position target missing'
-Need $web 'รูปแบบกำไร</span>' 'RACE profit selector must be visible'
+Need $web 'settingHelpLabel("profit-kind","รูปแบบกำไร"' 'RACE profit selector must be visible with tap help'
 Need $web 'เป้ากำไรต่อไม้' 'RACE per-position target input missing'
 Need $web 'เป้ากำไรทั้งชุด' 'RACE Basket target input missing'
 
