@@ -6572,7 +6572,7 @@ function BotSettingsModal(props:any) {
             <span>MANUAL Ownership</span>
             <span>MT5 Local Tick · Server ไม่กำหนดราคา SL</span>
             <span>ราคา / SL / TP / Exit บริหารใน MT5 โดยตรงทุกโหมด</span>
-            <span>Safety Stop → ล็อกกำไรสุทธิ ≥ 0.30 → Trailing SL แบบ Tick-on-Tick</span>
+            <span>Safety Stop → กำไรเป็นบวก → Trailing SL แบบ Tick-on-Tick</span>
             <span>ไม่มีการวาง BUY STOP / SELL STOP ล่วงหน้า</span>
           </div>
           <section className="cc-bot-v2-mode-section cc-mode-guide-anchor">
