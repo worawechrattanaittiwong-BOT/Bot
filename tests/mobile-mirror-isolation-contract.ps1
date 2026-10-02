@@ -1,8 +1,8 @@
 $ErrorActionPreference = "Stop"
 
 function Read-Text([string]$path) {
-  if (-not (Test-Path $path)) { throw "Missing source: $path" }
-  return [System.IO.File]::ReadAllText((Resolve-Path $path))
+  if (-not (Test-Path -LiteralPath $path)) { throw "Missing source: $path" }
+  return [System.IO.File]::ReadAllText((Resolve-Path -LiteralPath $path))
 }
 function Need([string]$text,[string]$needle,[string]$message) {
   if (-not $text.Contains($needle)) { throw $message }
