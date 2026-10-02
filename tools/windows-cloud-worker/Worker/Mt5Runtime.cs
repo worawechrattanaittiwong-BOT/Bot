@@ -559,9 +559,14 @@ internal sealed class Mt5Runtime
     {
         var isStop = string.Equals(command.Name, "STOP_INSTANCE", StringComparison.Ordinal);
         var isReload = string.Equals(command.Name, "RELOAD_INSTANCE", StringComparison.Ordinal);
-        if (!isStop && !isReload) return;
+        var isRebuild = string.Equals(command.Name, "REBUILD_INSTANCE", StringComparison.Ordinal);
+        if (!isStop && !isReload && !isRebuild) return;
 
-        var result = isReload ? "RELOAD_FAILED" : "STOP_FAILED";
+        var result = isRebuild
+            ? "REBUILD_FAILED"
+            : isReload
+                ? "RELOAD_FAILED"
+                : "STOP_FAILED";
         var errorCode = result;
 
         try
@@ -570,16 +575,27 @@ internal sealed class Mt5Runtime
             {
                 errorCode = "PROCESS_STILL_RUNNING";
             }
-            else if (isReload)
+            else if (isReload || isRebuild)
             {
                 if (command.Job is null ||
                     !string.Equals(command.Job.InstanceId, command.InstanceId, StringComparison.OrdinalIgnoreCase) ||
                     command.Job.ExecutionGeneration != command.ExecutionGeneration)
-                    throw new InvalidOperationException("RELOAD_JOB_MISMATCH");
+                    throw new InvalidOperationException(
+                        isRebuild ? "REBUILD_JOB_MISMATCH" : "RELOAD_JOB_MISMATCH");
+
+                if (isRebuild)
+                {
+                    ResetInstanceForRebuild(command.InstanceId);
+
+                    // A rebuild intentionally gets one fresh broker-platform install attempt.
+                    _brokerMigrationAttempted.Remove(command.InstanceId);
+                    if (!await EnsureBrokerPlatformAsync(command.Job, cancellationToken))
+                        throw new InvalidOperationException("BROKER_PLATFORM_REBUILD_FAILED");
+                }
 
                 var prepared = PrepareInstanceFiles(command.Job);
                 LaunchPrepared(prepared);
-                result = "RELOAD_CONFIRMED";
+                result = isRebuild ? "REBUILD_CONFIRMED" : "RELOAD_CONFIRMED";
                 errorCode = "";
             }
             else
@@ -590,7 +606,11 @@ internal sealed class Mt5Runtime
         }
         catch (Exception ex)
         {
-            result = isReload ? "RELOAD_FAILED" : "STOP_FAILED";
+            result = isRebuild
+                ? "REBUILD_FAILED"
+                : isReload
+                    ? "RELOAD_FAILED"
+                    : "STOP_FAILED";
             var normalized = new string(ex.Message
                 .ToUpperInvariant()
                 .Select(c => char.IsLetterOrDigit(c) || c == '_' ? c : '_')
@@ -609,6 +629,33 @@ internal sealed class Mt5Runtime
             result,
             errorCode
         }, cancellationToken);
+    }
+
+    private void ResetInstanceForRebuild(string instanceId)
+    {
+        var path = GetInstancePath(instanceId);
+
+        // StopInstance() must already have verified that this exact terminal is gone.
+        var terminal = Path.Combine(path, "terminal64.exe");
+        if (HasExactTerminal(terminal))
+            throw new InvalidOperationException("PROCESS_STILL_RUNNING");
+
+        if (Directory.Exists(path))
+        {
+            try
+            {
+                Directory.Delete(path, recursive: true);
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException("INSTANCE_RUNTIME_RESET_FAILED", ex);
+            }
+        }
+
+        _autoLaunchAttempted.Remove(instanceId);
+        _brokerMigrationAttempted.Remove(instanceId);
+        _provisioningHealthyReported.Remove(instanceId);
+        _maximizedProcessByInstance.Remove(instanceId);
     }
 
     public async Task StartOrRecoverAsync(

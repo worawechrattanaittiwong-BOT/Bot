@@ -444,7 +444,7 @@ export class WorkerController {
 
     if (!command) return { command: null };
     const reloadJob =
-      command.command === "RELOAD_INSTANCE"
+      ["RELOAD_INSTANCE","REBUILD_INSTANCE"].includes(command.command)
         ? await this.job(command.bot_instance_id)
         : null;
     return {
@@ -464,13 +464,19 @@ export class WorkerController {
     commandId: number;
     instanceId: string;
     executionGeneration: number;
-    result: "STOP_CONFIRMED" | "STOP_FAILED" | "RELOAD_CONFIRMED" | "RELOAD_FAILED";
+    result:
+      | "STOP_CONFIRMED"
+      | "STOP_FAILED"
+      | "RELOAD_CONFIRMED"
+      | "RELOAD_FAILED"
+      | "REBUILD_CONFIRMED"
+      | "REBUILD_FAILED";
     errorCode?: string;
   }) {
     if (!Number.isInteger(body.commandId) || body.commandId < 1) throw new BadRequestException("Invalid command ID");
     if (!/^[0-9a-f-]{36}$/i.test(body.instanceId || "")) throw new BadRequestException("Invalid instance ID");
     if (!Number.isInteger(body.executionGeneration) || body.executionGeneration < 1) throw new BadRequestException("Invalid execution generation");
-    if (!["STOP_CONFIRMED","STOP_FAILED","RELOAD_CONFIRMED","RELOAD_FAILED"].includes(body.result)) throw new BadRequestException("Invalid command result");
+    if (!["STOP_CONFIRMED","STOP_FAILED","RELOAD_CONFIRMED","RELOAD_FAILED","REBUILD_CONFIRMED","REBUILD_FAILED"].includes(body.result)) throw new BadRequestException("Invalid command result");
     const errorCode = String(body.errorCode || "").replace(/[^A-Z0-9_]/g, "").slice(0,64) || null;
 
     return this.db.transaction(async tx => {
@@ -481,9 +487,16 @@ export class WorkerController {
       if (!command || command.runner_id !== body.runnerId || command.bot_instance_id !== body.instanceId) {
         throw new BadRequestException("Worker command does not match this runtime");
       }
-      if (!["STOP_INSTANCE","RELOAD_INSTANCE"].includes(command.command)) throw new BadRequestException("Unsupported worker command");
-      const isReload = command.command === "RELOAD_INSTANCE";
-      if (isReload !== body.result.startsWith("RELOAD_")) {
+      if (!["STOP_INSTANCE","RELOAD_INSTANCE","REBUILD_INSTANCE"].includes(command.command)) {
+        throw new BadRequestException("Unsupported worker command");
+      }
+      const expectedPrefix =
+        command.command === "REBUILD_INSTANCE"
+          ? "REBUILD_"
+          : command.command === "RELOAD_INSTANCE"
+            ? "RELOAD_"
+            : "STOP_";
+      if (!body.result.startsWith(expectedPrefix)) {
         throw new BadRequestException("Worker command result type mismatch");
       }
       if (Number(command.execution_generation) !== body.executionGeneration) {
@@ -521,10 +534,10 @@ export class WorkerController {
            WHERE id=$1`,
           [instance.id]
         );
-      } else if (body.result === "RELOAD_CONFIRMED") {
+      } else if (body.result === "RELOAD_CONFIRMED" || body.result === "REBUILD_CONFIRMED") {
         await tx.query(
-          "UPDATE worker_commands SET status='ACKED',result_code='RELOAD_CONFIRMED',acked_at=now() WHERE id=$1",
-          [command.id]
+          "UPDATE worker_commands SET status='ACKED',result_code=$2,acked_at=now() WHERE id=$1",
+          [command.id,body.result]
         );
         await tx.query(
           `UPDATE bot_instances SET
@@ -532,27 +545,35 @@ export class WorkerController {
              cloud_recovery_attempts=0,
              cloud_recovery_last_error=NULL,
              cloud_recovery_next_at=NULL,
+             provisioning_error=NULL,
+             actual_state='OFFLINE',
+             last_seen_at=NULL,
              metrics=COALESCE(metrics,'{}'::jsonb) || jsonb_build_object(
                'symbolChangeStatus','RELOADED',
-               'manualMt5ActionStatus','ACKED'
+               'symbolRefreshStatus','RELOADED',
+               'manualMt5ActionStatus','ACKED',
+               'runtimeRepairStatus',CASE WHEN $2='REBUILD_CONFIRMED' THEN 'ACKED' ELSE COALESCE(metrics->>'runtimeRepairStatus','') END,
+               'runtimeRepairMessage',CASE WHEN $2='REBUILD_CONFIRMED' THEN 'Cloud Runtime rebuilt successfully' ELSE COALESCE(metrics->>'runtimeRepairMessage','') END
              )
            WHERE id=$1`,
-          [instance.id]
+          [instance.id,body.result]
         );
-      } else if (body.result === "RELOAD_FAILED") {
+      } else if (body.result === "RELOAD_FAILED" || body.result === "REBUILD_FAILED") {
         await tx.query(
           "UPDATE worker_commands SET status='FAILED',result_code=$2,acked_at=now() WHERE id=$1",
-          [command.id,errorCode || "RELOAD_FAILED"]
+          [command.id,errorCode || (body.result === "REBUILD_FAILED" ? "REBUILD_FAILED" : "RELOAD_FAILED")]
         );
         await tx.query(
           `UPDATE bot_instances SET
              metrics=COALESCE(metrics,'{}'::jsonb) || jsonb_build_object(
                'symbolChangeStatus','FAILED',
                'manualMt5ActionStatus','FAILED',
-               'manualMt5ActionMessage',$2::text
+               'manualMt5ActionMessage',$2::text,
+               'runtimeRepairStatus',CASE WHEN $3::boolean THEN 'FAILED' ELSE COALESCE(metrics->>'runtimeRepairStatus','') END,
+               'runtimeRepairMessage',CASE WHEN $3::boolean THEN $2::text ELSE COALESCE(metrics->>'runtimeRepairMessage','') END
              )
            WHERE id=$1`,
-          [instance.id,errorCode || "RELOAD_FAILED"]
+          [instance.id,errorCode || (body.result === "REBUILD_FAILED" ? "REBUILD_FAILED" : "RELOAD_FAILED"),body.result === "REBUILD_FAILED"]
         );
       } else {
         await tx.query(
@@ -576,7 +597,11 @@ export class WorkerController {
               ? "CLOUD_RUNTIME_RELOAD_CONFIRMED"
               : body.result === "RELOAD_FAILED"
                 ? "CLOUD_RUNTIME_RELOAD_FAILED"
-                : "CLOUD_RUNTIME_STOP_FAILED",
+                : body.result === "REBUILD_CONFIRMED"
+                  ? "CLOUD_RUNTIME_REBUILD_CONFIRMED"
+                  : body.result === "REBUILD_FAILED"
+                    ? "CLOUD_RUNTIME_REBUILD_FAILED"
+                    : "CLOUD_RUNTIME_STOP_FAILED",
           instance.id,
           JSON.stringify({ commandId: Number(command.id), executionGeneration: body.executionGeneration, errorCode: errorCode || null })
         ]

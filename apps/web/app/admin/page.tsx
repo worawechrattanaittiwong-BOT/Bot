@@ -329,6 +329,34 @@ export default function AdminPage() {
     }
   }
 
+  async function repairCustomerSlotRuntime(user:any, slot:any) {
+    if (!slot?.id || !slot?.account_number || slot?.mode !== "CLOUD") return;
+    const label="Cloud VPS Slot #"+Number(slot.slot_number||0);
+    const confirmed=await confirmPopup({
+      title:"ซ่อม MT5 / EA · "+label,
+      tone:"warning",
+      message:
+        "ระบบจะสร้าง Cloud Runtime ใหม่เฉพาะ "+label+" โดยใช้ Trading Credential เดิมที่เข้ารหัสไว้\n\n"+
+        "บัญชี MT5, สมาชิก และประวัติ Trial จะไม่ถูกลบ ต้องหยุดบอทและไม่มี Position / Pending Order ก่อนดำเนินการ",
+      confirmLabel:"ซ่อม MT5 / EA"
+    });
+    if(!confirmed) return;
+
+    setCustomerAction("slot-repair:"+slot.id);
+    try {
+      const result=await adminApi("/admin/slots/repair-runtime", {
+        method:"POST",
+        body:JSON.stringify({ userId:user.id, slotId:slot.id })
+      });
+      setMessage(result?.message || "ส่งคำสั่งซ่อม MT5 / EA แล้ว");
+      await search(undefined,true);
+    } catch(e:any) {
+      setMessage(e.message);
+    } finally {
+      setCustomerAction("");
+    }
+  }
+
   async function disconnectCustomerSlotMt5(user:any, slot:any) {
     if (!slot?.id || !slot?.account_number) return;
     const label=(slot.mode==="CLOUD"?"Cloud VPS":"Local MT5")+" Slot #"+Number(slot.slot_number||0);
@@ -1435,6 +1463,16 @@ export default function AdminPage() {
                                   <div className="owner-slot-actions">
                                     {slot.account_number && (
                                       <>
+                                        {slot.mode==="CLOUD" && (
+                                          <button
+                                            type="button"
+                                            className="btn primary owner-slot-repair"
+                                            disabled={Boolean(customerAction)}
+                                            onClick={()=>void repairCustomerSlotRuntime(selectedCustomer,slot)}
+                                          >
+                                            {customerAction==="slot-repair:"+slot.id?"กำลังซ่อม...":"ซ่อม MT5 / EA"}
+                                          </button>
+                                        )}
                                         <button
                                           type="button"
                                           className="btn owner-slot-refresh"
