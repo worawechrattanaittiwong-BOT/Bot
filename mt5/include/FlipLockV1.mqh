@@ -1,16 +1,18 @@
 #ifndef SCENOVA_FLIP_LOCK_V1_MQH
 #define SCENOVA_FLIP_LOCK_V1_MQH
 
-// FLIP LOCK 1.1.0 - M1 pending-baton engine.
-// One live FLIP position is paired with one opposite STOP pending order.
-// The pending trigger follows favorable M1 price movement and becomes the next
-// side when price reverses through it. Every new leg uses the configured Lot;
-// there is no martingale, multiplier or progressive volume sizing.
-#define FLIP_LOCK_V1_VERSION "1.1.0"
+// FLIP LOCK 1.2.0 - M1 one-position protected-profit engine.
+// A live FLIP position starts with the existing wide Safety SL. Once price has
+// moved far enough into profit for a broker-legal stop beyond entry, the SL
+// jumps to protected profit and then trails the executable market price at a
+// fixed 100-point distance. The SL only tightens; it never moves backward.
+// No opposite pending baton is used.
+#define FLIP_LOCK_V1_VERSION "1.2.0"
 #define FLIP_LOCK_PENDING_COMMENT "SCNFlipLock"
 #define FLIP_LOCK_LIVE_COMMENT "SCNFlipLockLive"
 #define FLIP_LOCK_UNARMED_RESTART_COOLDOWN_SECONDS 5
-#define FLIP_LOCK_PENDING_SYNC_MIN_MS 120
+#define FLIP_LOCK_STOP_SYNC_MIN_MS 250
+#define FLIP_LOCK_TRAIL_DISTANCE_POINTS 100.0
 
 int g_flipLockDirection=0;
 double g_flipLockPeakPrice=0.0;
@@ -231,6 +233,33 @@ bool FlipLockRemovePendingTicket(const ulong ticket)
    return sent && FlipLockTradeAccepted(result.retcode);
 }
 
+bool FlipLockSetPositionStop(const ulong positionTicket,const double stopPrice)
+{
+   if(positionTicket==0 || stopPrice<=0.0 || !PositionSelectByTicket(positionTicket))
+      return false;
+
+   MqlTradeRequest request={};
+   MqlTradeResult result={};
+   request.action=TRADE_ACTION_SLTP;
+   request.position=positionTicket;
+   request.symbol=_Symbol;
+   request.magic=InpMagic;
+   request.sl=FlipLockNormalizePrice(stopPrice);
+   request.tp=PositionGetDouble(POSITION_TP);
+
+   ResetLastError();
+   bool sent=OrderSend(request,result);
+   g_lastOrderError=GetLastError();
+   g_lastOrderRetcode=(long)result.retcode;
+   if(sent && FlipLockTradeAccepted(result.retcode))
+   {
+      g_dynamicStopPrice=request.sl;
+      g_lastOrderAt=TimeCurrent();
+      return true;
+   }
+   return false;
+}
+
 void FlipLockRemoveAllPending()
 {
    for(int i=OrdersTotal()-1;i>=0;i--)
@@ -369,7 +398,7 @@ bool FlipLockOpenStarter(const int forcedDirection=0)
 
    // The shared sender forces FLIP volume to NormalizeTradeVolume(g_lot).
    // No martingale or adaptive lot scaling is allowed.
-   g_entryModel="FLIP_LOCK_M1_PENDING_BATON";
+   g_entryModel="FLIP_LOCK_M1_PROFIT_LOCK";
    g_entryTrigger=direction>0 ? "FLIP_LOCK_M1_START_BUY" : "FLIP_LOCK_M1_START_SELL";
    g_entryQuality="FLIP_LOCK_M1";
    g_entryQualityScore=0.0;
@@ -393,26 +422,54 @@ bool FlipLockOpenStarter(const int forcedDirection=0)
    return sent;
 }
 
-double FlipLockCandidateTrigger(const int direction,const MqlTick &tick)
+double FlipLockProfitLockPrice(
+   const int direction,
+   const double openPrice,
+   const MqlTick &tick
+)
 {
-   double distancePoints=FlipLockTrailDistancePoints();
-   if(direction==0 || distancePoints<=0.0) return 0.0;
+   if(direction==0 || openPrice<=0.0)
+      return 0.0;
 
-   // BUY position => SELL STOP below Bid. SELL position => BUY STOP above Ask.
-   double candidate=direction>0
-      ? tick.bid-distancePoints*_Point
-      : tick.ask+distancePoints*_Point;
-   return NormalizeTargetPriceToTick(candidate,-direction);
+   double trailPoints=MathMax(
+      FLIP_LOCK_TRAIL_DISTANCE_POINTS,
+      FlipLockBrokerMinDistancePoints()
+   );
+   double executablePrice=direction>0 ? tick.bid : tick.ask;
+   double target=direction>0
+      ? executablePrice-trailPoints*_Point
+      : executablePrice+trailPoints*_Point;
+
+   // Do not replace the wide Safety SL until the fixed-distance trail itself
+   // sits on the profitable side of entry. Broker Stops/Freeze legality is
+   // already included in trailPoints above.
+   if(direction>0)
+   {
+      if(target<=openPrice) return 0.0;
+   }
+   else
+   {
+      if(target>=openPrice) return 0.0;
+   }
+
+   return NormalizeStopPriceToTick(target,direction);
 }
 
-bool FlipLockTriggerIsLegal(const int currentDirection,const double trigger,const MqlTick &tick)
+bool FlipLockProfitStopIsLegal(
+   const int direction,
+   const double stopPrice,
+   const double openPrice,
+   const MqlTick &tick
+)
 {
-   double minDistance=FlipLockBrokerMinDistancePoints()*_Point;
-   if(currentDirection>0) return trigger<=tick.bid-minDistance;   // SELL STOP
-   return trigger>=tick.ask+minDistance;                         // BUY STOP
+   if(direction==0 || stopPrice<=0.0 || openPrice<=0.0) return false;
+   double minimum=FlipLockBrokerMinDistancePoints()*_Point;
+   if(direction>0)
+      return stopPrice>openPrice && stopPrice<=tick.bid-minimum;
+   return stopPrice<openPrice && stopPrice>=tick.ask+minimum;
 }
 
-bool FlipLockSyncBaton(
+bool FlipLockSyncProfitLock(
    const ulong positionTicket,
    const int direction,
    const double positionVolume,
@@ -423,93 +480,60 @@ bool FlipLockSyncBaton(
    if(positionTicket==0 || direction==0 || positionVolume<=0.0) return false;
    if(!PositionSelectByTicket(positionTicket)) return false;
 
-   int pendingDirection=-direction;
-   double candidate=FlipLockCandidateTrigger(direction,tick);
-   if(candidate<=0.0 || !FlipLockTriggerIsLegal(direction,candidate,tick))
-   {
-      g_flipLockReason="WAIT_M1_PENDING_DISTANCE";
-      g_executionStatus="FLIP_LOCK_WAIT_M1_PENDING_DISTANCE";
-      return false;
-   }
-
-   // Trail only in the favorable direction. Never move the reversal trigger
-   // farther away after it has tightened.
-   if(g_flipLockTriggerPrice<=0.0)
-      g_flipLockTriggerPrice=candidate;
-   else if(direction>0)
-      g_flipLockTriggerPrice=MathMax(g_flipLockTriggerPrice,candidate);
-   else
-      g_flipLockTriggerPrice=MathMin(g_flipLockTriggerPrice,candidate);
-
-   ulong pendingTicket=0;
-   int existingDirection=0;
-   double pendingPrice=0.0,pendingVolume=0.0;
-   bool hasPending=FlipLockFindPending(
-      pendingTicket,existingDirection,pendingPrice,pendingVolume
+   const double openPrice=PositionGetDouble(POSITION_PRICE_OPEN);
+   const double target=FlipLockProfitLockPrice(
+      direction,
+      openPrice,
+      tick
    );
 
-   double lotStep=SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_STEP);
-   if(lotStep<=0.0) lotStep=0.01;
-   bool wrongPending=hasPending &&
-      (existingDirection!=pendingDirection ||
-       MathAbs(pendingVolume-positionVolume)>lotStep*0.25);
-
-   if(wrongPending)
+   // Until the 100-point trailing stop can sit beyond entry legally, leave the
+   // original wide Safety SL untouched.
+   if(target<=0.0 || !FlipLockProfitStopIsLegal(direction,target,openPrice,tick))
    {
-      FlipLockRemoveAllPending();
-      hasPending=false;
-      pendingTicket=0;
-   }
-
-   if(!hasPending)
-   {
-      if(!FlipLockPlacePending(
-         pendingDirection,
-         g_flipLockTriggerPrice,
-         positionVolume
-      ))
-      {
-         g_flipLockReason="PENDING_PLACE_RETRY";
-         g_executionStatus="FLIP_LOCK_PENDING_PLACE_RETRY";
-         return false;
-      }
-
-      g_flipLockArmed=true;
-      g_flipLockReason="M1_PENDING_BATON_ARMED";
-      g_executionStatus=direction>0
-         ? "FLIP_LOCK_BUY_WITH_SELL_STOP"
-         : "FLIP_LOCK_SELL_WITH_BUY_STOP";
+      g_flipLockReason="WAIT_PROFIT_LOCK_DISTANCE";
+      g_executionStatus="FLIP_LOCK_WAIT_PROFIT_LOCK";
       return true;
    }
 
    double tickSize=SymbolInfoDouble(_Symbol,SYMBOL_TRADE_TICK_SIZE);
    if(tickSize<=0.0) tickSize=_Point;
-   bool improved=direction>0
-      ? g_flipLockTriggerPrice>=pendingPrice+tickSize-1e-12
-      : g_flipLockTriggerPrice<=pendingPrice-tickSize+1e-12;
+   bool improved=currentSl<=0.0 ||
+      (direction>0
+         ? target>=currentSl+tickSize-1e-12
+         : target<=currentSl-tickSize+1e-12);
+
+   if(!improved)
+   {
+      g_flipLockArmed=true;
+      g_flipLockTriggerPrice=currentSl;
+      g_flipLockReason="PROFIT_LOCK_HOLD";
+      g_executionStatus=direction>0
+         ? "FLIP_LOCK_BUY_PROFIT_LOCK"
+         : "FLIP_LOCK_SELL_PROFIT_LOCK";
+      return true;
+   }
 
    ulong nowMs=GetTickCount64();
    bool syncReady=g_flipLockLastStopSyncMs==0 ||
-      nowMs-g_flipLockLastStopSyncMs>=FLIP_LOCK_PENDING_SYNC_MIN_MS;
+      nowMs-g_flipLockLastStopSyncMs>=FLIP_LOCK_STOP_SYNC_MIN_MS;
+   if(!syncReady)
+      return true;
 
-   if(improved && syncReady)
+   if(!FlipLockSetPositionStop(positionTicket,target))
    {
-      if(!FlipLockModifyPending(pendingTicket,g_flipLockTriggerPrice))
-      {
-         g_flipLockReason="PENDING_TRAIL_RETRY";
-         g_executionStatus="FLIP_LOCK_PENDING_TRAIL_RETRY";
-         return false;
-      }
-      g_flipLockLastStopSyncMs=nowMs;
+      g_flipLockReason="SL_PROFIT_LOCK_RETRY";
+      g_executionStatus="FLIP_LOCK_SL_PROFIT_LOCK_RETRY";
+      return false;
    }
 
-   g_flipLockPendingDirection=pendingDirection;
-   g_flipLockPendingTriggerPrice=g_flipLockTriggerPrice;
+   g_flipLockLastStopSyncMs=nowMs;
+   g_flipLockTriggerPrice=target;
    g_flipLockArmed=true;
-   g_flipLockReason="M1_PENDING_BATON_ACTIVE";
+   g_flipLockReason="LOCAL_100_POINT_PROFIT_TRAIL";
    g_executionStatus=direction>0
-      ? "FLIP_LOCK_BUY_WITH_SELL_STOP"
-      : "FLIP_LOCK_SELL_WITH_BUY_STOP";
+      ? "FLIP_LOCK_BUY_PROFIT_LOCK"
+      : "FLIP_LOCK_SELL_PROFIT_LOCK";
    return true;
 }
 
@@ -601,41 +625,103 @@ bool FlipLockPendingTriggerCrossed()
    return tick.bid<=g_flipLockPendingTriggerPrice+tolerance;
 }
 
+bool FlipLockHistoryPositionOwned(const ulong positionId)
+{
+   if(positionId==0 || !HistorySelectByPosition(positionId))
+      return false;
+
+   int total=HistoryDealsTotal();
+   for(int i=0;i<total;i++)
+   {
+      ulong deal=HistoryDealGetTicket(i);
+      if(deal==0) continue;
+      long entry=HistoryDealGetInteger(deal,DEAL_ENTRY);
+      if(entry!=DEAL_ENTRY_IN && entry!=DEAL_ENTRY_INOUT) continue;
+      if(HistoryDealGetString(deal,DEAL_SYMBOL)!=_Symbol) continue;
+      if(HistoryDealGetInteger(deal,DEAL_MAGIC)!=InpMagic) continue;
+
+      string comment=HistoryDealGetString(deal,DEAL_COMMENT);
+      if(StringFind(comment,FLIP_LOCK_LIVE_COMMENT)>=0 ||
+         StringFind(comment,FLIP_LOCK_PENDING_COMMENT)>=0)
+         return true;
+   }
+   return false;
+}
+
+bool FlipLockLastExitWasStop()
+{
+   datetime now=TimeCurrent();
+   if(!HistorySelect(now-86400,now+60))
+      return false;
+
+   int total=HistoryDealsTotal();
+   ulong latestExit=0;
+   long latestTime=-1;
+   ulong latestPositionId=0;
+   long latestReason=0;
+
+   for(int i=0;i<total;i++)
+   {
+      ulong deal=HistoryDealGetTicket(i);
+      if(deal==0) continue;
+      if(HistoryDealGetString(deal,DEAL_SYMBOL)!=_Symbol ||
+         HistoryDealGetInteger(deal,DEAL_MAGIC)!=InpMagic)
+         continue;
+
+      long entry=HistoryDealGetInteger(deal,DEAL_ENTRY);
+      if(entry!=DEAL_ENTRY_OUT &&
+         entry!=DEAL_ENTRY_OUT_BY &&
+         entry!=DEAL_ENTRY_INOUT)
+         continue;
+
+      long dealTime=(long)HistoryDealGetInteger(deal,DEAL_TIME_MSC);
+      if(latestExit==0 || dealTime>=latestTime)
+      {
+         latestExit=deal;
+         latestTime=dealTime;
+         latestPositionId=(ulong)HistoryDealGetInteger(deal,DEAL_POSITION_ID);
+         latestReason=HistoryDealGetInteger(deal,DEAL_REASON);
+      }
+   }
+
+   if(latestExit==0 || latestReason!=DEAL_REASON_SL)
+      return false;
+
+   return FlipLockHistoryPositionOwned(latestPositionId);
+}
+
+
 void FlipLockManageFlatState()
 {
-   ulong pendingTicket=0;
-   int pendingDirection=0;
-   double pendingPrice=0.0,pendingVolume=0.0;
-   bool pendingStillExists=FlipLockFindPending(
-      pendingTicket,pendingDirection,pendingPrice,pendingVolume
-   );
+   // New engine never pre-places the opposite side. Remove stale pending orders
+   // left by an older 1.1.0 build before deciding any new market exposure.
+   FlipLockRemoveAllPending();
+   g_flipLockFlatPendingSince=0;
 
-   // On Netting, an equal-volume opposite STOP closes the old leg to flat.
-   // If the tracked pending vanished exactly as price crossed its trigger, use
-   // that trigger as the handoff signal and reopen the opposite side at the
-   // configured Lot. This preserves configured Lot without a hidden 2x order.
-   bool nettingTriggered=
-      !FlipLockAccountIsHedging() &&
-      !pendingStillExists &&
-      FlipLockPendingTriggerCrossed();
-
-   int forcedDirection=nettingTriggered ? g_flipLockPendingDirection : 0;
-   if(pendingStillExists)
-      FlipLockRemoveAllPending();
-
-   if(nettingTriggered)
+   if(g_flipLockDirection!=0 && FlipLockLastExitWasStop())
    {
-      g_flipLockFlipCount++;
-      g_flipLockLastFlipAt=TimeCurrent();
-      g_flipLockReason="NETTING_PENDING_TRIGGER_HANDOFF";
-      FlipLockOpenStarter(forcedDirection);
+      // SL is the FLIP handoff trigger. A BUY stop-out means price reversed
+      // downward, so continue with SELL. A SELL stop-out means price reversed
+      // upward, so continue with BUY. Do not re-read M1 for this handoff.
+      int nextDirection=-g_flipLockDirection;
+      g_flipLockReason=nextDirection>0
+         ? "SL_HANDOFF_TO_BUY"
+         : "SL_HANDOFF_TO_SELL";
+
+      // Keep the previous direction until the replacement order is accepted so
+      // a transient broker reject cannot lose the required BUY<->SELL handoff.
+      if(FlipLockOpenStarter(nextDirection))
+      {
+         g_flipLockFlipCount++;
+         g_flipLockLastFlipAt=TimeCurrent();
+      }
       return;
    }
 
-   // No valid pending handoff means the Safety Stop/manual close ended this leg.
-   // Read M1 again after a short cooldown instead of inventing a higher-TF side.
    if(g_flipLockDirection!=0)
    {
+      // Manual/Close-All/non-SL exits are not reversal signals. Reset the old
+      // leg and let the normal M1 starter choose a fresh side after cooldown.
       if(g_flipLockLastFlatAt>0 &&
          TimeCurrent()-g_flipLockLastFlatAt<FLIP_LOCK_UNARMED_RESTART_COOLDOWN_SECONDS)
       {
@@ -664,6 +750,9 @@ void FlipLockManage()
       return;
    }
 
+   // 1.2.0 has no opposite pending baton. Clean any stale order from 1.1.0.
+   FlipLockRemoveAllPending();
+
    int totalCount=BasketPositionCount();
    bool canOpenNewCycle=
       selected &&
@@ -680,7 +769,6 @@ void FlipLockManage()
 
       if(!canOpenNewCycle)
       {
-         FlipLockRemoveAllPending();
          FlipLockResetTracking(true);
          ResetBasketCycleState();
          g_flipLockReason="WAIT_RUN_AUTHORIZATION";
@@ -698,26 +786,19 @@ void FlipLockManage()
 
    if(!ownsLivePosition)
    {
-      FlipLockRemoveAllPending();
       g_flipLockReason="WAIT_FOREIGN_POSITION";
       g_executionStatus="FLIP_LOCK_WAIT_EXISTING_POSITION";
       return;
    }
 
-   if(ownCount>1)
+   if(ownCount!=1 || totalCount!=ownCount)
    {
-      // Pending-trigger overlap is expected only on Hedging accounts. Keep the
-      // newest triggered leg and close the prior leg immediately.
-      FlipLockRemoveAllPending();
-      FlipLockReconcileHedgingPositions();
-      return;
-   }
-
-   if(totalCount!=ownCount)
-   {
-      FlipLockRemoveAllPending();
-      g_flipLockReason="WAIT_FOREIGN_POSITION";
-      g_executionStatus="FLIP_LOCK_WAIT_EXISTING_POSITION";
+      g_flipLockReason=ownCount>1
+         ? "WAIT_SINGLE_POSITION"
+         : "WAIT_FOREIGN_POSITION";
+      g_executionStatus=ownCount>1
+         ? "FLIP_LOCK_WAIT_SINGLE_POSITION"
+         : "FLIP_LOCK_WAIT_EXISTING_POSITION";
       return;
    }
 
@@ -741,8 +822,6 @@ void FlipLockManage()
       g_flipLockDirection=direction;
       g_flipLockPeakPrice=executablePrice;
       g_flipLockTriggerPrice=0.0;
-      g_flipLockPendingDirection=0;
-      g_flipLockPendingTriggerPrice=0.0;
       g_flipLockArmed=false;
       g_flipLockLastStopSyncMs=0;
    }
@@ -754,20 +833,19 @@ void FlipLockManage()
          ? executablePrice
          : MathMin(g_flipLockPeakPrice,executablePrice);
 
-   // Stop/authorization changes block NEW opposite exposure, but the existing
-   // live leg keeps its broker Safety Stop.
+   // Server state controls only NEW exposure. A live FLIP position must keep
+   // tightening its broker SL from the local MT5 quote even during Stop/offline.
+   FlipLockSyncProfitLock(positionTicket,direction,volume,currentSl,tick);
+
    if(!canOpenNewCycle)
    {
-      FlipLockRemoveAllPending();
-      g_flipLockArmed=false;
-      g_flipLockPendingDirection=0;
-      g_flipLockPendingTriggerPrice=0.0;
-      g_flipLockReason="LIVE_SAFETY_ONLY";
-      g_executionStatus="FLIP_LOCK_LIVE_SAFETY_ONLY";
-      return;
+      g_flipLockReason=g_flipLockArmed
+         ? "PROFIT_LOCK_MANAGE_ONLY"
+         : "LIVE_SAFETY_ONLY";
+      g_executionStatus=g_flipLockArmed
+         ? "FLIP_LOCK_PROFIT_LOCK_MANAGE_ONLY"
+         : "FLIP_LOCK_LIVE_SAFETY_ONLY";
    }
-
-   FlipLockSyncBaton(positionTicket,direction,volume,currentSl,tick);
 }
 
 #endif
