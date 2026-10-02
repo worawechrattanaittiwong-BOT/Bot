@@ -407,12 +407,9 @@ bool   g_raceCloseAllProfitEnabled = true;
 double g_raceCloseAllProfitMoney = 0.50;
 string g_raceProfitTargetMode = "BASKET";
 double g_racePerPositionProfitMoney = 0.50;
-// RACE uses a rolling 30-second order-flow window as the primary side signal.
-// Exchange/deal-side flags are used when the broker publishes them; quote-only
-// symbols fall back to uptick/downtick tick-volume counts. A modest 55%
-// dominance floor avoids acting on near-ties without turning RACE into a slow
-// confidence-gated system. Intact Demand/Supply zones may still override only
-// at the boundary. Trend/EMA/timeframes stay excluded from RACE side selection.
+// RACE entry side follows only the visible live Bid-price move over ~2 seconds.
+// The older 30-second flow remains for legacy exit/profit-run telemetry only;
+// it no longer selects or overrides BUY/SELL entries.
 datetime g_raceVolumeBucketSecond[RACE_VOLUME_HISTORY_SECONDS];
 double   g_raceVolumeBucketBuy[RACE_VOLUME_HISTORY_SECONDS];
 double   g_raceVolumeBucketSell[RACE_VOLUME_HISTORY_SECONDS];
@@ -3501,14 +3498,18 @@ void RaceSampleLivePriceFlow()
       nowMs-g_raceLiveFlowLastSampleMs<RACE_LIVE_FLOW_SAMPLE_MS)
       return;
 
-   double mid=(tick.bid+tick.ask)*0.5;
-   if(mid<=0.0)
+   // MT5 charts are Bid-based for normal OTC symbols. Follow the visible chart
+   // price directly so spread expansion/contraction cannot fake a direction.
+   double chartPrice=tick.bid>0.0
+      ? tick.bid
+      : (tick.bid+tick.ask)*0.5;
+   if(chartPrice<=0.0)
       return;
 
    if(g_raceLiveFlowCount<RACE_LIVE_FLOW_HISTORY)
    {
       g_raceLiveFlowTimeMs[g_raceLiveFlowCount]=nowMs;
-      g_raceLiveFlowPrice[g_raceLiveFlowCount]=mid;
+      g_raceLiveFlowPrice[g_raceLiveFlowCount]=chartPrice;
       g_raceLiveFlowCount++;
    }
    else
@@ -3519,7 +3520,7 @@ void RaceSampleLivePriceFlow()
          g_raceLiveFlowPrice[i-1]=g_raceLiveFlowPrice[i];
       }
       g_raceLiveFlowTimeMs[RACE_LIVE_FLOW_HISTORY-1]=nowMs;
-      g_raceLiveFlowPrice[RACE_LIVE_FLOW_HISTORY-1]=mid;
+      g_raceLiveFlowPrice[RACE_LIVE_FLOW_HISTORY-1]=chartPrice;
    }
 
    g_raceLiveFlowLastSampleMs=nowMs;
@@ -4743,9 +4744,9 @@ bool ManageRaceBasket(double momentum)
    }
 
 
-   // Direction still comes from the rolling 30-second BUY/SELL pressure
-   // window. A pressure flip never adds on the stale side. Negative baskets
-   // may soft-exit only through the confirmed structure+flow rule above.
+   // Entry/add direction comes only from the live two-second chart-price flow.
+   // Negative one-way baskets may still soft-exit through the existing safety
+   // path above; POSITION/Hedging was routed to ticket-level management earlier.
    int volumeDirection = RaceAnalysisDirection(momentum);
    if(volumeDirection != 0 && volumeDirection != direction)
    {
