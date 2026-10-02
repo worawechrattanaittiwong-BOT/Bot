@@ -258,7 +258,7 @@ CREATE TABLE IF NOT EXISTS worker_commands (
  runner_id varchar(120) NOT NULL REFERENCES worker_nodes(runner_id) ON DELETE CASCADE,
  bot_instance_id uuid NOT NULL REFERENCES bot_instances(id) ON DELETE CASCADE,
  execution_generation bigint NOT NULL,
- command varchar(32) NOT NULL CHECK (command IN ('STOP_INSTANCE','RELOAD_INSTANCE')),
+ command varchar(32) NOT NULL CHECK (command IN ('STOP_INSTANCE','RELOAD_INSTANCE','REBUILD_INSTANCE')),
  status varchar(20) NOT NULL DEFAULT 'PENDING'
    CHECK (status IN ('PENDING','DELIVERED','ACKED','FAILED','CANCELLED')),
  result_code varchar(64),
