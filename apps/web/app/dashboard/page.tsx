@@ -173,6 +173,8 @@ const defaultSettings = {
   autoMaxPositions: 10,
   raceLot: 0.01,
   raceMaxPositions: 10,
+  counterLot: 0.01,
+  counterMaxPositions: 10,
   flipLockLot: 0.01,
   manualLot: 0.01,
   manualMaxPositions: 10,
@@ -229,6 +231,7 @@ const defaultSettings = {
   raceProfitTargetMode: "BASKET",
   raceCloseAllProfitMoney: 0.5,
   racePerPositionProfitMoney: 0.5,
+  counterPerPositionProfitMoney: 0.5,
   zeroGridStepPrice: 3,
   zeroGridLevelsPerSide: 10,
   zeroGridBaseLot: 0.03,
@@ -364,6 +367,7 @@ export default function DashboardPage() {
         const sizingProfileByMode:Record<string,{lot:string;max?:string}> = {
           AUTO:{lot:"autoLot",max:"autoMaxPositions"},
           RACE:{lot:"raceLot",max:"raceMaxPositions"},
+          COUNTER:{lot:"counterLot",max:"counterMaxPositions"},
           FLIP_LOCK:{lot:"flipLockLot"},
           MANUAL:{lot:"manualLot",max:"manualMaxPositions"}
         };
@@ -399,6 +403,9 @@ export default function DashboardPage() {
           nextSettings.zeroGridBaseLot = 0.03;
           if (!Number.isFinite(Number(nextSettings.zeroGridMinNetProfitMoney)) || Number(nextSettings.zeroGridMinNetProfitMoney) <= 0.01) nextSettings.zeroGridMinNetProfitMoney = 0.5;
           nextSettings.zeroGridCloseReserveMoney = 0;
+        }
+        if (loadedControlMode === "COUNTER") {
+          if (!Number.isFinite(Number(nextSettings.counterPerPositionProfitMoney)) || Number(nextSettings.counterPerPositionProfitMoney) <= 0) nextSettings.counterPerPositionProfitMoney = 0.5;
         }
         if (loadedControlMode === "RACE") {
           const raceProfitMode = String(nextSettings.raceProfitTargetMode || "").toUpperCase();
@@ -1760,7 +1767,7 @@ export default function DashboardPage() {
   const configuredMaxPositions = Math.max(1, Number(settings.maxPositions || 1));
   const dashboardBotTodayProfit = Number(metrics.botTodayProfit ?? metrics.dailyProfit ?? 0);
   const activeControlModeRaw = String(settings.controlMode || settings.engineMode || "AUTO").toUpperCase();
-  const activeControlMode = ["AUTO","RACE","FLIP_LOCK","ZERO_GRID","MANUAL"].includes(activeControlModeRaw)
+  const activeControlMode = ["AUTO","RACE","COUNTER","FLIP_LOCK","ZERO_GRID","MANUAL"].includes(activeControlModeRaw)
     ? activeControlModeRaw
     : "AUTO";
   const todayPerformance = data?.tradeJournal?.today || {
@@ -1768,7 +1775,7 @@ export default function DashboardPage() {
   };
   const modePerformanceToday = Array.isArray(data?.tradeJournal?.modeToday)
     ? data.tradeJournal.modeToday
-    : ["AUTO","RACE","FLIP_LOCK","ZERO_GRID","MANUAL"].map(mode=>({
+    : ["AUTO","RACE","COUNTER","FLIP_LOCK","ZERO_GRID","MANUAL"].map(mode=>({
         mode,trades:0,closedTrades:0,wins:0,losses:0,winRate:0,netProfit:0,drawdownMoney:0,drawdownPercent:0
       }));
 
@@ -1828,7 +1835,9 @@ export default function DashboardPage() {
     ? "ZERO_GRID"
     : desiredControlMode === "RACE"
       ? "RACE"
-      : "AUTO";
+      : desiredControlMode === "COUNTER"
+        ? "COUNTER"
+        : "AUTO";
   const eaSettingsTelemetryReady =
     isMt5Online &&
     metrics.controlMode !== undefined &&
@@ -3483,6 +3492,8 @@ export default function DashboardPage() {
         "autoMaxPositions",
         "raceLot",
         "raceMaxPositions",
+        "counterLot",
+        "counterMaxPositions",
         "flipLockLot",
         "manualLot",
         "manualMaxPositions",
@@ -3504,6 +3515,7 @@ export default function DashboardPage() {
         "dailyProfitTargetMoney",
         "dailyProfitDrawdownPercent",
         "autoProfitTargetMoney",
+        "counterPerPositionProfitMoney",
         "manualBasketProfitTargetMoney",
         "manualPerPositionProfitMoney",
         "basketProfitTargetMoney",
@@ -3543,6 +3555,7 @@ export default function DashboardPage() {
         "maxPositions",
         "autoMaxPositions",
         "raceMaxPositions",
+        "counterMaxPositions",
         "manualMaxPositions",
         "minOrderIntervalMs",
         "maxOrdersPerMinute",
@@ -3566,6 +3579,9 @@ export default function DashboardPage() {
       } else if (requestedControlMode === "RACE") {
         payload.controlMode = "RACE";
         payload.engineMode = "RACE";
+      } else if (requestedControlMode === "COUNTER") {
+        payload.controlMode = "COUNTER";
+        payload.engineMode = "COUNTER";
       } else {
         payload.controlMode = ["AUTO","FLIP_LOCK","MANUAL"].includes(requestedControlMode) ? requestedControlMode : "AUTO";
         payload.engineMode = "AUTO";
@@ -3574,6 +3590,7 @@ export default function DashboardPage() {
       const sizingProfiles:Record<string,{lot:string;max?:string}> = {
         AUTO:{lot:"autoLot",max:"autoMaxPositions"},
         RACE:{lot:"raceLot",max:"raceMaxPositions"},
+        COUNTER:{lot:"counterLot",max:"counterMaxPositions"},
         FLIP_LOCK:{lot:"flipLockLot"},
         MANUAL:{lot:"manualLot",max:"manualMaxPositions"}
       };
@@ -3627,7 +3644,7 @@ export default function DashboardPage() {
           throw new Error("MANUAL เลือกกำไรทั้งชุดหรือกำไรต่อไม้ได้อย่างใดอย่างหนึ่ง");
         }
       } else {
-        // RACE/ZERO use dedicated fields. FLIP LOCK keeps its own lock engine.
+        // RACE/COUNTER/ZERO use dedicated fields. FLIP LOCK keeps its own lock engine.
         payload.profitTargetMode = "OFF";
         payload.basketProfitTargetMoney = 0;
         payload.perPositionProfitMoney = 0;
