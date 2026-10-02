@@ -1530,6 +1530,130 @@ export class AdminController {
     };
   }
 
+  @Post("slots/repair-runtime")
+  async repairCustomerSlotRuntime(
+    @Req() req: any,
+    @Body() body: { userId: string; slotId: string }
+  ) {
+    const slot = await this.adminCustomerSlot(body.userId, body.slotId);
+    if (!slot) throw new ConflictException("ไม่พบ Slot ของลูกค้ารายนี้");
+    if (String(slot.mode || "").toUpperCase() !== "CLOUD") {
+      throw new ConflictException("ปุ่มซ่อม MT5 / EA ใช้สำหรับ Cloud VPS เท่านั้น");
+    }
+    if (!slot.instance_id || !slot.mt5_account_id) {
+      throw new ConflictException("Slot นี้ยังไม่ได้เชื่อมบัญชี MT5");
+    }
+    if (!slot.runner_id) {
+      throw new ConflictException("Cloud VPS Slot นี้ยังไม่ได้เชื่อม Worker");
+    }
+
+    const positions = Math.max(0, Number(slot.positions || 0));
+    const pendingOrders = Math.max(0, Number(slot.pending_orders || 0));
+    if (
+      positions > 0 ||
+      pendingOrders > 0 ||
+      String(slot.actual_state || "").toUpperCase() === "RUNNING" ||
+      String(slot.desired_state || "").toUpperCase() === "RUNNING"
+    ) {
+      throw new ConflictException(
+        "กรุณาหยุดบอทและให้ Position / Pending Order เป็น 0 ก่อนซ่อม MT5 / EA"
+      );
+    }
+
+    const runtimeStopState = String(slot.runtime_stop_state || "NONE").toUpperCase();
+    if (runtimeStopState !== "NONE") {
+      throw new ConflictException(
+        "Cloud Runtime กำลังอยู่ในขั้นตอนหยุด/ย้ายระบบ กรุณารอให้สถานะกลับมา NONE ก่อน"
+      );
+    }
+
+    const credential = await this.db.one(
+      "SELECT mt5_account_id FROM mt5_credentials WHERE mt5_account_id=$1",
+      [slot.mt5_account_id]
+    );
+    if (!credential) {
+      throw new ConflictException(
+        "ไม่มี Trading Credential ที่เข้ารหัสของบัญชีนี้ ลูกค้าต้องเชื่อม MT5 ใหม่ด้วยตัวเอง"
+      );
+    }
+
+    const generation = Number(slot.execution_generation || 1);
+    const requestedAt = new Date().toISOString();
+
+    await this.db.transaction(async tx => {
+      await tx.query(
+        `UPDATE worker_commands
+         SET status='CANCELLED',
+             result_code='SUPERSEDED_BY_RUNTIME_REPAIR',
+             acked_at=COALESCE(acked_at,now())
+         WHERE bot_instance_id=$1
+           AND execution_generation=$2
+           AND status IN ('PENDING','DELIVERED')
+           AND command IN ('RELOAD_INSTANCE','REBUILD_INSTANCE')`,
+        [slot.instance_id, generation]
+      );
+
+      await tx.query(
+        `UPDATE bot_instances
+         SET desired_state='STOPPED',
+             actual_state='OFFLINE',
+             last_seen_at=NULL,
+             provisioning_error=NULL,
+             cloud_recovery_state='IDLE',
+             cloud_recovery_attempts=0,
+             cloud_recovery_window_started_at=NULL,
+             cloud_recovery_next_at=NULL,
+             cloud_recovery_last_error=NULL,
+             metrics=(
+               COALESCE(metrics,'{}'::jsonb)
+               - 'symbol'
+               - 'symbolTradeMode'
+               - 'marketWatchSymbols'
+               - 'marketWatchCapturedAt'
+               - 'requestedStartupSymbol'
+               - 'symbolChangeStatus'
+             ) || jsonb_build_object(
+               'runtimeRepairStatus','QUEUED',
+               'runtimeRepairRequestedAt',$2::text,
+               'runtimeRepairSource','ADMIN_SLOT',
+               'symbolRefreshStatus','QUEUED',
+               'symbolRefreshSource','ADMIN_RUNTIME_REPAIR'
+             )
+         WHERE id=$1`,
+        [slot.instance_id, requestedAt]
+      );
+
+      await tx.query(
+        `INSERT INTO worker_commands(
+           runner_id,bot_instance_id,execution_generation,command,status
+         ) VALUES($1,$2,$3,'REBUILD_INSTANCE','PENDING')`,
+        [slot.runner_id, slot.instance_id, generation]
+      );
+    });
+
+    const actor = req.user?.sub ? "OWNER:" + String(req.user.sub) : "ADMIN_KEY";
+    await this.audit(actor, "ADMIN_REPAIR_CLOUD_RUNTIME", "bot_instance", slot.instance_id, {
+      userId: body.userId,
+      userCode: slot.user_code,
+      slotId: slot.id,
+      runnerId: slot.runner_id,
+      mt5AccountId: slot.mt5_account_id,
+      accountNumber: slot.account_number || null,
+      brokerServer: slot.broker_server || null,
+      executionGeneration: generation,
+      credentialReusedSecurely: true
+    });
+
+    return {
+      ok: true,
+      slotId: slot.id,
+      instanceId: slot.instance_id,
+      mode: "CLOUD",
+      message:
+        "ส่งคำสั่งซ่อม MT5 / EA แล้ว ระบบจะสร้าง Runtime ใหม่เฉพาะ Slot นี้ ใช้ Credential เดิมที่เข้ารหัส และดึง Symbol ใหม่อัตโนมัติ"
+    };
+  }
+
   @Post("slots/disconnect-mt5")
   async disconnectCustomerSlotMt5(
     @Req() req: any,
