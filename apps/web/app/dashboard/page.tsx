@@ -6286,15 +6286,16 @@ function BotSettingsModal(props:any) {
   const profitTargetMode = String(props.settings?.profitTargetMode || "AUTO").toUpperCase();
   const manualSl = Number(props.settings?.manualStopLossPoints || 0);
   const hasManualExit = profitTargetMode === "MANUAL" || manualSl > 0;
-  const inferredControlMode = engineMode === "ZERO_GRID" ? "ZERO_GRID" : engineMode === "RACE" ? "RACE" : hasManualExit ? "MANUAL" : "AUTO";
+  const inferredControlMode = engineMode === "ZERO_GRID" ? "ZERO_GRID" : engineMode === "RACE" ? "RACE" : engineMode === "COUNTER" ? "COUNTER" : hasManualExit ? "MANUAL" : "AUTO";
   const requestedControlModeRaw = String(props.settings?.controlMode || inferredControlMode).toUpperCase();
   const requestedControlMode = requestedControlModeRaw === "ASSISTED" ? "AUTO" : requestedControlModeRaw;
-  const controlMode = ["AUTO","FLIP_LOCK","RACE","ZERO_GRID","MANUAL"].includes(requestedControlMode)
+  const controlMode = ["AUTO","FLIP_LOCK","RACE","COUNTER","ZERO_GRID","MANUAL"].includes(requestedControlMode)
     ? requestedControlMode
     : inferredControlMode;
   const sizingProfiles:Record<string,{lot:string;max?:string}> = {
     AUTO:{lot:"autoLot",max:"autoMaxPositions"},
     RACE:{lot:"raceLot",max:"raceMaxPositions"},
+    COUNTER:{lot:"counterLot",max:"counterMaxPositions"},
     FLIP_LOCK:{lot:"flipLockLot"},
     MANUAL:{lot:"manualLot",max:"manualMaxPositions"}
   };
@@ -6334,6 +6335,7 @@ function BotSettingsModal(props:any) {
     AUTO:{title:"AUTO · VECTOR EDGE",subtitle:"Vector Edge / V20 เป็นเจ้าของเฉพาะ Position ที่ AUTO เปิดเอง · Lot ต่อไม้ใช้ค่าที่ตั้งแบบตายตัว · ไม่รับช่วง Position จากโหมดอื่น"},
     FLIP_LOCK:{title:"FLIP LOCK",subtitle:"M1 เท่านั้น · เปิด 1 Position พร้อม Pending Stop ฝั่งตรงข้ามที่ขยับตามราคา · ทุกไม้ใช้ Lot ตามค่าที่ตั้ง ไม่มี Martingale"},
     RACE:{title:"RACE",subtitle:"เพิ่มความถี่ในการเปิดสถานะเพื่อให้ครบจำนวนที่กำหนดเร็วขึ้น โดยแยกการบริหารรอบจากโหมดอัตโนมัติ"},
+    COUNTER:{title:"COUNTER",subtitle:"กราฟขึ้นเปิด SELL · กราฟลงเปิด BUY · ค่อย ๆ เติมทีละไม้ · ไม่มี Stop Loss"},
     ZERO_GRID:{title:"ZERO GRID",subtitle:"วางคำสั่ง BUY STOP และ SELL STOP แบบสมมาตร รองรับ 1–30 ระดับต่อฝั่ง"},
     MANUAL:{title:"MANUAL",subtitle:"ใช้สมองเข้าเดียวกับ AUTO: Demand/Supply + Reaction + โครงสร้างตลาด แต่ Lot / จำนวนไม้ / Stop / Profit ใช้ค่าที่ผู้ใช้กำหนดเอง"}
   };
@@ -6480,6 +6482,13 @@ function BotSettingsModal(props:any) {
       props.onEdit?.("zeroGridCloseReserveMoney",0);
       return;
     }
+    // COUNTER has no direction/risk/SL controls. Side comes only from inverse live price flow.
+    if (mode === "COUNTER") {
+      props.onEdit?.("engineMode","COUNTER");
+      props.onEdit?.("profitTargetMode","OFF");
+      if (!Number.isFinite(Number(props.settings?.counterPerPositionProfitMoney)) || Number(props.settings?.counterPerPositionProfitMoney) <= 0) props.onEdit?.("counterPerPositionProfitMoney",0.5);
+      return;
+    }
     // Keep the currently selected direction when switching control modes.
     if (mode === "RACE") {
       props.onEdit?.("engineMode","RACE");
@@ -6524,11 +6533,14 @@ function BotSettingsModal(props:any) {
   const raceCloseAllProfitEnabled = raceProfitTargetMode === "BASKET";
   const raceCloseAllProfitMoney = Number(props.settings?.raceCloseAllProfitMoney || 0.5);
   const racePerPositionProfitMoney = Number(props.settings?.racePerPositionProfitMoney || 0.5);
+  const counterPerPositionProfitMoney = Number(props.settings?.counterPerPositionProfitMoney || 0.5);
   const manualStopEnabled = Number(props.settings?.manualStopLossPoints || 0) > 0;
   const updateOptionalValue = (key:string,value:any) => props.onEdit?.(key,value);
   const exitLabel = controlMode === "FLIP_LOCK"
     ? "Trailing SL จากราคา MT5 โดยตรง"
-    : controlMode === "RACE"
+    : controlMode === "COUNTER"
+      ? "ปิดแต่ละไม้ที่ "+formatAccountMoney(counterPerPositionProfitMoney,accountCurrency,true)
+      : controlMode === "RACE"
       ? (raceProfitTargetMode === "POSITION"
           ? "ปิดแต่ละไม้ที่ "+formatAccountMoney(racePerPositionProfitMoney,accountCurrency,true)
           : raceProfitTargetMode === "BASKET"
@@ -6543,7 +6555,9 @@ function BotSettingsModal(props:any) {
           : "—";
   const slLabel = controlMode === "FLIP_LOCK"
     ? "Safety Stop ก่อน · ยก SL เมื่อ Broker ล็อกกำไรได้"
-    : controlMode === "MANUAL"
+    : controlMode === "COUNTER"
+      ? "ไม่มี Stop Loss"
+      : controlMode === "MANUAL"
       ? Number(manualSl).toFixed(0)+" points"
       : controlMode === "RACE"
         ? "M5 ATR × 1.20"
