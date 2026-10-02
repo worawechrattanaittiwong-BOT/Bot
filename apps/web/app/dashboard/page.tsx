@@ -6333,7 +6333,7 @@ function BotSettingsModal(props:any) {
   ))));
   const modeCopy:Record<string,{title:string;subtitle:string}> = {
     AUTO:{title:"AUTO · VECTOR EDGE",subtitle:"Vector Edge / V20 เป็นเจ้าของเฉพาะ Position ที่ AUTO เปิดเอง · Lot ต่อไม้ใช้ค่าที่ตั้งแบบตายตัว · ไม่รับช่วง Position จากโหมดอื่น"},
-    FLIP_LOCK:{title:"FLIP LOCK",subtitle:"M1 เท่านั้น · เปิด 1 Position พร้อม Pending Stop ฝั่งตรงข้ามที่ขยับตามราคา · ทุกไม้ใช้ Lot ตามค่าที่ตั้ง ไม่มี Martingale"},
+    FLIP_LOCK:{title:"FLIP LOCK",subtitle:"M1 เท่านั้น · เปิด 1 Position พร้อม Safety SL · เมื่อกำไรวิ่ง SL จะล็อก 50% ของระยะกำไรสูงสุด · Lot คงที่ ไม่มี Martingale"},
     RACE:{title:"RACE",subtitle:"เพิ่มความถี่ในการเปิดสถานะเพื่อให้ครบจำนวนที่กำหนดเร็วขึ้น โดยแยกการบริหารรอบจากโหมดอัตโนมัติ"},
     COUNTER:{title:"COUNTER",subtitle:"กราฟขึ้นเปิด SELL · กราฟลงเปิด BUY · ค่อย ๆ เติมทีละไม้ · ไม่มี Stop Loss"},
     ZERO_GRID:{title:"ZERO GRID",subtitle:"วางคำสั่ง BUY STOP และ SELL STOP แบบสมมาตร รองรับ 1–30 ระดับต่อฝั่ง"},
@@ -6411,13 +6411,13 @@ function BotSettingsModal(props:any) {
     FLIP_LOCK:{
       title:"FLIP LOCK",
       icon:"trend",
-      systemType:"Single Position + Opposite Pending Stop · ไม่ใช่ Martingale",
+      systemType:"Single Position + Safety SL + 50% Profit Lock · ไม่ใช่ Martingale",
       sizing:"1 Position หลัก + Pending ฝั่งตรงข้าม · Lot คงที่ตามค่าที่ตั้ง",
       exitStyle:"Safety SL + Opposite Pending Baton · สลับฝั่งเมื่อ Pending ถูก Trigger",
-      workflow:"ใช้ M1 เลือกฝั่งเริ่มต้น แล้ววาง Pending Stop ฝั่งตรงข้ามไว้พร้อมกัน เมื่อราคาวิ่งถูกทาง Pending จะขยับตาม พอราคาย้อนชน Pending ระบบสลับฝั่งด้วย Lot เดิมตามค่าที่ตั้ง",
+      workflow:"ใช้ M1 เลือกฝั่งเริ่มต้น เปิด 1 Position พร้อม Safety SL ก่อน เมื่อราคาเดินกำไร ระบบเลื่อน Broker SL มาล็อก 50% ของระยะกำไรสูงสุดแบบไม่ถอยกลับ เช่น BUY 4000 ขึ้นถึง 4001 → SL 4000.500",
       good:"ตลาดที่เดินเป็นทาง วิ่งยาว มีระยะให้กำไรโต",
       caution:"Sideway แคบ ๆ สะบัดกลับไปกลับมาบ่อย เพราะอาจปิดแล้วเข้าใหม่หลายรอบ กำไรต่อไม้สั้นและต้นทุนเกิดบ่อย",
-      remember:"FLIP LOCK = 1 Position + Pending ฝั่งตรงข้าม · M1 เท่านั้น · Lot คงที่ตาม Settings",
+      remember:"FLIP LOCK = Safety SL ก่อน · กำไรวิ่งแล้วล็อก 50% · SL ไม่ถอยกลับ · M1 เท่านั้น",
       capital:{
         minimum:"50 USD",
         balanced:"150 USD",
@@ -6571,7 +6571,7 @@ function BotSettingsModal(props:any) {
           ? (profitKind === "POSITION" ? formatAccountMoney(props.settings.manualPerPositionProfitMoney,accountCurrency)+" ต่อไม้" : formatAccountMoney(props.settings.manualBasketProfitTargetMoney,accountCurrency)+" ทั้งชุด · ถึงแล้วปิดทันที")
           : "—";
   const slLabel = controlMode === "FLIP_LOCK"
-    ? "Safety Stop ก่อน · ยก SL เมื่อ Broker ล็อกกำไรได้"
+    ? "Safety SL ก่อน · กำไรวิ่งแล้วล็อก 50% และ SL ไม่ถอยกลับ"
     : controlMode === "COUNTER"
       ? "ไม่มี Stop Loss"
       : controlMode === "MANUAL"
@@ -6620,8 +6620,8 @@ function BotSettingsModal(props:any) {
             <span>MANUAL Ownership</span>
             <span>MT5 Local Tick · Server ไม่กำหนดราคา SL</span>
             <span>ราคา / SL / TP / Exit บริหารใน MT5 โดยตรงทุกโหมด</span>
-            <span>FLIP LOCK M1 · Safety SL + Pending Stop ฝั่งตรงข้ามขยับตามราคา</span>
-            <span>FLIP LOCK วาง BUY STOP / SELL STOP ฝั่งตรงข้ามล่วงหน้า · Lot เท่าค่าที่ตั้ง</span>
+            <span>FLIP LOCK M1 · Safety SL + ล็อก 50% ของระยะกำไรสูงสุด</span>
+            <span>FLIP LOCK ไม่วาง Pending ฝั่งตรงข้าม · SL ขยับตามกำไรและไม่ถอยกลับ · Lot เท่าค่าที่ตั้ง</span>
           </div>
           <section className="cc-bot-v2-mode-section cc-mode-guide-anchor">
             <div className="cc-bot-v2-section-title"><span>01</span><div><b>โหมดการเทรด</b></div></div>
@@ -6690,7 +6690,7 @@ function BotSettingsModal(props:any) {
                   </>}
                 </div>
                 <div className="cc-bot-v17-hidden-engine">{controlMode!=="ZERO_GRID"&&(controlMode==="FLIP_LOCK"
-                  ? <div className="cc-bot-v2-engine-line"><ScenovaIcon name="trend" size={16}/><b>โครงสร้าง FLIP LOCK</b><span>1 Position หลัก + Pending Stop ฝั่งตรงข้าม 1 อัน · ใช้ M1 เท่านั้น · Pending ขยับตามราคาเพื่อสลับฝั่ง · ทุกขาใช้ Lot ตาม Settings ไม่มี Martingale</span></div>
+                  ? <div className="cc-bot-v2-engine-line"><ScenovaIcon name="trend" size={16}/><b>โครงสร้าง FLIP LOCK</b><span>1 Position + Safety SL · เมื่อมีกำไร SL ล็อก 50% ของระยะกำไรสูงสุดและเลื่อนไปทางกำไรเท่านั้น · ใช้ M1 · Lot ตาม Settings ไม่มี Martingale</span></div>
                   : controlMode==="AUTO"
                     ? <div className="cc-bot-v2-engine-line"><ScenovaIcon name="spark" size={16}/><b>AUTO · Shared Zone Brain</b><span>Demand/Supply + Reaction เป็นแกนเข้าออเดอร์ร่วมกับ MANUAL · AUTO วาง SL/TP และจัดการ Position ของ AUTO เอง</span></div>
                     : controlMode==="MANUAL"
