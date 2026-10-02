@@ -3445,7 +3445,6 @@ bool ManageRacePerPositionHedgeBasket(double momentum)
    // the configured per-ticket target; Max Positions / explicit loss controls
    // remain authoritative.
    g_raceState="FILLING";
-   RefreshMarketContext(false);
    ProcessRaceFill(signalDirection);
    return true;
 }
@@ -4403,11 +4402,6 @@ bool ProcessRaceFill(int direction)
       }
    }
 
-   // News context remains visible to telemetry/analysis but never vetoes a
-   // RACE fill. Explicit operational/broker safeguards remain below.
-   string raceNewsReason="NONE";
-   bool raceNewsAdvisory=RaceNewsPauseActive(raceNewsReason);
-
    int filledUnits = RaceFilledUnits();
    if(filledUnits >= g_maxPositions)
    {
@@ -4445,12 +4439,6 @@ bool ProcessRaceFill(int direction)
       return false;
    }
 
-   // Anti-chase still evaluates for telemetry, but it is advisory only. RACE
-   // execution must not wait for pullback/continuation once analysis has chosen
-   // the current side.
-   string raceAntiChaseReason="NONE";
-   bool raceAntiChaseAdvisory=RaceAntiChaseBlocked(direction,raceAntiChaseReason);
-
    // Never open RACE with a broker-minimum placeholder SL. If ATR is not ready,
    // wait for the next tick instead of creating a position that can be stopped
    // almost immediately by spread/noise.
@@ -4476,10 +4464,7 @@ bool ProcessRaceFill(int direction)
 
    g_entryModel = "RACE_LIVE_PRICE_2S";
    g_entryTrigger = direction > 0 ? "RACE_PRICE_FLOW_BUY" : "RACE_PRICE_FLOW_SELL";
-   g_entryQuality =
-      raceNewsAdvisory ? "RACE_NEWS_ADVISORY" :
-      raceAntiChaseAdvisory ? "RACE_ANTI_CHASE_ADVISORY" :
-      "RACE";
+   g_entryQuality = "RACE_LIVE_PRICE";
    g_entryQualityScore = 0.0;
    g_raceDirection = direction;
    if(g_raceCycleStartedAt <= 0)
@@ -4517,13 +4502,8 @@ bool StartRaceCycle(double momentum)
    if(BasketPositionCount() > 0 || RescuePositionCount() > 0)
       return false;
 
-   // Keep post-cycle/news observation for telemetry only. Neither can veto a
-   // fresh RACE entry anymore.
-   RaceReentryDetectFlatTransition();
-   RaceReentryObserveReady();
-   string raceNewsReason="NONE";
-   RaceNewsPauseActive(raceNewsReason);
-
+   // RACE entry does not run news/re-entry/anti-chase analysis. It follows the
+   // visible short live-price flow and then applies only operational safety.
    ResetRaceRuntime();
 
    // Entry side is only the net live-price move over roughly two seconds.
@@ -4759,7 +4739,6 @@ bool ManageRaceBasket(double momentum)
             return true;
          }
          g_raceState="FILLING";
-         RefreshMarketContext(false);
          ProcessRaceFill(volumeDirection);
          return true;
       }
@@ -4790,7 +4769,6 @@ bool ManageRaceBasket(double momentum)
       // Existing floating/cycle P/L is not an entry gate. Analysis owns the
       // side and Max Positions owns the requested fill count.
       g_raceState="FILLING";
-      RefreshMarketContext(false);
       ProcessRaceFill(direction);
       return true;
    }
@@ -4818,7 +4796,6 @@ bool ManageRaceBasket(double momentum)
    // profit early before the selected Basket/per-position target.
    if(raceStrictProfitTarget)
    {
-      RefreshMarketContext(false);
       g_raceState = filling ? "FILLING" : "FULL_WAIT_PROFIT";
       g_executionStatus = racePerPositionProfitTarget
          ? "RACE_WAIT_PER_POSITION_TARGET"
