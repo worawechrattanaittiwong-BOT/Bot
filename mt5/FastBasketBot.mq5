@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.1.15"
-#define SCENOVA_EA_VERSION "1.1.15"
-#define SCENOVA_PRODUCT_VERSION "1.1.15"
+#property version   "1.1.16"
+#define SCENOVA_EA_VERSION "1.1.16"
+#define SCENOVA_PRODUCT_VERSION "1.1.16"
 #define SCENOVA_BUILD_ID "SOURCE"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_CONFIGURED_LOSS_ONLY_V1"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
@@ -3428,10 +3428,8 @@ bool ManageRacePerPositionHedgeBasket(double momentum)
    int signalDirection=RaceAnalysisDirection(momentum);
    if(signalDirection==0)
    {
-      g_raceState="VOLUME_WAIT";
-      g_executionStatus=RaceVolumeWindowReady()
-         ? "RACE_VOLUME_BALANCED"
-         : "RACE_VOLUME_WARMUP";
+      g_raceState="PRICE_FLOW_WAIT";
+      g_executionStatus="RACE_PRICE_FLOW_WAIT";
       return true;
    }
 
@@ -3440,7 +3438,6 @@ bool ManageRacePerPositionHedgeBasket(double momentum)
    // the configured per-ticket target; Max Positions / explicit loss controls
    // remain authoritative.
    g_raceState="FILLING";
-   RefreshMarketContext(false);
    ProcessRaceFill(signalDirection);
    return true;
 }
@@ -3816,48 +3813,36 @@ bool RaceAntiChaseBlocked(int direction,string &reasonOut)
 
 int RaceLivePriceDirection()
 {
-   // RACE entry direction follows only the live chart flow. Compare the newest
-   // midpoint with the oldest valid midpoint from roughly the last 2.5 seconds.
+   // Follow the visible MT5 chart price only. MT5 OTC charts are Bid-based, so
+   // spread expansion/contraction cannot manufacture a false BUY/SELL signal.
+   // Compare current Bid with the oldest valid Bid from roughly the last 2s.
    MqlTick nowTick;
-   if(!SymbolInfoTick(_Symbol,nowTick))
+   if(!SymbolInfoTick(_Symbol,nowTick) || nowTick.bid<=0.0)
       return 0;
 
    MqlTick ticks[];
-   ulong fromMsc=nowTick.time_msc>2500 ? (ulong)nowTick.time_msc-2500 : 0;
+   ulong fromMsc=nowTick.time_msc>2000 ? (ulong)nowTick.time_msc-2000 : 0;
    int copied=CopyTicks(_Symbol,ticks,COPY_TICKS_INFO,fromMsc,0);
+   if(copied<2)
+      return 0;
 
-   if(copied>=2)
+   double firstBid=0.0;
+   double lastBid=0.0;
+   for(int i=0;i<copied;i++)
    {
-      double firstMid=0.0;
-      double lastMid=0.0;
-
-      for(int i=0;i<copied;i++)
-      {
-         if(ticks[i].bid<=0.0 || ticks[i].ask<=0.0)
-            continue;
-         double mid=(ticks[i].bid+ticks[i].ask)*0.5;
-         if(firstMid<=0.0)
-            firstMid=mid;
-         lastMid=mid;
-      }
-
-      if(firstMid>0.0 && lastMid>0.0)
-      {
-         double delta=lastMid-firstMid;
-         if(delta>0.0) return 1;
-         if(delta<0.0) return -1;
-      }
+      if(ticks[i].bid<=0.0)
+         continue;
+      if(firstBid<=0.0)
+         firstBid=ticks[i].bid;
+      lastBid=ticks[i].bid;
    }
 
-   // Sparse-feed fallback: use only the already-captured live tick buffer.
-   int count=MathMin(g_tickCount,RequiredMomentumTicks());
-   if(count>=2)
-   {
-      double delta=g_ticks[count-1]-g_ticks[count-2];
-      if(delta>0.0) return 1;
-      if(delta<0.0) return -1;
-   }
+   if(firstBid<=0.0 || lastBid<=0.0)
+      return 0;
 
+   double delta=lastBid-firstBid;
+   if(delta>0.0) return 1;
+   if(delta<0.0) return -1;
    return 0;
 }
 
@@ -4352,11 +4337,6 @@ bool ProcessRaceFill(int direction)
       }
    }
 
-   // News context remains visible to telemetry/analysis but never vetoes a
-   // RACE fill. Explicit operational/broker safeguards remain below.
-   string raceNewsReason="NONE";
-   bool raceNewsAdvisory=RaceNewsPauseActive(raceNewsReason);
-
    int filledUnits = RaceFilledUnits();
    if(filledUnits >= g_maxPositions)
    {
@@ -4381,10 +4361,11 @@ bool ProcessRaceFill(int direction)
       g_executionStatus = "RACE_ORDER_RATE_LIMIT";
       return false;
    }
-   if(!AdaptiveSpreadAllowed())
+   // Normal adaptive-spread quality is not a RACE entry gate. Keep only the
+   // explicit EXTREME spread protection as a hard safety boundary.
+   if(g_spreadStatus == "EXTREME")
    {
-      g_executionStatus = g_spreadStatus == "EXTREME"
-         ? "RACE_EXTREME_SPREAD" : "RACE_SPREAD_WAIT";
+      g_executionStatus = "RACE_EXTREME_SPREAD";
       return false;
    }
    if(!OpenTradingAllowedForDirection(direction))
@@ -4392,12 +4373,6 @@ bool ProcessRaceFill(int direction)
       g_executionStatus = "RACE_SYMBOL_DIRECTION_BLOCKED";
       return false;
    }
-
-   // Anti-chase still evaluates for telemetry, but it is advisory only. RACE
-   // execution must not wait for pullback/continuation once analysis has chosen
-   // the current side.
-   string raceAntiChaseReason="NONE";
-   bool raceAntiChaseAdvisory=RaceAntiChaseBlocked(direction,raceAntiChaseReason);
 
    // Never open RACE with a broker-minimum placeholder SL. If ATR is not ready,
    // wait for the next tick instead of creating a position that can be stopped
@@ -4422,12 +4397,9 @@ bool ProcessRaceFill(int direction)
       projectedLossLimit > 0.0 &&
       g_raceExposureNoiseMoney > projectedLossLimit * 0.80;
 
-   g_entryModel = "RACE_VOLUME_30S";
-   g_entryTrigger = direction > 0 ? "RACE_VOLUME_BUY" : "RACE_VOLUME_SELL";
-   g_entryQuality =
-      raceNewsAdvisory ? "RACE_NEWS_ADVISORY" :
-      raceAntiChaseAdvisory ? "RACE_ANTI_CHASE_ADVISORY" :
-      "RACE";
+   g_entryModel = "RACE_LIVE_BID_2S";
+   g_entryTrigger = direction > 0 ? "RACE_PRICE_FLOW_BUY" : "RACE_PRICE_FLOW_SELL";
+   g_entryQuality = "RACE_LIVE_PRICE";
    g_entryQualityScore = 0.0;
    g_raceDirection = direction;
    if(g_raceCycleStartedAt <= 0)
@@ -4465,22 +4437,14 @@ bool StartRaceCycle(double momentum)
    if(BasketPositionCount() > 0 || RescuePositionCount() > 0)
       return false;
 
-   // Keep post-cycle/news observation for telemetry only. Neither can veto a
-   // fresh RACE entry anymore.
-   RaceReentryDetectFlatTransition();
-   RaceReentryObserveReady();
-   string raceNewsReason="NONE";
-   RaceNewsPauseActive(raceNewsReason);
-
+   // No extra analyzer runs before a RACE entry. Direction is only the visible
+   // two-second Bid flow, followed by operational safety in ProcessRaceFill().
    ResetRaceRuntime();
 
-   // No 30-second warmup gate. The analyzer uses volume when qualified and
-   // falls back to live Flow/Structure/Rejection/momentum/candle direction.
-   RefreshMarketContext(false);
    int direction=RaceAnalysisDirection(momentum);
    if(direction==0)
    {
-      g_executionStatus="RACE_ANALYSIS_NO_DIRECTION";
+      g_executionStatus="RACE_PRICE_FLOW_WAIT";
       return false;
    }
 
@@ -4709,7 +4673,6 @@ bool ManageRaceBasket(double momentum)
             return true;
          }
          g_raceState="FILLING";
-         RefreshMarketContext(false);
          ProcessRaceFill(volumeDirection);
          return true;
       }
@@ -4732,17 +4695,14 @@ bool ManageRaceBasket(double momentum)
    {
       if(volumeDirection==0)
       {
-         g_raceState="VOLUME_WAIT";
-         g_executionStatus=RaceVolumeWindowReady()
-            ? "RACE_VOLUME_BALANCED"
-            : "RACE_VOLUME_WARMUP";
+         g_raceState="PRICE_FLOW_WAIT";
+         g_executionStatus="RACE_PRICE_FLOW_WAIT";
          return true;
       }
 
       // Existing floating/cycle P/L is not an entry gate. Analysis owns the
       // side and Max Positions owns the requested fill count.
       g_raceState="FILLING";
-      RefreshMarketContext(false);
       ProcessRaceFill(direction);
       return true;
    }
@@ -4770,7 +4730,6 @@ bool ManageRaceBasket(double momentum)
    // profit early before the selected Basket/per-position target.
    if(raceStrictProfitTarget)
    {
-      RefreshMarketContext(false);
       g_raceState = filling ? "FILLING" : "FULL_WAIT_PROFIT";
       g_executionStatus = racePerPositionProfitTarget
          ? "RACE_WAIT_PER_POSITION_TARGET"
