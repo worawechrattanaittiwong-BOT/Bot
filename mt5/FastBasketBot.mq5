@@ -4476,9 +4476,9 @@ bool StartRaceCycle(double momentum)
    // Keep post-cycle/news observation for telemetry only. Neither can veto a
    // fresh RACE entry anymore.
    RaceReentryDetectFlatTransition();
-   bool reentryObservationReady=RaceReentryObserveReady();
+   RaceReentryObserveReady();
    string raceNewsReason="NONE";
-   bool raceNewsAdvisory=RaceNewsPauseActive(raceNewsReason);
+   RaceNewsPauseActive(raceNewsReason);
 
    ResetRaceRuntime();
 
