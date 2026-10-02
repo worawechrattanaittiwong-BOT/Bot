@@ -219,6 +219,33 @@ validate_generated_owner_mobile_shape() {
   return 0
 }
 
+validate_generated_mirror_mobile_shape() {
+  local sha="$1"
+  local subject author_email changed
+
+  subject="$(git log -1 --format=%s "$sha" 2>/dev/null || true)"
+  author_email="$(git log -1 --format=%ae "$sha" 2>/dev/null || true)"
+
+  [ "$subject" = "build: publish SCENOVA Mirror Android [skip mirror build]" ] || return 1
+  [ "$author_email" = "actions@users.noreply.github.com" ] || return 1
+
+  changed="$(git diff-tree --no-commit-id --name-only -r "$sha" 2>/dev/null || true)"
+  while IFS= read -r file; do
+    [ -z "$file" ] && continue
+    case "$file" in
+      apps/web/public/downloads/SCENOVA-Mirror.apk|apps/web/public/downloads/SCENOVA-Mirror.json)
+        ;;
+      *)
+        return 1
+        ;;
+    esac
+  done <<< "$changed"
+
+  git cat-file -e "$sha:apps/web/public/downloads/SCENOVA-Mirror.apk" 2>/dev/null || return 1
+  git cat-file -e "$sha:apps/web/public/downloads/SCENOVA-Mirror.json" 2>/dev/null || return 1
+  return 0
+}
+
 # Generated release commits can legitimately arrive back-to-back (for example
 # Windows installer publish followed by EA publish). Walk across only commits
 # whose author, subject, changed paths and artifact shape are trusted, then use
@@ -234,7 +261,8 @@ resolve_ci_anchor() {
     if validate_generated_ea_shape "$parent" >/dev/null 2>&1 || \
        validate_generated_installer_shape "$parent" >/dev/null 2>&1 || \
        validate_generated_cloud_setup_shape "$parent" >/dev/null 2>&1 || \
-       validate_generated_owner_mobile_shape "$parent" >/dev/null 2>&1; then
+       validate_generated_owner_mobile_shape "$parent" >/dev/null 2>&1 || \
+       validate_generated_mirror_mobile_shape "$parent" >/dev/null 2>&1; then
       parent="$(git rev-parse "$parent^" 2>/dev/null || true)"
       [ -n "$parent" ] || return 1
       hops=$((hops + 1))
@@ -346,6 +374,28 @@ verify_generated_owner_mobile_release() {
   return 0
 }
 
+verify_generated_mirror_mobile_release() {
+  local sha="$1"
+  local parent parent_ci
+
+  if ! validate_generated_mirror_mobile_shape "$sha"; then
+    echo "[SCENOVA] generated Mirror APK release rejected: untrusted commit shape"
+    return 1
+  fi
+
+  parent="$(resolve_ci_anchor "$sha" 2>/dev/null || true)"
+  [ -n "$parent" ] || return 1
+
+  parent_ci="$(gh run list --repo "$REPO_FULL_NAME" --commit "$parent" --workflow CI --limit 1 --json status,conclusion --jq 'if length == 0 then "missing" else .[0].status + ":" + (. [0].conclusion // "") end' 2>/dev/null || true)"
+  [ "$parent_ci" = "completed:success" ] || {
+    echo "[SCENOVA] generated Mirror APK waiting for source CI ($parent_ci)"
+    return 1
+  }
+
+  echo "[SCENOVA] trusted generated Mirror APK release verified"
+  return 0
+}
+
 # Main uses one serialized GitHub Actions pipeline (CI). Do not require
 # separately-triggered smoke/regression workflows here; they are jobs inside CI.
 if command -v gh >/dev/null 2>&1; then
@@ -379,6 +429,8 @@ if command -v gh >/dev/null 2>&1; then
         echo "[SCENOVA] generated Cloud Setup release accepted without a direct CI run"
       elif verify_generated_owner_mobile_release "$REMOTE_SHA"; then
         echo "[SCENOVA] generated Owner APK release accepted without a direct CI run"
+      elif verify_generated_mirror_mobile_release "$REMOTE_SHA"; then
+        echo "[SCENOVA] generated Mirror APK release accepted without a direct CI run"
       else
         echo "[SCENOVA] CI not ready yet ($CI_STATE); waiting for next check"
         exit 0
