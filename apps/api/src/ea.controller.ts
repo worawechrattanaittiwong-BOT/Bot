@@ -134,6 +134,16 @@ export class EaController {
     return createHash("sha256").update(readFileSync(path)).digest("hex");
   }
 
+  private artifactBuildId(channel = "Stable") {
+    if (channel === "AdminTest") {
+      return String(process.env.SCENOVA_EA_BUILD_ID_ADMIN_TEST || "").trim() || null;
+    }
+    if (channel === "Beta") {
+      return String(process.env.SCENOVA_EA_BUILD_ID_BETA || "").trim() || null;
+    }
+    return latestEaRelease().buildId;
+  }
+
   private resolveReleaseChannel(requested: unknown, instance: any) {
     const desired = this.normalizeReleaseChannel(requested);
     const elevated = ["OWNER", "ADMIN"].includes(String(instance?.user_role || ""));
@@ -1352,6 +1362,7 @@ export class EaController {
          actual_state,
          COALESCE(NULLIF(metrics->>'positions','')::int,0) AS positions,
          metrics->>'eaVersion' AS ea_version,
+         metrics->>'buildId' AS runtime_build_id,
          metrics->>'runtimeContract' AS runtime_contract,
          metrics->>'accountNumber' AS reported_account_number,
          metrics->>'server' AS reported_server,
@@ -1376,9 +1387,15 @@ export class EaController {
     const agentUpdateRequired = !isVersionExact(reportedAgentVersion, agentVersionRequired);
     const agentUpdateAvailable = !isVersionSame(reportedAgentVersion, agentVersionRequired);
     const eaVersionRequired = this.artifactVersion(releaseChannel);
+    const runtimeBuildIdRequired = String(this.artifactBuildId(releaseChannel) || "").trim();
+    const currentRuntimeBuildId = String(runtime?.runtime_build_id || "").trim();
+    const runtimeBuildMatch =
+      !runtimeBuildIdRequired ||
+      currentRuntimeBuildId === runtimeBuildIdRequired;
     const currentRuntimeContract = String(runtime?.runtime_contract || "").trim();
     const runtimeContractMatch = currentRuntimeContract === EA_RUNTIME_CONTRACT;
     const runtimeVersionMatch = isEaVersionExact(runtime?.ea_version, eaVersionRequired);
+    const runtimeIdentityMatch = runtimeContractMatch && runtimeBuildMatch;
     const safeToRestart =
       String(runtime?.desired_state || "STOPPED") !== "RUNNING" &&
       String(runtime?.actual_state || "STOPPED") !== "RUNNING" &&
@@ -1398,7 +1415,7 @@ export class EaController {
       eaUpdateState = stagedUpdate
         ? (safeToRestart ? "APPLY_REQUIRED" : "WAIT_SAFE_STOP_APPLY")
         : "DOWNLOAD_REQUIRED";
-    } else if (!runtimeVersionMatch || !runtimeContractMatch) {
+    } else if (!runtimeVersionMatch || !runtimeIdentityMatch) {
       eaUpdateState = safeToRestart ? "RELOAD_REQUIRED" : "WAIT_SAFE_STOP_RELOAD";
     }
 
@@ -1410,7 +1427,7 @@ export class EaController {
     // only after the customer's explicit UPDATE_EA_RESTART action.
     const runtimeReloadOnly =
       runtimeVersionMatch &&
-      !runtimeContractMatch;
+      !runtimeIdentityMatch;
     const agentEaVersionRequired = runtimeReloadOnly
       ? `${eaVersionRequired}-runtime-reload`
       : eaVersionRequired;
@@ -1428,6 +1445,9 @@ export class EaController {
       eaOnline: eaLastSeenAgeSeconds >= 0 && eaLastSeenAgeSeconds <= 10,
       eaVersion: String(runtime?.ea_version || ""),
       runtimeVersionMatch,
+      runtimeBuildId: currentRuntimeBuildId || null,
+      runtimeBuildIdRequired: runtimeBuildIdRequired || null,
+      runtimeBuildMatch,
       eaLastSeenAgeSeconds,
       terminalTradeAllowed:
         runtime?.terminal_trade_allowed === "true"
@@ -1451,7 +1471,11 @@ export class EaController {
       eaVersionRequired: agentEaVersionRequired,
       runtimeContract: currentRuntimeContract || null,
       runtimeContractRequired: EA_RUNTIME_CONTRACT,
-      runtimeContractMatch,
+      runtimeProtocolContractMatch: runtimeContractMatch,
+      // Existing Agents already treat RuntimeContractMatch as the reload gate.
+      // Fold build identity into that gate so same-version EX5 replacements
+      // cannot be mistaken for the already-loaded runtime.
+      runtimeContractMatch: runtimeIdentityMatch,
       releaseChannel,
       agentVersion: reportedAgentVersion,
       agentVersionRequired,
