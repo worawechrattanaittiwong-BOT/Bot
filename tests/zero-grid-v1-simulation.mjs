@@ -79,7 +79,7 @@ assert.match(ea, /double ZeroGridRequiredCloseNet\(\)[\s\S]*return MathMax\(0\.0
 assert.doesNotMatch(ea.match(/double ZeroGridRequiredCloseNet\(\)[\s\S]*?\n}/)?.[0] || "", /zeroGridCloseReserve|ZeroGridEstimatedExitCostMoney/, "ZERO target must not include hidden reserve/estimated exit cost");
 assert.match(ea, /bool\s+g_settingsSynchronized\s*=\s*false/);
 assert.match(ea, /WAIT_SETTINGS_SYNC/);
-assert.match(api, /\["AUTO",\s*"RACE",\s*"ZERO_GRID",\s*"FLIP_LOCK",\s*"ASSISTED",\s*"MANUAL"\]/);
+assert.match(api, /\["AUTO",\s*"RACE",\s*"COUNTER",\s*"ZERO_GRID",\s*"FLIP_LOCK",\s*"ASSISTED",\s*"MANUAL"\]/);
 assert.doesNotMatch(ea, /PARALLEL_UNIVERSE|ParallelUniverse/, "retired Parallel Universe must not remain in EA source");
 assert.doesNotMatch(api, /PARALLEL_UNIVERSE/, "retired Parallel Universe must not remain in API runtime");
 assert.doesNotMatch(web, /PARALLEL_UNIVERSE|PARALLEL UNIVERSE/, "retired Parallel Universe must not remain in Control Center");
