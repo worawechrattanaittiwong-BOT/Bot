@@ -704,13 +704,17 @@ void FlipLockManageFlatState()
       // downward, so continue with SELL. A SELL stop-out means price reversed
       // upward, so continue with BUY. Do not re-read M1 for this handoff.
       int nextDirection=-g_flipLockDirection;
-      g_flipLockFlipCount++;
-      g_flipLockLastFlipAt=TimeCurrent();
-      FlipLockResetTracking(false);
       g_flipLockReason=nextDirection>0
          ? "SL_HANDOFF_TO_BUY"
          : "SL_HANDOFF_TO_SELL";
-      FlipLockOpenStarter(nextDirection);
+
+      // Keep the previous direction until the replacement order is accepted so
+      // a transient broker reject cannot lose the required BUY<->SELL handoff.
+      if(FlipLockOpenStarter(nextDirection))
+      {
+         g_flipLockFlipCount++;
+         g_flipLockLastFlipAt=TimeCurrent();
+      }
       return;
    }
 
