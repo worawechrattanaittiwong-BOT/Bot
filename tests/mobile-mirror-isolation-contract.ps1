@@ -70,7 +70,7 @@ Need $mirrorApp 'mediaDevices as any).getDisplayMedia' 'Native screen capture en
 Need $mirrorApp 'createConfigForDefaultDisplay: true' 'Android default-display MediaProjection config missing'
 Need $mirrorApp 'audio: false' 'Mobile Mirror must not capture audio'
 Need $mirrorApp 'peer.addTrack(track, stream)' 'Native WebRTC video publishing missing'
-Need $mirrorApp 'scenova-mirror://connect' 'Native deep-link flow missing'
+Need $mirrorConfig 'scheme: "scenova-mirror"' 'Native deep-link scheme missing'
 Forbid $mirrorApp 'getUserMedia' 'Mirror companion must not request camera/microphone media'
 Forbid $mirrorApp 'BotController' 'Mirror companion must not couple to trading control'
 Forbid $mirrorApp 'controlMode' 'Mirror companion must not mutate trading mode'
