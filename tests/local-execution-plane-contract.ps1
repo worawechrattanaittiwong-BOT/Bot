@@ -15,7 +15,7 @@ $race=Block $ea 'bool ManageRaceBasket(double momentum)'
 $zero=Block $ea 'bool ManageZeroGrid()'
 $fastClose=Block $ea 'bool FastProfitClosePriority()'
 $flipManage=Block $flip 'void FlipLockManage()'
-$flipSync=Block $flip 'bool FlipLockSyncBaton('
+$flipSync=Block $flip 'bool FlipLockSyncProfitLock('
 
 Need $ea '#define LOCAL_EXECUTION_PLANE_V1 "MT5_TICK_DIRECT_V1"' 'local execution plane marker missing'
 Need $onTick 'g_lastMarketTickMs=GetTickCount64();' 'MT5 tick clock must be captured before mode management'
@@ -51,8 +51,9 @@ Need $fastClose ': "ZERO_GRID_STOPPED_FLAT";' 'ZERO fast close must release STOP
 Need $flipManage 'bool canOpenNewCycle=' 'SaaS authorization must control only new FLIP risk'
 Need $flipManage 'Stop/authorization changes block NEW opposite exposure' 'FLIP 1.1.0 must block only new opposite pending exposure when authorization is unavailable'
 Need $flipManage 'live leg keeps its broker Safety Stop.' 'existing FLIP leg must keep broker-side Safety Stop protection during SaaS latency or stop state'
-Need $flipSync 'SymbolInfoDouble(_Symbol,SYMBOL_TRADE_TICK_SIZE)' 'FLIP pending baton must follow broker tick increments'
-Need $flip 'FLIP_LOCK_PENDING_SYNC_MIN_MS 120' 'FLIP 1.1.0 pending baton must keep its bounded 120ms local sync cadence'
+Need $flipSync 'SymbolInfoDouble(_Symbol,SYMBOL_TRADE_TICK_SIZE)' 'FLIP profit trailing SL must follow broker tick increments'
+Need $flip 'FLIP_LOCK_STOP_SYNC_MIN_MS 250' 'FLIP 1.2.0 broker SL updates must keep bounded local sync pacing'
+Need $flip 'FLIP_LOCK_TRAIL_DISTANCE_POINTS 100.0' 'FLIP 1.2.0 must keep the fixed 100-point local profit trail'
 Need $flipSync 'nowMs-g_flipLockLastStopSyncMs>=FLIP_LOCK_PENDING_SYNC_MIN_MS' 'FLIP 1.1.0 local pending updates must use the bounded pending sync cadence'
 
 $flipTimer=$onTimer.IndexOf('FlipLockManage();')
