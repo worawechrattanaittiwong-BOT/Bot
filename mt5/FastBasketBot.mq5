@@ -8353,6 +8353,7 @@ void ApplySettings(string json)
    g_raceCloseAllProfitEnabled = JsonBool(json, "raceCloseAllProfitEnabled", g_raceCloseAllProfitEnabled);
    g_raceCloseAllProfitMoney = MathMax(0.01, JsonNumber(json, "raceCloseAllProfitMoney", g_raceCloseAllProfitMoney));
    g_racePerPositionProfitMoney = MathMax(0.01, JsonNumber(json, "racePerPositionProfitMoney", g_racePerPositionProfitMoney));
+   g_counterPerPositionProfitMoney = MathMax(0.01, JsonNumber(json, "counterPerPositionProfitMoney", g_counterPerPositionProfitMoney));
    string requestedRaceProfitMode = JsonString(json, "raceProfitTargetMode", "");
    StringToUpper(requestedRaceProfitMode);
    if(requestedRaceProfitMode == "BASKET" ||
@@ -8371,13 +8372,13 @@ void ApplySettings(string json)
 
    string requestedEngineMode = JsonString(json, "engineMode", "");
    StringToUpper(requestedEngineMode);
-   bool hasEngineMode = requestedEngineMode == "AUTO" || requestedEngineMode == "RACE" || requestedEngineMode == "ZERO_GRID";
+   bool hasEngineMode = requestedEngineMode == "AUTO" || requestedEngineMode == "RACE" || requestedEngineMode == "COUNTER" || requestedEngineMode == "ZERO_GRID";
 
    string requestedControlMode = JsonString(json, "controlMode", "");
    StringToUpper(requestedControlMode);
    bool hasControlMode =
       requestedControlMode == "AUTO" || requestedControlMode == "RACE" ||
-      requestedControlMode == "ZERO_GRID" || requestedControlMode == "FLIP_LOCK" ||
+      requestedControlMode == "COUNTER" || requestedControlMode == "ZERO_GRID" || requestedControlMode == "FLIP_LOCK" ||
       requestedControlMode == "ASSISTED" ||
       requestedControlMode == "MANUAL" || requestedControlMode == "LEGACY";
 
@@ -8388,6 +8389,7 @@ void ApplySettings(string json)
       g_controlMode = requestedControlMode;
       if(g_controlMode == "ZERO_GRID") g_engineMode = "ZERO_GRID";
       else if(g_controlMode == "RACE") g_engineMode = "RACE";
+      else if(g_controlMode == "COUNTER") g_engineMode = "COUNTER";
       else g_engineMode = "AUTO";
    }
    else if(hasEngineMode)
@@ -8395,7 +8397,8 @@ void ApplySettings(string json)
       g_engineMode = requestedEngineMode;
       if(g_engineMode == "ZERO_GRID") g_controlMode = "ZERO_GRID";
       else if(g_engineMode == "RACE") g_controlMode = "RACE";
-      else if(g_controlMode == "ZERO_GRID" || g_controlMode == "RACE" || g_controlMode == "LEGACY") g_controlMode = "AUTO";
+      else if(g_engineMode == "COUNTER") g_controlMode = "COUNTER";
+      else if(g_controlMode == "ZERO_GRID" || g_controlMode == "RACE" || g_controlMode == "COUNTER" || g_controlMode == "LEGACY") g_controlMode = "AUTO";
    }
 
    // A valid Server-delivered mode is the startup ownership latch.
@@ -8416,7 +8419,7 @@ void ApplySettings(string json)
    }
 
    // AUTO V20 and each isolated engine are distinct owners. The MANUAL legacy
-   // queue must never survive a transition into AUTO/RACE/ZERO/FLIP.
+   // queue must never survive a transition into AUTO/RACE/COUNTER/ZERO/FLIP.
    if(EffectiveExecutionMode() != "MANUAL")
       ResetLegacyBurstStateForIsolatedMode();
 
