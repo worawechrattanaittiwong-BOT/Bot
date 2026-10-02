@@ -5954,7 +5954,7 @@
   .cc-v19-settings-card .cc-bot-setting-help-popover{
     max-width:calc(100vw - 28px);
     padding:6px 8px;
-    font-size:10.5px!important;
+    font-size:var(--ui-type-caption)!important;
   }
 }
 /* ===== /Control Center V60 ===== */
