@@ -1371,7 +1371,6 @@ export class AdminController {
        LEFT JOIN mt5_accounts a ON a.id=bi.mt5_account_id
        WHERE ls.id=$1
          AND ls.assigned_user_id=$2
-         AND ls.owner_user_id=$2
          AND ls.status<>'DELETED'
        LIMIT 1`,
       [slotId, userId]
