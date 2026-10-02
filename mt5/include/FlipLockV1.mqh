@@ -755,7 +755,7 @@ bool FlipLockSyncBaton(
 
    // No artificial time throttle: when the normal Spread/ATR trail improves by
    // a tradable tick, synchronize the broker SL. The first arm above uses only
-   // the protected-profit floor and therefore cannot jump unnecessarily close.
+   // the protected entry lock and therefore cannot jump unnecessarily close.
    if(stopImproved)
    {
       if(!FlipLockSetPositionStop(positionTicket,trigger))
