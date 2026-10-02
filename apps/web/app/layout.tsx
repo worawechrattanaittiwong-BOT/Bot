@@ -4,6 +4,7 @@ import "./premium-dashboard.css";
 import "./dashboard-live.css";
 import { Mt5ManualActionControls } from "../components/Mt5ManualActionControls";
 import { SystemPopupProvider } from "../components/SystemPopupProvider";
+import { MobileMirrorOverlay } from "../components/MobileMirrorOverlay";
 import { SCENOVA_APPLE_TOUCH_ICON, SCENOVA_BRAND_NAME, SCENOVA_MASTER_MARK } from "../lib/brand";
 
 const SITE_URL = "https://snvea-bot.online";
@@ -47,6 +48,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <body>
         <SystemPopupProvider>
           <Mt5ManualActionControls />
+          <MobileMirrorOverlay />
           {children}
         </SystemPopupProvider>
       </body>
