@@ -162,6 +162,8 @@ jobs:
       - name: Trading symbol selection safety contract
         shell: pwsh
         run: ./tests/trading-symbol-selection-contract.ps1
+      - name: First-connect prime no-entry contract
+        run: node ./tests/first-connect-prime-no-entry-contract.mjs
       - name: BTC symbol support and mode gate contract
         shell: pwsh
         run: ./tests/btc-symbol-mode-contract.ps1

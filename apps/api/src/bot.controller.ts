@@ -45,6 +45,96 @@ export class BotController {
     return isEaVersionExact(version, latestEaRelease().eaVersion);
   }
 
+  private async armFirstConnectPrime(
+    instanceId: string,
+    actor: string,
+    force = false
+  ) {
+    return this.db.transaction(async (tx) => {
+      const row = (await tx.query(
+        `SELECT bi.id,bi.mode,bi.metrics,bs.settings
+         FROM bot_instances bi
+         LEFT JOIN bot_settings bs ON bs.bot_instance_id=bi.id
+         WHERE bi.id=$1
+         FOR UPDATE OF bi`,
+        [instanceId]
+      )).rows[0];
+
+      if (!row || String(row.mode || "").toUpperCase() !== "CLOUD") {
+        return false;
+      }
+
+      const settings = row.settings || {};
+      if (!force && settings.firstConnectPrimeCompletedAt) {
+        return false;
+      }
+
+      const positions = Math.max(
+        0,
+        Number(row.metrics?.accountScenovaPositions ?? row.metrics?.positions ?? 0)
+      );
+      const pendingOrders = Math.max(
+        0,
+        Number(row.metrics?.accountScenovaPendingOrders ?? 0)
+      );
+      if (positions > 0 || pendingOrders > 0) {
+        return false;
+      }
+
+      await tx.query(
+        `INSERT INTO bot_settings(bot_instance_id,settings)
+         VALUES(
+           $1,
+           jsonb_build_object(
+             'firstConnectPrimePending',true,
+             'firstConnectPrimeStartedAt',now()::text
+           )
+         )
+         ON CONFLICT(bot_instance_id) DO UPDATE SET
+           settings=jsonb_set(
+             jsonb_set(
+               COALESCE(bot_settings.settings,'{}'::jsonb) - 'firstConnectPrimeCompletedAt',
+               '{firstConnectPrimePending}',
+               'true'::jsonb,
+               true
+             ),
+             '{firstConnectPrimeStartedAt}',
+             to_jsonb(now()::text),
+             true
+           ),
+           updated_at=now()`,
+        [instanceId]
+      );
+
+      await tx.query(
+        `UPDATE bot_instances
+         SET desired_state='STOPPED',lock_owner=NULL
+         WHERE id=$1`,
+        [instanceId]
+      );
+      await tx.query(
+        `UPDATE bot_commands
+         SET status='ACKED',acked_at=COALESCE(acked_at,now())
+         WHERE bot_instance_id=$1
+           AND command IN ('START','SAFE_STOP')
+           AND status IN ('PENDING','DELIVERED')`,
+        [instanceId]
+      );
+      await tx.query(
+        `INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail)
+         VALUES(
+           $1,
+           'FIRST_CONNECT_PRIME_ARMED',
+           'bot_instance',
+           $2,
+           jsonb_build_object('noEntry',true)
+         )`,
+        [actor.slice(0,160), instanceId]
+      );
+      return true;
+    });
+  }
+
   private installerUpdateState(instance: any, mode?: string | null) {
     const latestVersion = latestInstallerVersion();
     const release = latestEaRelease();
@@ -323,6 +413,7 @@ export class BotController {
       NO_PRICE: { label: "ไม่มีราคาให้ส่ง Order", detail: "รอราคาใหม่จาก Broker", tone: "warn" },
       PRICE_CHANGED: { label: "ราคาเปลี่ยนระหว่างส่งคำสั่ง", detail: "บอทจะประเมินสัญญาณใหม่ใน Tick ถัดไป", tone: "warn" },
       ORDER_REJECTED: { label: "Order ถูกปฏิเสธ", detail: "ตรวจ Retcode ล่าสุดในสถานะ Live", tone: "bad" },
+      FIRST_CONNECT_PRIME: { label: "กำลังเตรียมบอทครั้งแรก", detail: "VPS กำลัง Start บอท 1 ครั้งโดยล็อก Order แล้วจะ Stop อัตโนมัติ", tone: "warn" },
       RUNNING_READY: { label: "บอทกำลังทำงาน", detail: "ระบบพร้อมและกำลังประเมินเงื่อนไขเข้าออเดอร์", tone: "good" },
       EVALUATING: { label: "กำลังประเมินตลาด", detail: "EA กำลังตรวจเงื่อนไขเข้าออเดอร์แบบ Real-time", tone: "good" }
     };
@@ -2447,10 +2538,19 @@ export class BotController {
     }
 
     await this.trials.claimPendingAuthorization(req.user.sub, account.id);
+    const firstConnectPrimeArmed =
+      mode === "CLOUD" &&
+      body.tradingPassword !== undefined &&
+      await this.armFirstConnectPrime(
+        instance.id,
+        String(req.user?.code || req.user?.sub || "USER"),
+        true
+      );
     return {
       account,
       instance,
       installToken: null,
+      firstConnectPrimeArmed,
       note: "Cloud install token is held encrypted for the assigned worker."
     };
   }
@@ -2763,7 +2863,18 @@ export class BotController {
         ]
       );
     }
-    return { ok: true, recoveryRequested: Boolean(bound) };
+    const firstConnectPrimeArmed = bound
+      ? await this.armFirstConnectPrime(
+          bound.id,
+          String(req.user?.code || req.user?.sub || "USER"),
+          false
+        )
+      : false;
+    return {
+      ok: true,
+      recoveryRequested: Boolean(bound),
+      firstConnectPrimeArmed
+    };
   }
 
   @Post("start")
@@ -2854,6 +2965,11 @@ export class BotController {
       [instance.id]
     );
     const startSettings = startSettingsRow?.settings || {};
+    if (startSettings.firstConnectPrimePending === true) {
+      throw new ConflictException(
+        "ระบบกำลัง Start/Stop ครั้งแรกบน VPS เพื่อเตรียมการเชื่อมต่อ กรุณารอให้สถานะพร้อมใช้งานก่อน"
+      );
+    }
     const currentAccountCurrency = String(instance.metrics?.currency || "").trim().toUpperCase();
     const settingsAccountCurrency = String(startSettings.accountCurrency || "").trim().toUpperCase();
     const implicitCurrencyReviewRequired =

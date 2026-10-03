@@ -12,7 +12,7 @@ import {
 } from "@nestjs/common";
 import { DbService } from "./db.service";
 import { CryptoService } from "./security";
-import { EA_RUNTIME_CONTRACT, installerDownloadPath, isEaVersionExact, isVersionExact, isVersionSame, latestEaRelease, latestInstallerVersion } from "./release-version";
+import { DEFAULT_EA_VERSION, EA_RUNTIME_CONTRACT, installerDownloadPath, isEaVersionExact, isVersionExact, isVersionSame, latestEaRelease, latestInstallerVersion } from "./release-version";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { MaintenanceService } from "./maintenance.service";
@@ -759,6 +759,15 @@ export class EaController {
       ]
     );
 
+    const settings = await this.db.one(
+      "SELECT settings FROM bot_settings WHERE bot_instance_id=$1",
+      [instance.id]
+    );
+    const runtimeSettings = { ...(settings?.settings || {}) };
+    const firstConnectPrimePending =
+      instance.mode === "CLOUD" &&
+      runtimeSettings.firstConnectPrimePending === true;
+
     // Re-read the control state immediately before responding so a Start/Stop
     // click that happened during this heartbeat cannot be overwritten by stale data.
     let latestControl = await this.db.one(
@@ -766,10 +775,78 @@ export class EaController {
       [instance.id]
     );
 
+    const heartbeatActualState = String(body.state || "").toUpperCase();
+    const firstConnectPrimeRuntimeReady =
+      firstConnectPrimePending &&
+      isEaVersionExact(metrics.eaVersion, DEFAULT_EA_VERSION) &&
+      String(metrics.runtimeContract || "") === EA_RUNTIME_CONTRACT;
+
+    // Do not send the one-time Start until the current protected EA runtime is
+    // actually loaded. This prevents an older EA that does not understand
+    // entrySuppressed from ever receiving the automatic RUNNING intent.
+    if (
+      firstConnectPrimeRuntimeReady &&
+      heartbeatActualState !== "RUNNING" &&
+      String(latestControl?.desired_state || "").toUpperCase() === "STOPPED"
+    ) {
+      const primePositions = Math.max(
+        0,
+        Number(metrics.accountScenovaPositions ?? metrics.positions ?? 0)
+      );
+      const primePendingOrders = Math.max(
+        0,
+        Number(metrics.accountScenovaPendingOrders ?? 0)
+      );
+
+      if (primePositions <= 0 && primePendingOrders <= 0) {
+        await this.db.query(
+          "UPDATE bot_instances SET desired_state='RUNNING',lock_owner=id::text WHERE id=$1 AND desired_state='STOPPED'",
+          [instance.id]
+        );
+        await this.db.query(
+          `UPDATE bot_commands
+           SET status='ACKED',acked_at=COALESCE(acked_at,now())
+           WHERE bot_instance_id=$1
+             AND command IN ('START','SAFE_STOP')
+             AND status IN ('PENDING','DELIVERED')`,
+          [instance.id]
+        );
+        await this.db.query(
+          `INSERT INTO bot_commands(bot_instance_id,command,payload)
+           VALUES(
+             $1,
+             'START',
+             jsonb_build_object('source','FIRST_CONNECT_PRIME','noEntry',true)
+           )`,
+          [instance.id]
+        );
+        await this.db.query(
+          `INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail)
+           VALUES(
+             $1,
+             'FIRST_CONNECT_PRIME_DISPATCHED',
+             'bot_instance',
+             $2,
+             jsonb_build_object(
+               'eaVersion',$3::text,
+               'runtimeContract',$4::text,
+               'noEntry',true
+             )
+           )`,
+          [
+            ("EA:" + String(instance.user_id || "UNKNOWN")).slice(0,160),
+            instance.id,
+            String(metrics.eaVersion || ""),
+            String(metrics.runtimeContract || "")
+          ]
+        );
+        latestControl = { desired_state: "RUNNING" };
+      }
+    }
+
     // A RUNNING heartbeat is stronger evidence than a command-delivery flag.
     // Close the START command lifecycle immediately so Dashboard/Terminal never
     // remains stuck at DELIVERED after the EA is already executing.
-    const heartbeatActualState = String(body.state || "").toUpperCase();
     if (
       heartbeatActualState === "RUNNING" &&
       String(latestControl?.desired_state || "").toUpperCase() === "RUNNING"
@@ -784,6 +861,72 @@ export class EaController {
            AND status IN ('PENDING','DELIVERED')`,
         [instance.id]
       );
+
+      if (firstConnectPrimePending) {
+        const primePositions = Math.max(
+          0,
+          Number(metrics.accountScenovaPositions ?? metrics.positions ?? 0)
+        );
+        const primePendingOrders = Math.max(
+          0,
+          Number(metrics.accountScenovaPendingOrders ?? 0)
+        );
+
+        if (primePositions <= 0 && primePendingOrders <= 0) {
+          const completedAt = new Date().toISOString();
+          await this.db.query(
+            `UPDATE bot_instances
+             SET desired_state='STOPPED',lock_owner=NULL
+             WHERE id=$1 AND desired_state='RUNNING'`,
+            [instance.id]
+          );
+          await this.db.query(
+            `UPDATE bot_settings
+             SET settings=jsonb_set(
+                   jsonb_set(
+                     COALESCE(settings,'{}'::jsonb),
+                     '{firstConnectPrimePending}',
+                     'false'::jsonb,
+                     true
+                   ),
+                   '{firstConnectPrimeCompletedAt}',
+                   to_jsonb($2::text),
+                   true
+                 ),
+                 updated_at=now()
+             WHERE bot_instance_id=$1`,
+            [instance.id, completedAt]
+          );
+          await this.db.query(
+            `INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail)
+             VALUES(
+               $1,
+               'FIRST_CONNECT_PRIME_COMPLETED',
+               'bot_instance',
+               $2,
+               jsonb_build_object('completedAt',$3::text,'noEntry',true)
+             )`,
+            [
+              ("EA:" + String(instance.user_id || "UNKNOWN")).slice(0,160),
+              instance.id,
+              completedAt
+            ]
+          );
+          runtimeSettings.firstConnectPrimePending = false;
+          runtimeSettings.firstConnectPrimeCompletedAt = completedAt;
+          latestControl = { desired_state: "STOPPED" };
+        } else {
+          await this.db.query(
+            "UPDATE bot_instances SET desired_state='SAFE_STOP' WHERE id=$1 AND desired_state='RUNNING'",
+            [instance.id]
+          );
+          await this.db.query(
+            "INSERT INTO bot_commands(bot_instance_id,command) VALUES($1,'SAFE_STOP')",
+            [instance.id]
+          );
+          latestControl = { desired_state: "SAFE_STOP" };
+        }
+      }
     }
 
     // SAFE_STOP is a drain transition, not a terminal state. When the EA has
@@ -821,13 +964,8 @@ export class EaController {
       latestControl = { desired_state: "STOPPED" };
     }
 
-    const settings = await this.db.one(
-      "SELECT settings FROM bot_settings WHERE bot_instance_id=$1",
-      [instance.id]
-    );
     // Runtime contract: preserve the direction selected by the customer.
     // RACE runs at exactly 2x the normal order cadence without changing AUTO.
-    const runtimeSettings = { ...(settings?.settings || {}) };
     const reportedCurrency = String(metrics.currency || "").trim().toUpperCase();
     const previousCurrency = String(
       runtimeSettings.accountCurrency ||
@@ -869,6 +1007,7 @@ export class EaController {
     // until the customer reviews and saves the account-money settings.
     if (
       currencyReviewRequired &&
+      !firstConnectPrimePending &&
       String(latestControl?.desired_state || "") === "RUNNING"
     ) {
       await this.db.query(
@@ -958,6 +1097,11 @@ export class EaController {
       ok: true,
       access,
       desiredState: effectiveDesired,
+      entrySuppressed:
+        firstConnectPrimePending &&
+        String(effectiveDesired || "").toUpperCase() === "RUNNING",
+      firstConnectPrimePending:
+        runtimeSettings.firstConnectPrimePending === true,
       command: cmd || null,
       commandId: cmd?.id || null,
       commandName: cmd?.command || null,
@@ -1535,7 +1679,7 @@ export class EaController {
     await this.instance(body.instanceId, body.installToken);
 
     const commandRow = await this.db.one(
-      "SELECT command FROM bot_commands WHERE id=$1 AND bot_instance_id=$2",
+      "SELECT command,payload FROM bot_commands WHERE id=$1 AND bot_instance_id=$2",
       [body.commandId, body.instanceId]
     );
     if (!commandRow) return { ok: true };
@@ -1579,6 +1723,72 @@ export class EaController {
          WHERE id=$1`,
         [body.instanceId, state, executionStatus || state]
       );
+    }
+
+    const firstConnectPrimeAck =
+      String(commandRow.command || "") === "START" &&
+      String(commandRow.payload?.source || "") === "FIRST_CONNECT_PRIME";
+
+    if (firstConnectPrimeAck && state === "RUNNING") {
+      const accountPositions = Math.max(
+        0,
+        Number(body.accountScenovaPositions ?? 0)
+      );
+      const accountPending = Math.max(
+        0,
+        Number(body.accountScenovaPendingOrders ?? 0)
+      );
+
+      if (accountPositions <= 0 && accountPending <= 0) {
+        const completedAt = new Date().toISOString();
+        await this.db.query(
+          `UPDATE bot_instances
+           SET desired_state='STOPPED',lock_owner=NULL
+           WHERE id=$1 AND desired_state='RUNNING'`,
+          [body.instanceId]
+        );
+        await this.db.query(
+          `UPDATE bot_settings
+           SET settings=jsonb_set(
+                 jsonb_set(
+                   COALESCE(settings,'{}'::jsonb),
+                   '{firstConnectPrimePending}',
+                   'false'::jsonb,
+                   true
+                 ),
+                 '{firstConnectPrimeCompletedAt}',
+                 to_jsonb($2::text),
+                 true
+               ),
+               updated_at=now()
+           WHERE bot_instance_id=$1`,
+          [body.instanceId, completedAt]
+        );
+        await this.db.query(
+          `INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail)
+           VALUES(
+             'EA:FIRST_CONNECT_PRIME',
+             'FIRST_CONNECT_PRIME_COMPLETED',
+             'bot_instance',
+             $1,
+             jsonb_build_object(
+               'completedAt',$2::text,
+               'ackCommandId',$3::bigint,
+               'noEntry',true
+             )
+           )`,
+          [body.instanceId, completedAt, body.commandId]
+        );
+      } else {
+        await this.db.query(
+          "UPDATE bot_instances SET desired_state='SAFE_STOP' WHERE id=$1 AND desired_state='RUNNING'",
+          [body.instanceId]
+        );
+        await this.db.query(
+          "INSERT INTO bot_commands(bot_instance_id,command) VALUES($1,'SAFE_STOP')",
+          [body.instanceId]
+        );
+      }
     }
 
     await this.db.query(

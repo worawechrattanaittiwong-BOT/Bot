@@ -1234,8 +1234,16 @@ export default function DashboardPage() {
   const maintenanceForceCloseLabel = maintenance.force_close_at
     ? new Date(maintenance.force_close_at).toLocaleString("th-TH", { timeZone:"Asia/Bangkok", dateStyle:"medium", timeStyle:"short" })
     : maintenanceTimeLabel;
-  const botStarting = desired === "RUNNING" && state !== "RUNNING";
-  const botRunning = state === "RUNNING";
+  const firstConnectPrimePending =
+    String(data?.selectedSlot?.mode || "").toUpperCase() === "CLOUD" &&
+    data?.settings?.firstConnectPrimePending === true;
+  const botStarting =
+    !firstConnectPrimePending &&
+    desired === "RUNNING" &&
+    state !== "RUNNING";
+  const botRunning =
+    !firstConnectPrimePending &&
+    state === "RUNNING";
   const startTransition = data?.startTransition || {};
   const startPhase = String(startTransition.phase || (botRunning ? "RUNNING" : botStarting ? "COMMAND_QUEUED" : "IDLE"));
   // A timeout is only an active UI state while the Server is still trying RUNNING.
@@ -1368,6 +1376,14 @@ export default function DashboardPage() {
       } else if (op.kind === "MT5_SWITCH" && !data?.account) {
         complete = true;
         message = "ตัดการเชื่อมต่อ MT5 เดิมแล้ว · พร้อมเชื่อมบัญชีใหม่";
+      } else if (
+        runtimeIsCloud &&
+        accountMatches &&
+        runnerReady &&
+        mt5Ready &&
+        firstConnectPrimePending
+      ) {
+        message = "MT5 และ EA เชื่อมแล้ว · กำลัง Start บอทครั้งแรกบน VPS แบบห้ามออกออเดอร์ แล้วระบบจะ Stop ให้อัตโนมัติ";
       } else if (accountMatches && runnerReady && mt5Ready) {
         complete = true;
 
@@ -1429,6 +1445,7 @@ export default function DashboardPage() {
     data?.instance?.metrics?.positions,
     data?.instance?.metrics?.accountScenovaPendingOrders,
     data?.instance?.provisioning_error,
+    data?.settings?.firstConnectPrimePending,
     serverOperation?.id,
     serverOperation?.status,
     startPhase,
@@ -1574,6 +1591,7 @@ export default function DashboardPage() {
   const startBlocked =
     busy ||
     botCommandLocked ||
+    firstConnectPrimePending ||
     botStarting ||
     botRunning ||
     safeStopInProgress ||

@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.1.18"
-#define SCENOVA_EA_VERSION "1.1.18"
-#define SCENOVA_PRODUCT_VERSION "1.1.18"
+#property version   "1.1.19"
+#define SCENOVA_EA_VERSION "1.1.19"
+#define SCENOVA_PRODUCT_VERSION "1.1.19"
 #define SCENOVA_BUILD_ID "SOURCE"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_CONFIGURED_LOSS_ONLY_V1"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
@@ -257,6 +257,7 @@ input int             InpIndicatorMaxWaitSeconds = 20;
 ENUM_BOT_STATE g_state = STATE_STOPPED;
 bool   g_access = false;
 bool   g_runAuthorized = false;
+bool   g_serverEntrySuppressed = false;
 bool   g_safeStopDrainRequested = false;
 bool   g_trailArmed = false;
 double g_peakProfit = 0.0;
@@ -5262,6 +5263,15 @@ void OnTick()
       return;
    }
 
+   if(g_serverEntrySuppressed &&
+      ScenovaAccountPositionCount()<=0 &&
+      ScenovaAccountPendingCount()<=0)
+   {
+      g_runAuthorized = false;
+      g_executionStatus = "FIRST_CONNECT_PRIME";
+      return;
+   }
+
    // ZERO GRID is a self-contained execution owner. Its visible close contract
    // is zeroGridMinNetProfitMoney + zeroGridCloseReserveMoney + estimated exit
    // cost. Hidden/stale AUTO/RACE daily-profit or daily-loss settings must never
@@ -7213,6 +7223,7 @@ void SendHeartbeat()
 
    string desired = JsonString(response, "desiredState", "STOPPED");
    string command = JsonString(response, "commandName", "");
+   g_serverEntrySuppressed = JsonBool(response, "entrySuppressed", false);
 
    ApplySettings(response);
    g_buyWinProbability = MathMax(0.0, MathMin(100.0,
@@ -7276,9 +7287,20 @@ void SendHeartbeat()
       else
       {
          g_state = STATE_RUNNING;
-         g_runAuthorized = true;
-         g_lastRunAuthorization = TimeCurrent();
-         g_executionStatus = "EVALUATING";
+         if(g_serverEntrySuppressed)
+         {
+            // First-connect prime uses the real RUNNING lifecycle once, but
+            // must never authorize a market or pending entry.
+            g_runAuthorized = false;
+            g_lastRunAuthorization = 0;
+            g_executionStatus = "FIRST_CONNECT_PRIME";
+         }
+         else
+         {
+            g_runAuthorized = true;
+            g_lastRunAuthorization = TimeCurrent();
+            g_executionStatus = "EVALUATING";
+         }
       }
    }
    else if(desired == "SAFE_STOP")
@@ -17383,6 +17405,7 @@ int SymbolDigitsNow()
 
 bool CanSendOrder()
 {
+   if(g_serverEntrySuppressed) return false;
    ulong nowMs = GetTickCount64();
    int spacingMs = BasketFillEnabled()
       ? g_minOrderIntervalMs
@@ -17403,6 +17426,7 @@ bool CanSendOrder()
 bool EntryLeaseValid()
 {
    if(MQLInfoInteger(MQL_TESTER)) return true;
+   if(g_serverEntrySuppressed) return false;
    int freshnessSeconds = MathMax(10, MathMax(1, InpHeartbeatSeconds) * 3);
    return g_access && g_runAuthorized && g_lastRunAuthorization > 0 &&
           TimeCurrent() - g_lastRunAuthorization <= freshnessSeconds;
