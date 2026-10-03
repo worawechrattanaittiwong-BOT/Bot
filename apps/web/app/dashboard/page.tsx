@@ -305,6 +305,7 @@ export default function DashboardPage() {
   const [brokerCode, setBrokerCode] = useState("EXNESS");
   const [customBrokerName, setCustomBrokerName] = useState("");
   const [brokerServer, setBrokerServer] = useState("");
+  const [serverMenuOpen, setServerMenuOpen] = useState(false);
   const [cloudMt5DialogError, setCloudMt5DialogError] = useState("");
   const [tradingPassword, setTradingPassword] = useState("");
   const [cloudMt5DialogMode, setCloudMt5DialogMode] = useState<"NEW"|"RECONNECT">("NEW");
@@ -1600,6 +1601,14 @@ export default function DashboardPage() {
       .map((item:any)=>[item.serverName.toLowerCase(),item])
   ).values()) as Array<{serverName:string;environment:string}>;
   const selectedServer = brokerServer.trim();
+  const selectedServerKey = selectedServer.toLowerCase();
+  const selectedServerExact = selectedBrokerServers.some(
+    item=>item.serverName.toLowerCase()===selectedServerKey
+  );
+  const serverFilterKey = serverMenuOpen && selectedServerExact ? "" : selectedServerKey;
+  const visibleBrokerServers = selectedBrokerServers.filter(item =>
+    !serverFilterKey || item.serverName.toLowerCase().includes(serverFilterKey)
+  );
   const hasLocalConnectionSlot = (data?.slots || []).some((slot:any) =>
     String(slot?.mode || "").toUpperCase() === "LOCAL" &&
     Boolean(slot?.can_control) &&
@@ -4932,6 +4941,7 @@ export default function DashboardPage() {
                     const nextBroker = e.target.value;
                     setBrokerCode(nextBroker);
                     setBrokerServer("");
+                    setServerMenuOpen(false);
                     setCloudMt5DialogError("");
                   }}
                   required
@@ -4964,32 +4974,72 @@ export default function DashboardPage() {
                       className="input"
                       value={brokerServer}
                       readOnly={cloudMt5DialogMode === "RECONNECT"}
-                      list={cloudMt5DialogMode === "NEW" && selectedBrokerServers.length ? "cloud-mt5-server-options" : undefined}
+                      onFocus={()=>cloudMt5DialogMode==="NEW" && setServerMenuOpen(true)}
+                      onBlur={()=>window.setTimeout(()=>setServerMenuOpen(false),120)}
                       onChange={e=>{
                         setBrokerServer(e.target.value);
+                        setServerMenuOpen(true);
                         setCloudMt5DialogError("");
                       }}
-                      placeholder="MT5 Server"
+                      onKeyDown={e=>{
+                        if(e.key==="Escape") setServerMenuOpen(false);
+                        if(e.key==="ArrowDown") setServerMenuOpen(true);
+                      }}
+                      placeholder={selectedBrokerServers.length ? "เลือกหรือพิมพ์ Server" : "พิมพ์ MT5 Server"}
                       autoComplete="off"
                       autoCapitalize="none"
                       autoCorrect="off"
                       spellCheck={false}
                       aria-label="MT5 Server"
+                      aria-autocomplete="list"
+                      aria-expanded={serverMenuOpen}
                       required
                     />
-                    {cloudMt5DialogMode === "NEW" && selectedBrokerServers.length > 0 && (
-                      <datalist id="cloud-mt5-server-options">
-                        {selectedBrokerServers.map(server=>(
-                          <option
-                            key={server.serverName}
-                            value={server.serverName}
-                            label={(server.environment==="REAL"?"LIVE":server.environment==="DEMO"?"DEMO":"SERVER")+" · "+server.serverName}
-                          />
-                        ))}
-                      </datalist>
+                    {cloudMt5DialogMode==="NEW" && selectedBrokerServers.length>0 && (
+                      <button
+                        type="button"
+                        className="cloud-mt5-server-toggle"
+                        tabIndex={-1}
+                        aria-label="เปิดรายการ MT5 Server"
+                        onMouseDown={e=>e.preventDefault()}
+                        onClick={()=>setServerMenuOpen(value=>!value)}
+                      >⌄</button>
                     )}
                   </div>
+
+                  {cloudMt5DialogMode==="NEW" && serverMenuOpen && selectedBrokerServers.length>0 && (
+                    <div className="cloud-mt5-server-menu" role="listbox" aria-label={"MT5 Server ของ "+selectedBrokerName}>
+                      {visibleBrokerServers.slice(0,80).map(server=>(
+                        <button
+                          key={server.serverName}
+                          type="button"
+                          className="cloud-mt5-server-option"
+                          role="option"
+                          aria-selected={server.serverName.toLowerCase()===selectedServerKey}
+                          onMouseDown={e=>e.preventDefault()}
+                          onClick={()=>{
+                            setBrokerServer(server.serverName);
+                            setServerMenuOpen(false);
+                            setCloudMt5DialogError("");
+                          }}
+                        >
+                          <span>{server.serverName}</span>
+                          <small>{server.environment==="REAL"?"LIVE":server.environment==="DEMO"?"DEMO":"MT5"}</small>
+                        </button>
+                      ))}
+                      {visibleBrokerServers.length===0 && (
+                        <div className="cloud-mt5-server-empty">
+                          ไม่พบในรายการ · พิมพ์ Server นี้ต่อได้เลย
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
+                <small className="cloud-mt5-server-note">
+                  {selectedBrokerServers.length
+                    ? "เลือกจาก "+selectedBrokerName+" หรือพิมพ์เอง"
+                    : "พิมพ์ชื่อ Server ตาม MT5"}
+                </small>
               </div>
 
               <label className="field cloud-mt5-password-field">
