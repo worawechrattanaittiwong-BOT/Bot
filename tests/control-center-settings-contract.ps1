@@ -212,14 +212,20 @@ Need $css 'height:var(--desktop-form-control-h)!important;' 'Desktop risk amount
 if($css.Contains('Give the risk controls real vertical breathing room')) { throw 'Obsolete 44px / 6px desktop risk-row owner must not return' }
 if($css.Contains('Risk money box breathing room only')) { throw 'Obsolete risk-field margin shim must not return' }
 if($css.Contains('grid-auto-rows:52px!important;')) { throw 'Old 52px desktop risk-row owner must not return; risk rows now follow the MANUAL profit-target rhythm' }
-Need $page 'cc-bot-setting-help-label' 'Tap-to-explain Bot Settings labels missing'
+Need $page 'cc-bot-setting-help-label' 'Bot Settings help labels missing'
+Need $page 'onPointerEnter={event=>' 'Desktop hover help behavior missing'
+Need $page 'event.pointerType==="mouse"' 'Desktop help must react to mouse hover only'
+Need $page 'setTimeout(()=>{' 'Mobile long-press help timer missing'
+Need $page '},450);' 'Mobile help must require a deliberate long press'
+Need $page 'onPointerUp={event=>' 'Mobile help must dismiss when the finger is released'
 Need $page 'ขาดทุนถึงยอดนี้ EA จะปิดออเดอร์ของรอบทันที' 'Basket-loss plain-language help missing'
 Need $page 'ขาดทุนรวมถึงยอดนี้ บอทจะหยุดเทรดทั้งวัน' 'Daily-loss plain-language help missing'
 Need $page 'กำไรรวมถึงยอดนี้ บอทจะหยุดเพื่อเก็บกำไร' 'Daily-profit plain-language help missing'
 Need $page 'EA จะไม่เปิดออเดอร์เกินจำนวนนี้' 'Max-position plain-language help missing'
 Need $page 'กำหนดขนาด Lot ของแต่ละออเดอร์' 'Lot plain-language help missing'
-Need $css 'Control Center V60 · one-line tap help for Bot Settings' 'One-line Bot Settings help styling missing'
-Need $css '.cc-bot-setting-help-popover' 'Tap-help popover styling missing'
+Need $css 'Control Center V60 · hover + long-press help for Bot Settings' 'Hover/long-press Bot Settings help styling missing'
+Need $css '.cc-bot-setting-help-popover' 'Help popover styling missing'
+Need $css '-webkit-touch-callout:none;' 'Mobile long-press help must suppress the native callout'
 
 Need $css 'Control Center V59 · mobile authoritative alignment' 'Current mobile authoritative alignment layer missing'
 Need $css '--mobile-form-control-width:66.666%' 'All mobile modes must share the same right-edge control width'

@@ -6212,30 +6212,86 @@ function BotSettingsModal(props:any) {
   const [modeGuideOpen,setModeGuideOpen] = useState(false);
   const [modeGuideMode,setModeGuideMode] = useState("AUTO");
   const [settingHelpKey,setSettingHelpKey] = useState("");
+  const settingHelpPressTimerRef = useRef<ReturnType<typeof setTimeout>|null>(null);
 
-  const settingHelpLabel = (key:string,title:string,help:string,icon?:string) => (
-    <span
-      className="cc-bot-setting-help-label"
-      role="button"
-      tabIndex={0}
-      aria-expanded={settingHelpKey===key}
-      onClick={event=>{
-        event.preventDefault();
-        event.stopPropagation();
-        setSettingHelpKey(current=>current===key?"":key);
-      }}
-      onKeyDown={event=>{
-        if(event.key!=="Enter" && event.key!==" ") return;
-        event.preventDefault();
-        event.stopPropagation();
-        setSettingHelpKey(current=>current===key?"":key);
-      }}
-    >
-      {icon?<ScenovaIcon name={icon} size={17}/>:null}
-      <b className="cc-bot-setting-help-title">{title}</b>
-      {settingHelpKey===key&&<span className="cc-bot-setting-help-popover" role="tooltip">{help}</span>}
-    </span>
-  );
+  const clearSettingHelpPressTimer = () => {
+    if(settingHelpPressTimerRef.current){
+      clearTimeout(settingHelpPressTimerRef.current);
+      settingHelpPressTimerRef.current=null;
+    }
+  };
+
+  const settingHelpLabel = (key:string,title:string,help:string,icon?:string) => {
+    const helpId="setting-help-"+key.replace(/[^a-zA-Z0-9_-]/g,"-");
+    const visible=settingHelpKey===key;
+    return (
+      <span
+        className="cc-bot-setting-help-label"
+        tabIndex={0}
+        aria-label={title+": "+help}
+        aria-describedby={visible?helpId:undefined}
+        onPointerEnter={event=>{
+          if(event.pointerType==="mouse"){
+            clearSettingHelpPressTimer();
+            setSettingHelpKey(key);
+          }
+        }}
+        onPointerLeave={event=>{
+          clearSettingHelpPressTimer();
+          if(event.pointerType==="mouse" || event.pointerType==="touch" || event.pointerType==="pen"){
+            setSettingHelpKey(current=>current===key?"":current);
+          }
+        }}
+        onPointerDown={event=>{
+          if(event.pointerType==="mouse") return;
+          clearSettingHelpPressTimer();
+          settingHelpPressTimerRef.current=setTimeout(()=>{
+            setSettingHelpKey(key);
+            settingHelpPressTimerRef.current=null;
+          },450);
+        }}
+        onPointerUp={event=>{
+          if(event.pointerType==="mouse") return;
+          clearSettingHelpPressTimer();
+          setSettingHelpKey(current=>current===key?"":current);
+        }}
+        onPointerCancel={()=>{
+          clearSettingHelpPressTimer();
+          setSettingHelpKey(current=>current===key?"":current);
+        }}
+        onContextMenu={event=>{
+          event.preventDefault();
+        }}
+        onBlur={()=>{
+          clearSettingHelpPressTimer();
+          setSettingHelpKey(current=>current===key?"":current);
+        }}
+        onKeyDown={event=>{
+          if(event.key==="Enter" || event.key===" "){
+            event.preventDefault();
+            setSettingHelpKey(key);
+            return;
+          }
+          if(event.key==="Escape"){
+            setSettingHelpKey(current=>current===key?"":current);
+          }
+        }}
+      >
+        {icon?<ScenovaIcon name={icon} size={17}/>:null}
+        <b className="cc-bot-setting-help-title">{title}</b>
+        {visible&&<span id={helpId} className="cc-bot-setting-help-popover" role="tooltip">{help}</span>}
+      </span>
+    );
+  };
+
+  useEffect(()=>{
+    return()=>{
+      if(settingHelpPressTimerRef.current){
+        clearTimeout(settingHelpPressTimerRef.current);
+        settingHelpPressTimerRef.current=null;
+      }
+    };
+  },[]);
 
   useEffect(()=>{
     if(!modeGuideOpen) return;
