@@ -85,6 +85,9 @@ function resolveBrokerTradingSymbol(
   const exact = symbols.find(
     item => item.toUpperCase() === symbol.toUpperCase()
   );
+  // A symbol selected from the live MT5 Market Watch is already broker-native.
+  // Never rewrite an exact account symbol merely because the broker is Exness.
+  if (exact) return exact;
   const root = instrumentRoot(symbol);
 
   // If the Web already supplied a broker-native variant (suffix/prefix),
@@ -149,20 +152,26 @@ export class TradingSymbolController {
     const fallbackRequestedSymbol = normalizeSymbol(settings.symbol);
     const desiredRequestedSymbol =
       explicitRequestedSymbol || activeSymbol || fallbackRequestedSymbol || "XAUUSD";
+    const exactResolution =
+      String(settings.symbolResolutionMode || "").toUpperCase() === "EXACT";
     const explicitSymbol = explicitRequestedSymbol
-      ? resolveBrokerTradingSymbol(
-          explicitRequestedSymbol,
+      ? exactResolution
+        ? explicitRequestedSymbol
+        : resolveBrokerTradingSymbol(
+            explicitRequestedSymbol,
+            metrics,
+            instance.account_broker,
+            instance.account_broker_server
+          )
+      : "";
+    const desiredSymbol = exactResolution
+      ? desiredRequestedSymbol
+      : resolveBrokerTradingSymbol(
+          desiredRequestedSymbol,
           metrics,
           instance.account_broker,
           instance.account_broker_server
-        )
-      : "";
-    const desiredSymbol = resolveBrokerTradingSymbol(
-      desiredRequestedSymbol,
-      metrics,
-      instance.account_broker,
-      instance.account_broker_server
-    );
+        );
     const tradeMode = parseTradeMode(metrics.symbolTradeMode);
     const tradingAllowed = symbolTradeAllowed(tradeMode);
     const matches = Boolean(
@@ -260,12 +269,27 @@ export class TradingSymbolController {
 
     await this.db.query(
       `INSERT INTO bot_settings(bot_instance_id,settings,updated_at)
-       VALUES($1,jsonb_build_object('startupSymbol',$2::text,'symbol',$2::text),now())
+       VALUES(
+         $1,
+         jsonb_build_object(
+           'startupSymbol',$2::text,
+           'symbol',$2::text,
+           'symbolResolutionMode','EXACT',
+           'symbolSelectedBy','CUSTOMER'
+         ),
+         now()
+       )
        ON CONFLICT(bot_instance_id)
        DO UPDATE SET
          settings=jsonb_set(
-           jsonb_set(COALESCE(bot_settings.settings,'{}'::jsonb),'{startupSymbol}',to_jsonb($2::text),true),
-           '{symbol}',to_jsonb($2::text),true
+           jsonb_set(
+             jsonb_set(
+               jsonb_set(COALESCE(bot_settings.settings,'{}'::jsonb),'{startupSymbol}',to_jsonb($2::text),true),
+               '{symbol}',to_jsonb($2::text),true
+             ),
+             '{symbolResolutionMode}',to_jsonb('EXACT'::text),true
+           ),
+           '{symbolSelectedBy}',to_jsonb('CUSTOMER'::text),true
          ),
          updated_at=now()`,
       [instance.id, symbol]
@@ -432,12 +456,16 @@ export class EaTradingSymbolController {
     const legacySavedSymbol = normalizeSymbol(settings.symbol);
     const desiredRequestedSymbol =
       explicitRequestedSymbol || currentSymbol || legacySavedSymbol || "XAUUSD";
-    const desiredSymbol = resolveBrokerTradingSymbol(
-      desiredRequestedSymbol,
-      metrics,
-      row.account_broker,
-      row.account_broker_server
-    );
+    const exactResolution =
+      String(settings.symbolResolutionMode || "").toUpperCase() === "EXACT";
+    const desiredSymbol = exactResolution
+      ? desiredRequestedSymbol
+      : resolveBrokerTradingSymbol(
+          desiredRequestedSymbol,
+          metrics,
+          row.account_broker,
+          row.account_broker_server
+        );
     const tradeMode = parseTradeMode(metrics.symbolTradeMode);
     const tradingAllowed = symbolTradeAllowed(tradeMode);
     const currentMatchesDesired = Boolean(
