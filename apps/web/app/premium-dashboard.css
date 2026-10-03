@@ -2190,14 +2190,18 @@
 }
 
 
-/* ===== Control Center V34 · 430px MANUAL-rhythm settings =====
-   Keep every mode visually as compact as MANUAL, add a little more breathing
-   room inside the settings frame, and use a 430px card baseline. */
+/* ===== Control Center V34 · MANUAL-rhythm settings =====
+   Settings follows the visible rows of each mode; neighboring cards keep
+   their dashboard baseline independently. */
 .cc-v19-three-card-grid{
   align-items:start!important;
 }
-.cc-v19-three-card-grid>section,
-.cc-v19-settings-card,
+.cc-v19-settings-card{
+  align-self:start!important;
+  height:auto!important;
+  min-height:0!important;
+  max-height:none!important;
+}
 .cc-v19-three-card-grid .cc-v17-running-positions,
 .cc-v19-three-card-grid .cc-v12-mode-performance{
   align-self:start!important;
@@ -2206,12 +2210,12 @@
   max-height:430px!important;
 }
 
-/* Bot Settings shell: 44px header + 386px scrollable body = 430px total. */
+/* Bot Settings shell follows the selected mode content. */
 .cc-v19-settings-card .cc-bot-embedded-frame,
 .cc-v19-settings-card .cc-bot-v2-embedded{
-  height:430px!important;
-  min-height:430px!important;
-  max-height:430px!important;
+  height:auto!important;
+  min-height:0!important;
+  max-height:none!important;
 }
 .cc-v19-settings-card .cc-bot-v2-embedded{
   --settings-row:38px;
@@ -2454,13 +2458,13 @@
   max-height:38px!important;
 }
 
-/* Fixed 430px settings shell remains unchanged. */
+/* Settings shell follows the visible rows of the selected mode. */
 .cc-v19-settings-card,
 .cc-v19-settings-card .cc-bot-embedded-frame,
 .cc-v19-settings-card .cc-bot-v2-embedded{
-  height:430px!important;
-  min-height:430px!important;
-  max-height:430px!important;
+  height:auto!important;
+  min-height:0!important;
+  max-height:none!important;
 }
 
 /* ===== Control Center V38 · centered dropdown text =====
@@ -2609,11 +2613,13 @@
   flex:0 0 auto!important;
 }
 
-/* Keep the total settings card at 430px after giving the header more air. */
+/* Keep only one settings-row of breathing room below the final visible field. */
 .cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-body{
-  height:380px!important;
-  min-height:380px!important;
-  max-height:380px!important;
+  height:auto!important;
+  min-height:0!important;
+  max-height:none!important;
+  padding-bottom:var(--settings-row)!important;
+  overflow:visible!important;
 }
 
 @media(max-width:1180px){
@@ -5371,16 +5377,15 @@
 
 
 /* ===== Control Center V56 · desktop three-card breathing room ===== */
-/* Desktop only: widen Bot Settings, narrow Live Execution, and give all
-   three primary cards a little more vertical breathing room. */
+/* Desktop only: widen Bot Settings and keep neighboring cards stable.
+   Settings itself follows its visible rows with one-row bottom breathing room. */
 @media(min-width:1181px){
   .cc-v19-three-card-grid{
     grid-template-columns:36.33fr 30.33fr 33.34fr!important;
     gap:10px!important;
+    align-items:start!important;
   }
 
-  .cc-v19-three-card-grid>section,
-  .cc-v19-settings-card,
   .cc-v19-three-card-grid .cc-v17-running-positions,
   .cc-v19-three-card-grid .cc-v12-mode-performance{
     height:470px!important;
@@ -5388,17 +5393,21 @@
     max-height:470px!important;
   }
 
+  .cc-v19-settings-card,
   .cc-v19-settings-card .cc-bot-embedded-frame,
   .cc-v19-settings-card .cc-bot-v2-embedded{
-    height:470px!important;
-    min-height:470px!important;
-    max-height:470px!important;
+    align-self:start!important;
+    height:auto!important;
+    min-height:0!important;
+    max-height:none!important;
   }
 
   .cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-body{
-    height:420px!important;
-    min-height:420px!important;
-    max-height:420px!important;
+    height:auto!important;
+    min-height:0!important;
+    max-height:none!important;
+    padding-bottom:var(--settings-row)!important;
+    overflow:visible!important;
   }
 
   .cc-v19-settings-card .cc-bot-v2-fields>.cc-bot-v2-field,
