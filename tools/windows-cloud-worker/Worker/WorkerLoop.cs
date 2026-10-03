@@ -197,6 +197,7 @@ internal sealed class WorkerLoop
                     var templateReady = _mt5.TemplateReady;
                     var telemetry = TelemetryReader.Read(templateReady);
                     telemetry.SetupVersion = _config.SetupVersion;
+                    telemetry.BrokerServers = _mt5.BrokerServers();
                     telemetry.Instances = _mt5.Diagnostics();
                     return new
                     {
