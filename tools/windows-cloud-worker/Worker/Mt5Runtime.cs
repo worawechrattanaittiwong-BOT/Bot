@@ -37,6 +37,7 @@ internal sealed class Mt5Runtime
     private readonly string _instancesPath;
     private readonly string _templatePath;
     private readonly BrokerPlatformManager _brokerPlatforms;
+    private readonly BrokerServerDirectory _brokerServerDirectory;
     private readonly HashSet<string> _brokerMigrationAttempted =
         new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _autoLaunchAttempted =
@@ -52,12 +53,16 @@ internal sealed class Mt5Runtime
         _instancesPath = Path.Combine(config.Root, "instances");
         _templatePath = Path.Combine(config.Root, "template");
         _brokerPlatforms = new BrokerPlatformManager(config);
+        _brokerServerDirectory = new BrokerServerDirectory(config);
     }
 
     public bool TemplateReady =>
         File.Exists(Path.Combine(_templatePath, "terminal64.exe")) &&
         File.Exists(Path.Combine(_templatePath, "MQL5", "Experts", "FastBasketBot.ex5")) &&
         File.Exists(Path.Combine(_templatePath, "cloud-template.ready"));
+
+    public IReadOnlyList<BrokerServerDirectoryEntry> BrokerServers() =>
+        _brokerServerDirectory.Read();
 
     public int ActiveInstanceCount()
     {
