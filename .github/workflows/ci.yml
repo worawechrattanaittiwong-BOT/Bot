@@ -104,6 +104,9 @@ jobs:
       - name: AUTO V21 balanced exit and lot-safety contract
         shell: pwsh
         run: ./tests/auto-v21-balanced-exit-contract.ps1
+      - name: AUTO V22 safe-profit isolation contract
+        shell: pwsh
+        run: ./tests/auto-v22-consistent-profit-contract.ps1
       - name: Adaptive Rescue disabled contract
         shell: pwsh
         run: ./tests/rescue-disabled-contract.ps1

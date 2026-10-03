@@ -3,7 +3,7 @@
 
 #include "AutoVectorEdgeV1.mqh"
 
-#define VECTOR_EDGE_LIVE_V1_VERSION "1.1.0"
+#define VECTOR_EDGE_LIVE_V1_VERSION "1.2.0"
 
 double g_vectorEdgeLiveBuyEV = 0.0;
 double g_vectorEdgeLiveSellEV = 0.0;
@@ -11,7 +11,7 @@ double g_vectorEdgeLiveRatio = 0.0;
 double g_vectorEdgeLiveEntropy = 1.0;
 string g_vectorEdgeLiveReason = "WARMUP";
 
-bool VectorEdgeLiveBuildInput(VECTOR_EDGE_INPUT &edgeInput)
+bool VectorEdgeLiveBuildInput(VECTOR_EDGE_INPUT &edgeInput,const int selectedDirection=0)
 {
    if(!AutoV20Enabled()) return false;
 
@@ -36,8 +36,12 @@ bool VectorEdgeLiveBuildInput(VECTOR_EDGE_INPUT &edgeInput)
    if(spreadRef<=0.0) spreadRef=MathMax(1.0,g_spreadMedian);
    edgeInput.spreadPenalty=MathMax(0.0,MathMin(2.0,CurrentSpreadPoints()/MathMax(1.0,spreadRef)-1.0));
 
-   double bestConfidence=MathMax(g_autoV20Buy.confidence,g_autoV20Sell.confidence);
-   edgeInput.modelUncertainty=1.0-VectorClamp01(bestConfidence/100.0);
+   // Uncertainty follows the side being evaluated. A strong opposite-side
+   // score must not make the selected side look artificially certain.
+   double selectedConfidence=MathMax(g_autoV20Buy.confidence,g_autoV20Sell.confidence);
+   if(selectedDirection>0) selectedConfidence=g_autoV20Buy.confidence;
+   else if(selectedDirection<0) selectedConfidence=g_autoV20Sell.confidence;
+   edgeInput.modelUncertainty=1.0-VectorClamp01(selectedConfidence/100.0);
    edgeInput.persistence=g_autoV20PhaseSince>0
       ? VectorClamp01((double)MathMax(0,TimeCurrent()-g_autoV20PhaseSince)/30.0)
       : 0.0;
@@ -62,7 +66,7 @@ bool AutoVectorEdgeLiveAllow(const int direction,string &reason)
    }
 
    VECTOR_EDGE_INPUT edgeInput;
-   if(!VectorEdgeLiveBuildInput(edgeInput))
+   if(!VectorEdgeLiveBuildInput(edgeInput,direction))
    {
       reason="VECTOR_INPUT_UNAVAILABLE_ALLOW";
       return true;
@@ -114,7 +118,7 @@ bool AutoVectorEdgeLiveExitLost(const int direction)
    int selectedSamples=direction>0 ? g_autoV20Buy.winSamples : g_autoV20Sell.winSamples;
    if(selectedSamples<20) return false;
    VECTOR_EDGE_INPUT edgeInput;
-   if(!VectorEdgeLiveBuildInput(edgeInput)) return false;
+   if(!VectorEdgeLiveBuildInput(edgeInput,direction)) return false;
    VECTOR_EDGE_OUTPUT edge=VectorEvaluateEdge(edgeInput);
    if(!edge.valid) return false;
    double selectedEV=direction>0 ? edge.buyEV : edge.sellEV;
