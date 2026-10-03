@@ -4969,13 +4969,12 @@ export default function DashboardPage() {
                         setBrokerServer(e.target.value);
                         setCloudMt5DialogError("");
                       }}
-                      placeholder={selectedBrokerServers.length ? "เลือกหรือพิมพ์ Server" : "พิมพ์ MT5 Server"}
+                      placeholder="MT5 Server"
                       autoComplete="off"
                       autoCapitalize="none"
                       autoCorrect="off"
                       spellCheck={false}
                       aria-label="MT5 Server"
-                      aria-describedby="cloud-mt5-server-help"
                       required
                     />
                     {cloudMt5DialogMode === "NEW" && selectedBrokerServers.length > 0 && (
@@ -4990,11 +4989,6 @@ export default function DashboardPage() {
                       </datalist>
                     )}
                   </div>
-                  <small id="cloud-mt5-server-help" className="cloud-mt5-server-note">
-                    {selectedBrokerServers.length
-                      ? "เลือกจากรายการ "+selectedBrokerName+" หรือพิมพ์ Server เอง"
-                      : "พิมพ์ชื่อ Server ตามที่แสดงใน MT5"}
-                  </small>
                 </div>
               </div>
 
@@ -5007,13 +5001,10 @@ export default function DashboardPage() {
                     autoComplete="off"
                     value={tradingPassword}
                     onChange={e=>setTradingPassword(e.target.value)}
-                    placeholder="กรอกรหัส Trading ของ MT5"
+                    placeholder="Trading Password"
                     required
                   />
                 </span>
-                <small className="cloud-mt5-password-note">
-                  ใช้ Trading Password เท่านั้น ไม่ใช่ Investor Password
-                </small>
               </label>
             </div>
 
