@@ -10,7 +10,7 @@ namespace Scenova.CloudSetup;
 
 internal static class Program
 {
-    internal const string SetupVersion = "0.6.18";
+    internal const string SetupVersion = "0.6.19";
     private const string DefaultApiBase = "https://snvea-bot.online/backend";
     private const string RootPath = @"C:\BotTrading";
     private static readonly byte[] Entropy = Encoding.UTF8.GetBytes("SCENOVA-CLOUD-WORKER-V1");
