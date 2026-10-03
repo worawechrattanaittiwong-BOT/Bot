@@ -28,6 +28,11 @@ export class WorkerController {
       templateReady?: boolean;
       version?: string;
       setupVersion?: string;
+      brokerServers?: Array<{
+        brokerCode?: string;
+        serverName?: string;
+        environment?: string;
+      }>;
       instances?: Array<{
         instanceId?: string;
         terminalRunning?: boolean;
@@ -87,6 +92,27 @@ export class WorkerController {
         templateReady: t.templateReady === true,
         version: String(t.version || "").slice(0,32),
         setupVersion: String(t.setupVersion || "").slice(0,32),
+        brokerServers: Array.isArray(t.brokerServers)
+          ? Array.from(
+              new Map(
+                t.brokerServers
+                  .slice(0,250)
+                  .map(item => {
+                    const brokerCode = String(item?.brokerCode || "")
+                      .toUpperCase().replace(/[^A-Z0-9_-]/g,"").slice(0,32);
+                    const serverName = String(item?.serverName || "")
+                      .replace(/[\u0000-\u001F\u007F]/g,"").trim().slice(0,96);
+                    const environmentRaw = String(item?.environment || "UNKNOWN").toUpperCase();
+                    const environment = ["REAL","DEMO","UNKNOWN"].includes(environmentRaw)
+                      ? environmentRaw
+                      : "UNKNOWN";
+                    return { brokerCode, serverName, environment };
+                  })
+                  .filter(item => item.brokerCode && item.serverName)
+                  .map(item => [item.brokerCode+"|"+item.serverName.toLowerCase(),item] as const)
+              ).values()
+            )
+          : [],
         instances: Array.isArray(t.instances)
           ? t.instances.slice(0,50).map(item => ({
               instanceId: String(item?.instanceId || "").slice(0,64),
