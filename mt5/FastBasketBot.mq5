@@ -15266,9 +15266,9 @@ int AutoV20PrecisionDirection(double momentum)
       selected=direction>0 ? g_autoV20Buy : g_autoV20Sell;
    }
 
-   // Positions 1-4 are intentionally opportunity-first. Demand/Supply plus the
-   // shared brain provides the direction, while confidence/rank remains
-   // telemetry. Position 5+ keeps the previous stricter quality policy.
+   // Positions 1-4 keep the relaxed score policy so AUTO does not become
+   // excessively quiet. Confidence/rank still guide selection, while add
+   // safety is enforced separately below: position 2+ may never average down.
    if(!relaxedFirstFour)
    {
       double minimumConfidence=62.0;
@@ -15303,41 +15303,47 @@ int AutoV20PrecisionDirection(double momentum)
 
    if(count>0)
    {
+      // Never increase AUTO exposure while a wrong-direction exit candidate is
+      // armed. The existing basket must recover or exit before another add.
+      if(g_autoV20ExitCandidateSince>0)
+      {
+         g_autoV20RejectReason="EXIT_CANDIDATE_NO_ADD";
+         g_autoV20AddReason="WAIT_WRONG_DIRECTION_RESOLUTION";
+         g_adaptiveBlockReason="AUTO_V21_EXIT_CANDIDATE";
+         return 0;
+      }
+
       AutoV21ApplyNoIncreaseLotCap(selected);
       if(direction>0) g_autoV20Buy=selected; else g_autoV20Sell=selected;
 
-      if(relaxedFirstFour)
-      {
-         if(!AutoV20ZoneStructureIntact(direction))
-         {
-            g_autoV20RejectReason="ACTIVE_ZONE_STRUCTURE_BROKEN";
-            g_autoV20AddReason="WAIT_ZONE_STRUCTURE";
-            g_adaptiveBlockReason="AUTO_V20_WAIT_ZONE_STRUCTURE";
-            return 0;
-         }
-         g_autoV20AddReason="ZONE_STRUCTURE_INTACT_RELAXED_1_4";
-      }
-      else
-      {
-         double atrPoints=MathMax(10.0,
-            AverageTrueRangePoints(PERIOD_M5,g_atrPeriod));
-         double progress=BasketFavorableProgressPoints(direction);
-         AUTO_V20_PULLBACK pb;
-         AutoV20EvaluatePullback(direction,momentum,pb);
-         double required=MathMax(2.0,atrPoints*0.08);
+      double atrPoints=MathMax(10.0,
+         AverageTrueRangePoints(PERIOD_M5,g_atrPeriod));
+      double progress=BasketFavorableProgressPoints(direction);
+      AUTO_V20_PULLBACK pb;
+      AutoV20EvaluatePullback(direction,momentum,pb);
+      double addProgressFactor=relaxedFirstFour ? 0.05 : 0.08;
+      double required=MathMax(2.0,atrPoints*addProgressFactor);
 
-         // Position 5+ keeps the previous anti-average-down behavior.
-         if(progress<0.0 || (progress<required && !pb.resumed))
-         {
-            g_autoV20RejectReason="ADD_NEEDS_FAVORABLE_PROGRESS";
-            g_autoV20AddReason="WAIT_PROGRESS_OR_PULLBACK_RESUME";
-            g_adaptiveBlockReason="AUTO_V20_WAIT_ADD";
-            return 0;
-         }
-         g_autoV20AddReason=progress>=required
-            ? "FAVORABLE_PROGRESS"
-            : "UNIFIED_PULLBACK_RESUME";
+      if(relaxedFirstFour && !AutoV20ZoneStructureIntact(direction))
+      {
+         g_autoV20RejectReason="ACTIVE_ZONE_STRUCTURE_BROKEN";
+         g_autoV20AddReason="WAIT_ZONE_STRUCTURE";
+         g_adaptiveBlockReason="AUTO_V20_WAIT_ZONE_STRUCTURE";
+         return 0;
       }
+
+      // Every AUTO add (position 2+) is winner-only. Positions 2-4 use a light
+      // 0.05 ATR hurdle to preserve trade activity. Position 5+ keeps 0.08 ATR.
+      if(progress<0.0 || (progress<required && !pb.resumed))
+      {
+         g_autoV20RejectReason="ADD_NEEDS_FAVORABLE_PROGRESS";
+         g_autoV20AddReason="WAIT_PROGRESS_OR_PULLBACK_RESUME";
+         g_adaptiveBlockReason="AUTO_V20_WAIT_ADD";
+         return 0;
+      }
+      g_autoV20AddReason=relaxedFirstFour
+         ? (progress>=required ? "EARLY_WINNER_PROGRESS" : "EARLY_PULLBACK_RESUME")
+         : (progress>=required ? "FAVORABLE_PROGRESS" : "UNIFIED_PULLBACK_RESUME");
 
       selected.aggregateRiskMoney=AutoV20AggregateRiskAtStop(
          direction,
@@ -15368,10 +15374,21 @@ int AutoV20PrecisionDirection(double momentum)
    bool vectorLiveAllowed=AutoVectorEdgeLiveAllow(direction,vectorLiveReason);
    if(!vectorLiveAllowed && !relaxedFirstFour)
    {
-      // Vector Edge stays a strict add guard from position 5 onward. Positions
-      // 1-4 follow the shared Demand/Supply structure without duplicate vetoes.
+      // Position 5+ keeps the existing strict Vector Edge guard.
       g_autoV20RejectReason=vectorLiveReason;
       g_adaptiveBlockReason="AUTO_VECTOR_EDGE_WAIT";
+      g_cachedAdaptiveDirection=0;
+      g_cachedAdaptiveBlockReason=g_adaptiveBlockReason;
+      return 0;
+   }
+   if(!vectorLiveAllowed && count>0 && relaxedFirstFour &&
+      (vectorLiveReason=="VECTOR_SELECTED_NEGATIVE_EV" ||
+       vectorLiveReason=="VECTOR_DIRECTION_DISAGREE"))
+   {
+      // Positions 2-4 stay activity-friendly: weak edge alone is not a veto.
+      // Only negative expectancy or a confirmed opposite direction blocks.
+      g_autoV20RejectReason=vectorLiveReason;
+      g_adaptiveBlockReason="AUTO_VECTOR_EDGE_SAFETY_WAIT";
       g_cachedAdaptiveDirection=0;
       g_cachedAdaptiveBlockReason=g_adaptiveBlockReason;
       return 0;
