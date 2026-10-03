@@ -1,1 +1,254 @@
-.shellMain{padding:0!important;background:#09070f}.root{min-height:100vh;background:#09070f;color:#f7f2ff;padding:32px;display:flex;flex-direction:column;gap:22px}.header{display:flex;justify-content:space-between;gap:24px;align-items:flex-start}.header h1{margin:6px 0 8px;font-size:36px}.header p,.muted{color:#a99db8}.kicker{font-size:12px;letter-spacing:.14em;color:#a78bfa}.actions{display:flex;gap:10px;flex-wrap:wrap}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.card,.panel{background:#13101b;border:1px solid #2b2337;border-radius:16px;padding:18px}.card strong{display:block;font-size:32px;margin:8px 0}.card p{margin:0;color:#a99db8}.panelHead{display:flex;justify-content:space-between;align-items:center}.panel h2{margin:4px 0 14px}.button,.primary,.danger{border-radius:10px;padding:10px 14px;border:1px solid #3a3048;background:#1a1523;color:#f7f2ff;text-decoration:none;cursor:pointer}.primary{background:#6d28d9;border-color:#7c3aed}.danger{background:#3a1018;border-color:#7f1d1d}.button:disabled,.primary:disabled,.danger:disabled{opacity:.45;cursor:not-allowed}.notice{border-radius:10px;padding:12px 14px}.good{background:#0f291f;border:1px solid #1f6d4b}.bad{background:#351218;border:1px solid #7f1d1d}.field{display:flex;flex-direction:column;gap:6px;margin:12px 0}.field input{background:#0e0b14;color:#fff;border:1px solid #3a3048;border-radius:10px;padding:11px}.tableWrap{overflow:auto}.tableWrap table{width:100%;border-collapse:collapse}.tableWrap th,.tableWrap td{text-align:left;padding:12px;border-bottom:1px solid #2b2337;vertical-align:top}.tableWrap th{font-size:12px;color:#9b8cac;letter-spacing:.08em}.tableWrap td small{display:block;color:#9b8cac;margin-top:4px}.badgeBad,.badgeGood{display:inline-block;padding:4px 8px;border-radius:999px;font-size:12px}.badgeBad{background:#3a1018;color:#fca5a5}.badgeGood{background:#0f291f;color:#86efac}@media(max-width:900px){.root{padding:18px}.header{flex-direction:column}.grid{grid-template-columns:1fr}.header h1{font-size:30px}}
+.shellMain{
+  padding:0!important;
+  background:#09070f;
+}
+.root{
+  min-height:100vh;
+  background:#09070f;
+  color:#f7f2ff;
+  padding:26px 28px 36px;
+  display:flex;
+  flex-direction:column;
+  gap:14px;
+}
+.header{
+  display:flex;
+  justify-content:space-between;
+  gap:18px;
+  align-items:center;
+  padding-bottom:2px;
+}
+.header h1{
+  margin:0 0 4px;
+  font-size:30px;
+  line-height:1.12;
+}
+.header p{
+  margin:0;
+  color:#9f95ad;
+  font-size:13px;
+}
+.actions{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.grid{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:10px;
+}
+.card,.panel{
+  background:#13101b;
+  border:1px solid #2b2337;
+  border-radius:14px;
+}
+.card{
+  padding:14px 16px;
+}
+.card small{
+  color:#b6abc4;
+  font-size:12px;
+  font-weight:700;
+}
+.card strong{
+  display:block;
+  font-size:28px;
+  line-height:1;
+  margin:8px 0 7px;
+}
+.card p{
+  margin:0;
+  color:#91869f;
+  font-size:12px;
+}
+.panel{
+  padding:16px;
+}
+.panelHead{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:12px;
+  margin-bottom:12px;
+}
+.panel h2{
+  margin:0;
+  font-size:19px;
+}
+.panelMeta{
+  color:#91869f;
+  font-size:12px;
+  white-space:nowrap;
+}
+.statusLine{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.statusLine span{
+  padding:6px 9px;
+  border:1px solid #342b42;
+  border-radius:999px;
+  color:#a99db8;
+  font-size:12px;
+  background:#0f0c16;
+}
+.statusLine b{
+  color:#86efac;
+  margin-left:4px;
+}
+.button,.primary,.danger{
+  min-height:38px;
+  border-radius:9px;
+  padding:8px 12px;
+  border:1px solid #3a3048;
+  background:#1a1523;
+  color:#f7f2ff;
+  text-decoration:none;
+  cursor:pointer;
+  font-weight:700;
+}
+.primary{
+  background:#6d28d9;
+  border-color:#7c3aed;
+}
+.danger{
+  background:#351218;
+  border-color:#7f1d1d;
+}
+.button:disabled,.primary:disabled,.danger:disabled{
+  opacity:.45;
+  cursor:not-allowed;
+}
+.notice{
+  border-radius:10px;
+  padding:10px 12px;
+}
+.good{
+  background:#0f291f;
+  border:1px solid #1f6d4b;
+}
+.bad{
+  background:#351218;
+  border:1px solid #7f1d1d;
+}
+.field{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  margin:0 0 10px;
+  color:#cfc6d9;
+  font-size:12px;
+  font-weight:700;
+}
+.field input{
+  height:40px;
+  background:#0e0b14;
+  color:#fff;
+  border:1px solid #3a3048;
+  border-radius:9px;
+  padding:0 11px;
+}
+.updated{
+  margin:10px 0 0;
+  color:#857a92;
+  font-size:11px;
+}
+.tableWrap{
+  overflow:auto;
+  border:1px solid #211b2b;
+  border-radius:10px;
+}
+.tableWrap table{
+  width:100%;
+  border-collapse:collapse;
+}
+.tableWrap th,.tableWrap td{
+  text-align:left;
+  padding:10px 11px;
+  border-bottom:1px solid #241d2e;
+  vertical-align:middle;
+}
+.tableWrap tr:last-child td{
+  border-bottom:0;
+}
+.tableWrap th{
+  font-size:11px;
+  color:#8f839d;
+  letter-spacing:.04em;
+  background:#0d0b12;
+}
+.tableWrap td{
+  font-size:12px;
+  color:#ddd5e7;
+}
+.tableWrap td small{
+  display:block;
+  color:#82768f;
+  margin-top:3px;
+}
+.badgeBad,.badgeGood,.badgeWarn{
+  display:inline-block;
+  padding:4px 8px;
+  border-radius:999px;
+  font-size:11px;
+  font-weight:800;
+  white-space:nowrap;
+}
+.badgeBad{
+  background:#3a1018;
+  color:#fca5a5;
+}
+.badgeGood{
+  background:#0f291f;
+  color:#86efac;
+}
+.badgeWarn{
+  background:#32260b;
+  color:#f5d071;
+}
+.emptyState{
+  min-height:54px;
+  display:flex;
+  align-items:center;
+  padding:0 14px;
+  border:1px dashed #31283d;
+  border-radius:10px;
+  background:#0e0b14;
+  color:#8fcfab;
+  font-size:13px;
+}
+@media(max-width:900px){
+  .root{
+    padding:16px 14px 28px;
+    gap:12px;
+  }
+  .header{
+    align-items:flex-start;
+    flex-direction:column;
+  }
+  .header h1{
+    font-size:26px;
+  }
+  .grid{
+    grid-template-columns:1fr;
+  }
+  .panelHead{
+    align-items:flex-start;
+    flex-direction:column;
+    margin-bottom:10px;
+  }
+  .statusLine{
+    width:100%;
+  }
+  .actions{
+    width:100%;
+  }
+  .actions .button,.actions .primary,.actions .danger{
+    flex:1 1 170px;
+  }
+  .tableWrap table{
+    min-width:620px;
+  }
+}

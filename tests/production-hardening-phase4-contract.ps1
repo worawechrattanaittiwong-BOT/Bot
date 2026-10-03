@@ -69,9 +69,12 @@ Require $cloudUpdate "bi\.last_seen_at>now\(\)-interval '30 seconds'.*OR" 'norma
 
 Require $app 'ProductionHardeningController' 'hardening controller registered'
 Require $app 'ProductionHardeningService' 'hardening service registered'
-Require $page 'Pause Provisioning \+ Recovery' 'owner emergency pause UI'
-Require $page 'Quarantine' 'owner quarantine UI'
-Require $page 'Reset circuit' 'owner recovery circuit reset UI'
+Require $page 'หยุดเพิ่มลูกค้า \+ Recovery' 'owner emergency pause UI'
+Require $page 'พักเครื่อง' 'owner quarantine UI'
+Require $page 'รีเซ็ต Recovery' 'owner recovery circuit reset UI'
+Require $page 'Cloud Protection' 'owner hardening page uses concise operator-facing title'
+Reject $page 'Health Guard, bounded Auto-Recovery' 'owner page must not expose system-heavy explanatory copy'
+Reject $page 'INCIDENT LEDGER' 'owner page must not expose internal incident-ledger label'
 
 Require $botApi 'Safe Stop/Force Flat กำลังทำงานอยู่.*Position และ Pending Order ของ SCENOVA เป็น 0.*STOPPED' 'Start is blocked while Safe Stop or Force Flat drain is active'
 Require $eaApi 'safeStopDrainComplete' 'Safe Stop drain has an explicit completion transition'
