@@ -122,7 +122,7 @@ jobs:
           if-no-files-found: error
 
       - name: Publish Cloud binaries to website on main
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
         shell: powershell
         run: |
           $ErrorActionPreference = "Stop"
