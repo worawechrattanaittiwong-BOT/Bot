@@ -6,6 +6,7 @@ const dashboard = read("apps/web/app/dashboard/page.tsx");
 const catalog = read("apps/api/src/catalog.controller.ts");
 const ea = read("apps/api/src/ea.controller.ts");
 const seed = read("database/057_broker_server_catalog_verified.sql");
+const exnessDirectory = read("database/059_exness_mt5_server_directory.sql");
 const deploy = read("scripts/deploy-hostinger.sh");
 const worker = read("tools/windows-cloud-worker/Worker/Mt5Runtime.cs");
 const workerController = read("apps/api/src/worker.controller.ts");
@@ -15,30 +16,54 @@ assert.match(
   /CASE s\.environment WHEN 'REAL' THEN 0 WHEN 'DEMO' THEN 1 ELSE 2 END,[\s\S]*?s\.sort_order,[\s\S]*?lower\(s\.server_name\)/,
   "broker API must return MT5 servers in deterministic REAL -> DEMO -> other order"
 );
+assert.doesNotMatch(
+  catalog,
+  /FROM mt5_accounts|JOIN mt5_accounts/,
+  "broker server dropdown must never be populated from customer-entered account history"
+);
 assert.match(
-  dashboard,
-  /MT5 Server · ต้องตรงกับบัญชีของคุณทุกตัว/,
-  "MT5 server entry must tell the customer that the server name must match exactly"
+  exnessDirectory,
+  /Exness-MT5Real51/,
+  "Exness directory must include the broad broker server set rather than one guessed server"
+);
+assert.match(
+  exnessDirectory,
+  /Exness-MT5Trial17/,
+  "Exness directory must include current demo/trial server choices"
+);
+assert.ok(
+  (exnessDirectory.match(/Exness-MT5(?:Real|Trial)/g) || []).length >= 50,
+  "Exness broker directory should expose dozens of MT5 servers"
 );
 assert.match(
   dashboard,
-  /คัดลอกจาก MT5 เช่น Exness-MT5Trial7/,
-  "MT5 server entry must instruct the customer to copy the exact terminal server"
+  /<span>MT5 Server<\/span>/,
+  "MT5 server field must use a clean compact label"
 );
 assert.match(
   dashboard,
-  /Trial6, Trial7, Trial14 ใช้แทนกันไม่ได้/,
-  "MT5 server entry must explain that similar Trial server numbers are not interchangeable"
+  /list=\{cloudMt5DialogMode === "NEW" && selectedBrokerServers\.length \? "cloud-mt5-server-options"/,
+  "MT5 server input must expose broker-specific suggestions while staying editable"
+);
+assert.match(
+  dashboard,
+  /<datalist id="cloud-mt5-server-options">/,
+  "MT5 server suggestions must use one searchable native dropdown"
 );
 assert.doesNotMatch(
   dashboard,
-  /cloud-mt5-server-menu|<b>REAL \/ LIVE<\/b>|<b>DEMO \/ TRIAL<\/b>/,
-  "new MT5 connections must not offer a stale server catalog as clickable choices"
+  /Trial6, Trial7, Trial14|คัดลอกจาก MT5 เช่น|ต้องตรงกับบัญชีของคุณทุกตัว/,
+  "MT5 connection dialog must stay concise and avoid tutorial-style server copy"
+);
+assert.match(
+  dashboard,
+  /เข้ารหัส AES-256-GCM ก่อนจัดเก็บ และใช้เฉพาะเชื่อมต่อ MT5 บน VPS/,
+  "credential storage security disclosure must remain visible"
 );
 assert.match(
   dashboard,
   /cloud-mt5-server-combobox/,
-  "MT5 server must remain a single exact-entry field"
+  "MT5 server must remain one combined dropdown/manual-entry control"
 );
 assert.doesNotMatch(
   dashboard,
@@ -121,6 +146,11 @@ assert.match(
   deploy,
   /database\/057_broker_server_catalog_verified\.sql/,
   "production deploy must apply broker server catalog migration"
+);
+assert.match(
+  deploy,
+  /database\/059_exness_mt5_server_directory\.sql/,
+  "production deploy must apply the Exness MT5 server directory migration"
 );
 assert.match(
   worker,
