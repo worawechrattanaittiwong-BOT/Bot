@@ -3600,9 +3600,8 @@ int RaceVolumeDirection()
 
 int RaceM5CandleDirection()
 {
-   // RACE AUTO reads one thing only for side selection: the latest completed
-   // M5 candle. Closed-bar data keeps the chosen side stable and prevents an
-   // intrabar flip from opening the opposite direction inside the same cycle.
+   // Stable M5 candle fallback for the RACE structure engine. Primary side
+   // selection comes from the 20-bar regime + Demand/Supply context.
    MqlRates rates[];
    ArraySetAsSeries(rates, true);
    if(CopyRates(_Symbol, PERIOD_M5, 1, 1, rates) < 1)
@@ -4932,9 +4931,8 @@ bool ProcessRaceFill(int direction)
    if(direction == 0)
       return false;
 
-   // One-way cycle lock remains unchanged for BASKET/OFF and for Netting.
-   // Only POSITION profit mode on an MT5 Hedging account may hold independent
-   // BUY and SELL tickets inside the same RACE cycle.
+   // RACE 1.1.20 keeps one structural side per live cycle in every profit
+   // target mode. Reversal closes old exposure first; no mixed-side trap.
    int existingPositions = BasketPositionCount();
    if(existingPositions<=0)
       g_raceLastObservedCycleProfit=0.0;
@@ -5107,13 +5105,10 @@ bool ManageRaceBasket(double momentum)
       return true;
    }
 
-   // RACE POSITION on a Hedging account is ticket-owned from the first fill.
-   // Do not wait until the Basket is already mixed before allowing a fresh
-   // opposite BUY/SELL signal to open its own independent ticket.
-   if(RacePerPositionDualDirectionEnabled())
-      return ManageRacePerPositionHedgeBasket(momentum);
+   // Every RACE profit mode now shares the same one-way structural cycle.
+   // Legacy dual-direction helper remains dormant for source compatibility.
 
-   // All other RACE modes retain the existing one-way Basket contract.
+   // RACE retains one-way Basket ownership until a structural handoff closes it.
    // RACE close decisions use direct P/L, current price and completed M5 data.
    // Defer expensive market-context refresh to non-close paths only.
    int direction = BasketDirection();
@@ -5132,6 +5127,12 @@ bool ManageRaceBasket(double momentum)
       // last-fill timestamp. Rebase it for consistent recovered-cycle telemetry.
       if(g_raceLastFillAt <= 0)
          g_raceLastFillAt = g_raceCycleStartedAt;
+      if(g_raceLastFillPrice<=0.0)
+      {
+         g_raceLastFillPrice=BasketAnchorEntryPrice(direction);
+         g_raceLastFillDirection=direction;
+         g_raceLastFillMs=GetTickCount64();
+      }
    }
 
    int filledUnits = RaceFilledUnits();
@@ -5502,7 +5503,6 @@ void OnTick()
    // directly. SaaS heartbeat/telemetry is never a price source for trading.
    g_lastMarketTickMs=GetTickCount64();
    SampleSpread();
-   RaceSampleVolumePressure();
 
    // Profit target owns the tick before any non-close analysis.
    if(FastProfitClosePriority())
