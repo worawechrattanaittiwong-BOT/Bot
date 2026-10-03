@@ -426,9 +426,9 @@ double g_racePerPositionProfitMoney = 0.50;
 double g_counterPerPositionProfitMoney = 0.50;
 datetime g_counterOrderWindowStart = 0;
 int      g_counterOrdersInWindow = 0;
-// Legacy 30-second order-flow sampler. Retained only for backward-compatible
-// telemetry/history. RACE 1.1.20 trading decisions do NOT read this window;
-// COUNTER keeps its own existing 2-second Bid helper unchanged.
+// Legacy 30-second order-flow storage/functions are retained only for source
+// compatibility; OnTick no longer samples them. RACE 1.1.20 trading decisions
+// do NOT read this window. COUNTER keeps its existing 2-second Bid helper.
 datetime g_raceVolumeBucketSecond[RACE_VOLUME_HISTORY_SECONDS];
 double   g_raceVolumeBucketBuy[RACE_VOLUME_HISTORY_SECONDS];
 double   g_raceVolumeBucketSell[RACE_VOLUME_HISTORY_SECONDS];
@@ -5317,7 +5317,8 @@ bool ManageRaceBasket(double momentum)
    // M5 structure/regime confirmation above.
    if(signalDirection!=0 && signalDirection!=direction)
    {
-      g_raceRecoveryWatch=true;
+      // Sideway swing changes pause additions only. Do not mark recovery or
+      // force an early exit; the existing Basket keeps its normal exit contract.
       g_raceState="STRUCTURE_WAIT";
       g_executionStatus="RACE_OPPOSITE_M5_WAIT";
       return true;
