@@ -22,6 +22,8 @@ Need $css 'position:static!important' 'Mobile sidebar trigger must stay away fro
 Need $summary 'left:12px;right:auto;bottom:calc(94px + env(safe-area-inset-bottom));z-index:2200' 'Bot summary launcher must sit above and away from command dock'
 Need $mirror 'className="cc-mobile-mirror-launch"' 'Mobile Mirror launcher must have a dedicated safe-placement class'
 Need $css '.cc-mobile-mirror-launch{' 'Mobile Mirror launcher safe-placement styles missing'
+Need $css 'bottom:86px!important;' 'Desktop Mobile Mirror launcher must sit above the fixed Summary launcher'
+Need $css 'z-index:7500!important;' 'Desktop Mobile Mirror launcher must stay below the Summary launcher stacking level'
 Need $css 'bottom:calc(90px + env(safe-area-inset-bottom))!important;' 'Mobile Mirror launcher must sit above the Start/Stop dock'
 Need $css 'z-index:2590!important;' 'Mobile Mirror launcher must remain below the Start/Stop dock in stacking order'
 Write-Host 'SCENOVA mobile dashboard command hierarchy contract: PASS'

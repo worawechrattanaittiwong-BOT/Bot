@@ -6904,6 +6904,14 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
 }
 
 
+/* Mobile Mirror launcher: on desktop keep it above the fixed Summary
+   launcher; phone placement is overridden below above the Start / Stop dock. */
+.cc-mobile-mirror-launch{
+  right:22px!important;
+  bottom:86px!important;
+  z-index:7500!important;
+}
+
 /* ===== Mobile command hierarchy cleanup =====
    Primary Start/Stop live only in the persistent lower dock on phones.
    Secondary Symbol / Close All / Terminal remain in the hero. */
