@@ -6936,6 +6936,14 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
     white-space:nowrap;
   }
 
+  /* Keep the Mobile Mirror launcher above the persistent Start / Stop dock.
+     The dock keeps the higher z-index so trading controls always win taps. */
+  .cc-mobile-mirror-launch{
+    right:12px!important;
+    bottom:calc(90px + env(safe-area-inset-bottom))!important;
+    z-index:2590!important;
+  }
+
   /* Keep the secondary navigation in the top app header, physically away
      from the persistent Start / Stop controls to prevent accidental Stop taps. */
   .mobile-app-head{

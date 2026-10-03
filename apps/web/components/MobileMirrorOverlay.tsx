@@ -293,6 +293,7 @@ export function MobileMirrorOverlay() {
       {!pairing && !live && (
         <button
           type="button"
+          className="cc-mobile-mirror-launch"
           onClick={startPairing}
           aria-label="เชื่อมต่อหน้าจอมือถือ"
           title="เชื่อมต่อหน้าจอมือถือ"
