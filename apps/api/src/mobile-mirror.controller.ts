@@ -30,7 +30,7 @@ type MirrorSession = {
   answer?: MirrorDescription;
 };
 
-const PAIR_TTL_MS = 2 * 60 * 1000;
+const PAIR_TTL_MS = 10 * 60 * 1000;
 const ACTIVE_TTL_MS = 12 * 60 * 60 * 1000;
 const MAX_SDP_LENGTH = 200_000;
 const sessions = new Map<string, MirrorSession>();
