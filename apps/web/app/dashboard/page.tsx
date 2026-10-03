@@ -827,6 +827,12 @@ export default function DashboardPage() {
     settings.symbol ||
     ""
   ).trim();
+  const activeTradingSymbol = String(metrics.symbol || "").trim();
+  const symbolSelectedBy = String(data?.settings?.symbolSelectedBy || "").toUpperCase();
+  const symbolSelectionPending = Boolean(
+    desiredTradingSymbol &&
+    (!activeTradingSymbol || desiredTradingSymbol.toUpperCase() !== activeTradingSymbol.toUpperCase())
+  );
   // Only symbols reported by the connected MT5 Market Watch are selectable.
   // Never inject guessed canonical names such as BTCUSD/XAUUSD into the picker.
   const tradingSymbolOptions = marketWatchSymbols;
@@ -4292,7 +4298,12 @@ export default function DashboardPage() {
                     <b>Trading Symbol</b>
                     <button type="button" aria-label="ปิด" disabled={symbolBusy} onClick={()=>symbolDialogRef.current?.close()}>×</button>
                   </div>
-                  <p className="cc-symbol-picker-source">แสดงเฉพาะ Symbol ที่ MT5 บัญชีนี้รายงานจาก Market Watch</p>
+                  <p className="cc-symbol-picker-source">
+                    Symbol ที่เลือก: <b>{desiredTradingSymbol || "—"}</b>
+                    {symbolSelectedBy==="ADMIN" ? " · กำหนดโดยผู้ดูแล" : symbolSelectedBy==="CUSTOMER" ? " · เลือกจากบัญชีนี้" : ""}
+                    {symbolSelectionPending ? " · รอ MT5/EA ยืนยัน" : activeTradingSymbol ? " · ใช้งานจริงแล้ว" : ""}
+                  </p>
+                  <p className="cc-symbol-picker-source">รายการด้านล่างแสดงเฉพาะ Symbol ที่ MT5 บัญชีนี้รายงานจาก Market Watch</p>
                   <select
                     autoFocus
                     value={tradingSymbol}
