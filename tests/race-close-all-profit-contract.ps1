@@ -39,7 +39,7 @@ Need $race 'raceStrictProfitTarget' 'RACE configured target must block hidden pr
 Need $race 'displayedRoundProfit>=g_raceCloseAllProfitMoney' 'RACE Basket arm must use the live MT5 displayed Profit for the current round'
 Need $race 'RACE_PROFIT_ARMED' 'RACE Basket target must arm the profit runner instead of closing immediately'
 Need $race 'RACE_PROFIT_ARM_GIVEBACK' 'RACE armed Basket must bank profit on protected giveback'
-Need $race 'RACE_PROFIT_ARM_FLOW_END' 'RACE armed Basket must bank profit when the 30-second flow ends'
+Need $race 'RACE_PROFIT_ARM_FLOW_END' 'RACE armed Basket must bank profit when the M5 structural flow ends'
 Need $race 'RaceGivebackMoney(' 'RACE Basket arm must use the profit giveback helper'
 Need $race 'g_raceCloseAllProfitMoney' 'RACE Basket arm must trail from the configured money target'
 Need $race 'protectedProfitFloor' 'RACE Basket arm must protect part of the configured target after arming'
