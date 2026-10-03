@@ -26,7 +26,7 @@ Need $page 'cc-rated-mode-option' 'Rated mode option marker missing'
 Need $page 'cc-race-recommended-badge' 'RACE recommended badge missing'
 Need $css '.cc-bot-v12-mode-select.is-rated-mode' 'Rated selected-state styling missing'
 Need $css '.cc-race-recommended-badge' 'RACE recommendation badge styling missing'
-foreach($mode in @('<option value="AUTO">AUTO</option>','<option value="RACE" className="cc-rated-mode-option">★★★ RACE</option>','<option value="COUNTER">COUNTER</option>','<option value="FLIP_LOCK" className="cc-rated-mode-option">★★ FLIP LOCK</option>','<option value="MANUAL">MANUAL</option>')) {
+foreach($mode in @('<option value="AUTO">AUTO</option>','<option value="RACE" className="cc-rated-mode-option">★★★ RACE</option>','<option value="COUNTER" className="cc-rated-mode-option">★★ COUNTER</option>','<option value="FLIP_LOCK" className="cc-rated-mode-option">★★ FLIP LOCK</option>','<option value="MANUAL">MANUAL</option>')) {
   Need $page $mode "Concise mode dropdown option missing: $mode"
 }
 Need $page '<option value="ZERO_GRID" className="cc-rated-mode-option" disabled={zeroGridBlockedForSymbol}>★ ZERO GRID' 'ZERO GRID rated dropdown option must remain available for supported symbols and disable on BTC/XBT'
@@ -133,7 +133,8 @@ Need $page 'raceMaxPositions' 'RACE max-position profile missing'
 Need $page 'counterLot' 'COUNTER Lot profile missing'
 Need $page 'counterMaxPositions' 'COUNTER max-position profile missing'
 Need $page 'counterPerPositionProfitMoney' 'COUNTER per-position profit profile missing'
-Need $page 'จำนวนไม้ต่อฝั่ง' 'COUNTER max-position UI must describe per-side BUY/SELL capacity'
+Need $page 'จำนวนไม้รวม' 'COUNTER UI must expose one total-position setting'
+Need $page 'BUY {v/2} / SELL {v/2}' 'COUNTER UI must show the automatic half split'
 Need $page 'flipLockLot' 'FLIP LOCK Lot profile missing'
 Need $page 'manualLot' 'MANUAL Lot profile missing'
 Need $page 'manualMaxPositions' 'MANUAL max-position profile missing'
