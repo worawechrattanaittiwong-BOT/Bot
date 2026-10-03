@@ -19,8 +19,20 @@ import {
   ScreenCapturePickerView
 } from "react-native-webrtc";
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || "https://snvea-bot.online/backend/api";
-const ICE_SERVERS = [{ urls: "stun:stun.l.google.com:19302" }];
+const DEFAULT_API_BASE = "https://snvea-bot.online/backend";
+
+function normalizeApiBase(value: string | undefined) {
+  return String(value || DEFAULT_API_BASE)
+    .trim()
+    .replace(/\/+$/, "")
+    .replace(/\/api$/i, "");
+}
+
+const API_BASE = normalizeApiBase(process.env.EXPO_PUBLIC_API_URL);
+const ICE_SERVERS = [
+  { urls: "stun:stun.l.google.com:19302" },
+  { urls: "stun:stun1.l.google.com:19302" }
+];
 
 function tokenFromUrl(value: string | null | undefined) {
   const input = String(value || "");
@@ -36,7 +48,8 @@ function tokenFromUrl(value: string | null | undefined) {
 async function mirrorRequest(path: string, init: RequestInit = {}) {
   const headers = new Headers(init.headers);
   headers.set("Content-Type", "application/json");
-  const response = await fetch(API_URL + "/api" + path, {
+  const safePath = "/" + String(path || "").replace(/^\/+/, "");
+  const response = await fetch(API_BASE + "/api" + safePath, {
     ...init,
     headers
   });
