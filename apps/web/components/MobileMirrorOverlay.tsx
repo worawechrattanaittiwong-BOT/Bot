@@ -351,7 +351,7 @@ export function MobileMirrorOverlay() {
               <div style={{height:246,display:"grid",placeItems:"center",color:"#94a3b8"}}>กำลังสร้าง QR...</div>
             )}
             <div style={{marginTop:12,fontSize:12,color:"#94a3b8"}}>
-              สแกน QR แล้วกดอนุญาตแชร์หน้าจอบนมือถือ
+              QR ใช้ได้ประมาณ 10 นาที · สแกนแล้วเปิด SCENOVA Mirror เพื่ออนุญาตแชร์หน้าจอ
             </div>
             {message && <div style={{marginTop:10,fontSize:12,color:"#f0c875"}}>{message}</div>}
           </div>

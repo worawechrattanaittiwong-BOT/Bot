@@ -4,18 +4,18 @@ module.exports = {
   expo: {
     name: "SCENOVA Mirror",
     slug: "scenova-mirror",
-    version: "1.0.0",
+    version: "1.0.1",
     orientation: "default",
     scheme: "scenova-mirror",
     userInterfaceStyle: "dark",
     android: {
       package: "com.scenova.mirror",
-      versionCode: 1,
+      versionCode: 2,
       allowBackup: false
     },
     ios: {
       bundleIdentifier: "com.scenova.mirror",
-      buildNumber: "1",
+      buildNumber: "2",
       supportsTablet: false
     },
     plugins: [

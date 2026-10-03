@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      EXPO_PUBLIC_API_URL: https://snvea-bot.online/backend/api
+      EXPO_PUBLIC_API_URL: https://snvea-bot.online/backend
       CI: "1"
     defaults:
       run:
@@ -66,7 +66,7 @@ jobs:
             .trim().split(/\s+/)[0];
           const manifest = {
             platform: "android",
-            version: "1.0.0",
+            version: "1.0.1",
             url: "https://snvea-bot.online/downloads/SCENOVA-Mirror.apk",
             sha256,
             builtAt: new Date().toISOString()
