@@ -103,10 +103,16 @@ export function Page({ children, title, subtitle, onBack, refreshing = false, on
 export function Frame({ children, tab, onNavigate, count = 0, onLock, auth = false }: React.PropsWithChildren<{ tab?: MainTab; onNavigate?: (tab: MainTab) => void; count?: number; onLock?: () => void; auth?: boolean }>) {
   const { colors: c } = useTheme();
   const { width } = useWindowDimensions();
-  const items: Array<[MainTab, IconName, string]> = [["dashboard", "home", "เงิน"], ["packages", "list", "แพ็กเกจ"], ["promotions", "percent", "โปรโมชั่น"], ["accounts", "user", "บัญชี"]];
+  const items: Array<[MainTab, IconName, string]> = [
+    ["overview", "home", "ภาพรวม"],
+    ["trading", "list", "Trading"],
+    ["customers", "user", "ลูกค้า"],
+    ["finance", "wallet", "การเงิน"],
+    ["more", "settings", "เพิ่มเติม"]
+  ];
   return <SafeAreaView style={{ flex: 1, backgroundColor: c.background }} edges={["top", "bottom", "left", "right"]}>
     <View style={{ paddingHorizontal: width < 360 ? 14 : 20, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: c.border }}><View style={[s.between, { width: "100%", maxWidth: 560, alignSelf: "center" }]}><Brand /><View style={{ flexDirection: "row", gap: 8 }}><ThemeSwitch />{onLock && <IconButton icon="lock" label="ล็อกแอป" onPress={onLock} />}</View></View></View>
     <View style={s.fill}>{children}</View>
-    {!auth && tab && onNavigate && <View accessibilityRole="tablist" style={{ flexDirection: "row", borderTopWidth: 1, borderColor: c.border, backgroundColor: c.surface, paddingTop: 8, paddingBottom: 6, paddingHorizontal: 12 }}>{items.map(([key, icon, label]) => <Pressable key={key} accessibilityRole="tab" accessibilityLabel={label} accessibilityState={{ selected: tab === key }} onPress={() => onNavigate(key)} style={{ flex: 1, minHeight: 59, alignItems: "center", justifyContent: "center", gap: 5, borderRadius: 15, backgroundColor: key === tab ? c.accentSoft : "transparent" }}><View><Icon name={icon} color={tab === key ? c.accent : c.subtle} size={22} />{key === "dashboard" && count > 0 && <View style={{ position: "absolute", top: -5, right: -10, minWidth: 15, height: 15, borderRadius: 8, backgroundColor: c.primary, alignItems: "center", justifyContent: "center" }}><Copy style={{ color: c.onPrimary, fontSize: 8, fontWeight: "700" }}>{count > 99 ? "99+" : count}</Copy></View>}</View><Copy style={{ color: tab === key ? c.accent : c.muted, fontSize: 10, fontWeight: tab === key ? "700" : "500" }}>{label}</Copy></Pressable>)}</View>}
+    {!auth && tab && onNavigate && <View accessibilityRole="tablist" style={{ flexDirection: "row", borderTopWidth: 1, borderColor: c.border, backgroundColor: c.surface, paddingTop: 8, paddingBottom: 6, paddingHorizontal: 12 }}>{items.map(([key, icon, label]) => <Pressable key={key} accessibilityRole="tab" accessibilityLabel={label} accessibilityState={{ selected: tab === key }} onPress={() => onNavigate(key)} style={{ flex: 1, minHeight: 59, alignItems: "center", justifyContent: "center", gap: 5, borderRadius: 15, backgroundColor: key === tab ? c.accentSoft : "transparent" }}><View><Icon name={icon} color={tab === key ? c.accent : c.subtle} size={22} />{key === "finance" && count > 0 && <View style={{ position: "absolute", top: -5, right: -10, minWidth: 15, height: 15, borderRadius: 8, backgroundColor: c.primary, alignItems: "center", justifyContent: "center" }}><Copy style={{ color: c.onPrimary, fontSize: 8, fontWeight: "700" }}>{count > 99 ? "99+" : count}</Copy></View>}</View><Copy style={{ color: tab === key ? c.accent : c.muted, fontSize: 10, fontWeight: tab === key ? "700" : "500" }}>{label}</Copy></Pressable>)}</View>}
   </SafeAreaView>;
 }

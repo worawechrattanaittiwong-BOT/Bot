@@ -5,6 +5,7 @@ on:
     paths:
       - "apps/owner-mobile/**"
       - "apps/api/src/owner-mobile.controller.ts"
+      - "apps/api/src/owner-management.controller.ts"
       - "apps/api/src/app.module.ts"
       - "database/036_owner_mobile.sql"
       - "tests/owner-mobile-contract.mjs"

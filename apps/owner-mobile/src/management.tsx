@@ -1,10 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Alert, Pressable, View } from "react-native";
-import { type OwnerUpdateManifest } from "./finance";
 import { layout as s, useTheme } from "./theme";
 import {
-  Badge, Brand, Button, Copy, DetailRow, Empty, Field, Icon, IconTile,
-  Notice, Page, PinField, Surface, ThemeSwitch
+  Badge, Button, Copy, DetailRow, Empty, Field, Icon, IconTile,
+  Notice, Page, PinField, Surface
 } from "./ui";
 
 export type OwnerApi = (path: string, options?: RequestInit) => Promise<any>;
@@ -342,25 +341,16 @@ type AccountListItem = {
 type AccountDetail = {
   user: { id: string; user_code: string; email: string; status: string; email_verified_at?: string | null };
   subscriptions: Array<{ id: string; status: string; starts_at: string; expires_at: string; plan_code: string; name_th: string; mode: string }>;
-  slots: Array<{ id: string; mode: string; slot_number: number; status: string; subscription_id?: string | null }>;
+  slots: Array<{
+    id: string; mode: string; slot_number: number; status: string; subscription_id?: string | null;
+    instance_id?: string | null; mt5_account_id?: string | null; actual_state?: string | null; desired_state?: string | null;
+    positions?: number; pending_orders?: number; active_symbol?: string | null; requested_symbol?: string | null;
+    market_watch_symbols?: string[]; account_number?: string | null; broker?: string | null; broker_server?: string | null;
+  }>;
   mt5Accounts: Array<{ id: string; account_number: string; broker: string; broker_server: string; mode: string; status: string }>;
 };
 
-export function AccountsScreen({
-  api,
-  version,
-  update,
-  updateBusy,
-  onInstall,
-  onLock
-}: {
-  api: OwnerApi;
-  version: string;
-  update: OwnerUpdateManifest | null;
-  updateBusy: boolean;
-  onInstall: () => void;
-  onLock: () => void;
-}) {
+export function AccountsScreen({ api }: { api: OwnerApi }) {
   const { colors: c } = useTheme();
   const [q, setQ] = useState("");
   const [items, setItems] = useState<AccountListItem[]>([]);
@@ -370,6 +360,9 @@ export function AccountsScreen({
   const [mode, setMode] = useState<"LOCAL" | "CLOUD">("LOCAL");
   const [months, setMonths] = useState(1);
   const [days, setDays] = useState("30");
+  const [slotEditorId, setSlotEditorId] = useState("");
+  const [symbolValue, setSymbolValue] = useState("");
+  const [symbolChoicesOpen, setSymbolChoicesOpen] = useState(false);
   const [error, setError] = useState("");
 
   async function search() {
@@ -390,6 +383,9 @@ export function AccountsScreen({
     try {
       setSelected(await api("/owner-mobile/accounts/" + encodeURIComponent(id)));
       setPin("");
+      setSlotEditorId("");
+      setSymbolValue("");
+      setSymbolChoicesOpen(false);
       setError("");
     } catch (e) {
       setError(message(e));
@@ -422,21 +418,89 @@ export function AccountsScreen({
     }
   }
 
-  async function extend() {
+  async function adjustDays(sign: 1 | -1) {
     if (!selected || !activeSub) return;
+    const amount=Math.max(1,Math.trunc(Number(days||0)));
     setLoading(true);
     try {
-      setSelected(await api("/owner-mobile/accounts/" + selected.user.id + "/extend", {
+      setSelected(await api("/owner-mobile/accounts/" + selected.user.id + "/adjust-days", {
         method: "POST",
-        body: JSON.stringify({ subscriptionId: activeSub.id, days: Number(days), pin })
+        body: JSON.stringify({ subscriptionId: activeSub.id, days: sign * amount, pin })
       }));
       setPin("");
-      Alert.alert("ต่ออายุแล้ว", "เพิ่ม " + days + " วัน");
+      Alert.alert(sign>0 ? "เพิ่มวันแล้ว" : "ลดวันแล้ว", (sign>0 ? "เพิ่ม " : "ลด ") + amount + " วัน");
     } catch (e) {
-      Alert.alert("ต่ออายุไม่สำเร็จ", message(e));
+      Alert.alert(sign>0 ? "เพิ่มวันไม่สำเร็จ" : "ลดวันไม่สำเร็จ", message(e));
     } finally {
       setLoading(false);
     }
+  }
+
+  function editSlotSymbol(slot: AccountDetail["slots"][number]) {
+    if (slotEditorId===slot.id) {
+      setSlotEditorId("");
+      setSymbolChoicesOpen(false);
+      return;
+    }
+    setSlotEditorId(slot.id);
+    setSymbolValue(String(slot.requested_symbol||slot.active_symbol||""));
+    setSymbolChoicesOpen(false);
+    setPin("");
+  }
+
+  async function saveSymbol(slot: AccountDetail["slots"][number]) {
+    if (!selected) return;
+    const symbol=String(symbolValue||"").trim();
+    if (!symbol) {
+      Alert.alert("ยังไม่ได้เลือก Symbol","เลือกจากรายการ MT5 หรือพิมพ์ Symbol ก่อน");
+      return;
+    }
+    setLoading(true);
+    try {
+      setSelected(await api("/owner-mobile/accounts/" + selected.user.id + "/slots/symbol", {
+        method:"POST",
+        body:JSON.stringify({ slotId:slot.id, symbol, pin })
+      }));
+      setPin("");
+      setSlotEditorId("");
+      setSymbolChoicesOpen(false);
+      Alert.alert("บันทึก Symbol แล้ว",symbol);
+    } catch(e) {
+      Alert.alert("เปลี่ยน Symbol ไม่สำเร็จ",message(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function resetMt5(slot: AccountDetail["slots"][number]) {
+    if (!selected) return;
+    if (pin.length!==6) {
+      Alert.alert("กรุณายืนยัน PIN","ใส่ Owner PIN 6 หลักก่อนรีเซ็ต MT5");
+      return;
+    }
+    Alert.alert(
+      "รีเซ็ตการเชื่อมต่อ MT5",
+      "ระบบจะตัดการเชื่อมต่อบัญชี MT5 ของ Slot นี้ และลูกค้าต้องเชื่อมใหม่",
+      [
+        { text:"ยกเลิก", style:"cancel" },
+        { text:"รีเซ็ต", style:"destructive", onPress:()=>void (async()=>{
+          setLoading(true);
+          try {
+            setSelected(await api("/owner-mobile/accounts/" + selected.user.id + "/slots/reset-mt5", {
+              method:"POST",
+              body:JSON.stringify({ slotId:slot.id, pin })
+            }));
+            setPin("");
+            setSlotEditorId("");
+            Alert.alert("รีเซ็ตแล้ว","รอลูกค้าเชื่อม MT5 ใหม่");
+          } catch(e) {
+            Alert.alert("รีเซ็ตไม่สำเร็จ",message(e));
+          } finally {
+            setLoading(false);
+          }
+        })() }
+      ]
+    );
   }
 
   async function setStatus(status: "ACTIVE" | "SUSPENDED") {
@@ -470,6 +534,42 @@ export function AccountsScreen({
         <DetailRow label="MT5" value={selected.mt5Accounts[0]?.account_number || "ยังไม่ผูก"} last />
       </Surface>
 
+      {selected.slots.map(slot=>{
+        const choices=Array.isArray(slot.market_watch_symbols)
+          ? slot.market_watch_symbols.map(item=>String(item||"").trim()).filter(Boolean).slice(0,40)
+          : [];
+        const editing=slotEditorId===slot.id;
+        const state=String(slot.actual_state||"OFFLINE").toUpperCase();
+        return <Surface key={slot.id} style={s.stack}>
+          <View style={s.between}>
+            <View style={s.row}><IconTile name="list" tone={slot.mode==="CLOUD"?"accent":"blue"} size={36}/><View><Copy style={s.heading}>{slot.mode} · Slot #{slot.slot_number}</Copy><Copy style={[s.small,{color:c.muted}]}>{slot.account_number||"ยังไม่เชื่อม MT5"}</Copy></View></View>
+            <Badge text={state} tone={state==="RUNNING"?"success":state==="SAFE_STOP"?"warning":state==="OFFLINE"?"danger":"neutral"}/>
+          </View>
+          <DetailRow label="Symbol ปัจจุบัน" value={String(slot.requested_symbol||slot.active_symbol||"—")}/>
+          <DetailRow label="Position / Pending" value={Number(slot.positions||0)+" / "+Number(slot.pending_orders||0)}/>
+          <Button label={editing?"ปิดการจัดการ MT5":"จัดการ Symbol / รีเซ็ต MT5"} icon="settings" variant="secondary" onPress={()=>editSlotSymbol(slot)}/>
+          {editing&&<>
+            <Pressable
+              accessibilityRole="button"
+              onPress={()=>setSymbolChoicesOpen(v=>!v)}
+              style={{minHeight:48,paddingHorizontal:14,borderRadius:13,borderWidth:1,borderColor:c.border,backgroundColor:c.input,flexDirection:"row",alignItems:"center",justifyContent:"space-between",gap:10}}>
+              <View style={s.grow}><Copy style={[s.small,{color:c.muted}]}>เลือกจาก MT5 บัญชีนี้</Copy><Copy style={s.label}>{choices.length?choices.length+" Symbol":"ยังไม่มีรายการจาก MT5"}</Copy></View>
+              <Icon name="chevron" color={c.subtle} size={17}/>
+            </Pressable>
+            {symbolChoicesOpen&&choices.length>0&&<View style={{borderWidth:1,borderColor:c.border,borderRadius:13,overflow:"hidden"}}>
+              {choices.map((item,index)=><Pressable key={item} onPress={()=>{setSymbolValue(item);setSymbolChoicesOpen(false);}}
+                style={{minHeight:44,paddingHorizontal:13,justifyContent:"center",backgroundColor:item===symbolValue?c.accentSoft:c.surface,borderBottomWidth:index===choices.length-1?0:1,borderBottomColor:c.border}}>
+                <Copy style={{color:item===symbolValue?c.accent:c.text,fontWeight:item===symbolValue?"700":"500"}}>{item}</Copy>
+              </Pressable>)}
+            </View>}
+            <Field label="Symbol (เลือกหรือพิมพ์เอง)" value={symbolValue} onChangeText={setSymbolValue} placeholder="เช่น XAUUSD, XAUUSDm"/>
+            <PinField value={pin} onChange={setPin}/>
+            <Button label="บันทึก Symbol" icon="check" disabled={pin.length!==6||!symbolValue.trim()} onPress={()=>void saveSymbol(slot)}/>
+            <Button label="รีเซ็ตการเชื่อมต่อ MT5" icon="refresh" variant="danger" disabled={pin.length!==6||!slot.mt5_account_id} onPress={()=>resetMt5(slot)}/>
+          </>}
+        </Surface>;
+      })}
+
       <Surface style={s.stack}>
         <Copy style={s.heading}>เปิดสิทธิ์ / เปลี่ยนแพ็กเกจ</Copy>
         <View style={{ flexDirection: "row", gap: 8 }}>
@@ -489,11 +589,14 @@ export function AccountsScreen({
       </Surface>
 
       <Surface style={s.stack}>
-        <Copy style={s.heading}>ต่ออายุ / Refresh สิทธิ์</Copy>
-        <Field label="เพิ่มจำนวนวัน" value={days} onChangeText={v => setDays(v.replace(/\D/g, ""))} keyboardType="number-pad" />
+        <Copy style={s.heading}>เพิ่ม / ลดวันใช้งาน</Copy>
+        <Field label="จำนวนวัน" value={days} onChangeText={v => setDays(v.replace(/\D/g, ""))} keyboardType="number-pad" />
         <PinField value={pin} onChange={setPin} />
-        <Button label="เพิ่มวัน" icon="clock" variant="secondary" disabled={!activeSub || pin.length !== 6} onPress={() => void extend()} />
-        <Button label="Refresh ข้อมูลบัญชี" icon="refresh" variant="secondary" onPress={() => void open(selected.user.id)} />
+        <View style={{flexDirection:"row",gap:8}}>
+          <View style={s.grow}><Button label="เพิ่มวัน" icon="clock" variant="secondary" disabled={!activeSub || pin.length !== 6} onPress={() => void adjustDays(1)} /></View>
+          <View style={s.grow}><Button label="ลดวัน" icon="clock" variant="danger" disabled={!activeSub || pin.length !== 6} onPress={() => void adjustDays(-1)} /></View>
+        </View>
+        <Button label="รีเฟรชข้อมูลบัญชี" icon="refresh" variant="secondary" onPress={() => void open(selected.user.id)} />
       </Surface>
 
       <Surface style={s.stack}>
@@ -510,7 +613,7 @@ export function AccountsScreen({
     </Page>;
   }
 
-  return <Page title="บัญชี" subtitle="จัดการลูกค้าและบัญชี Owner" refreshing={loading} onRefresh={() => void search()}>
+  return <Page title="ลูกค้า" subtitle="สิทธิ์ใช้งานและบัญชี MT5" refreshing={loading} onRefresh={() => void search()}>
     {!!error && <Notice text={error} danger onRetry={() => void search()} />}
     <Surface style={s.stack}>
       <View style={s.row}><IconTile name="search" /><Copy style={s.heading}>ค้นหาบัญชีลูกค้า</Copy></View>
@@ -537,15 +640,5 @@ export function AccountsScreen({
         </Surface>
       </Pressable>)}
 
-    <Surface style={s.stack}>
-      <View style={s.between}>
-        <View style={s.row}><Brand /><Badge text="OWNER" tone="success" /></View>
-        <ThemeSwitch />
-      </View>
-      <DetailRow label="App Version" value={version} />
-      <DetailRow label="การเข้าใช้งาน" value="PIN + 2FA" last />
-      {update && <Button label={"อัปเดตเป็น " + update.version} icon="download" busy={updateBusy} onPress={onInstall} />}
-      <Button label="ล็อกแอป" icon="lock" variant="secondary" onPress={onLock} />
-    </Surface>
   </Page>;
 }
