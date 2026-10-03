@@ -301,6 +301,49 @@ export default function AdminPage() {
     }
   }
 
+  async function selectCustomerSlotSymbol(user:any, slot:any) {
+    if (!slot?.id || !slot?.account_number) return;
+    const label=(slot.mode==="CLOUD"?"Cloud VPS":"Local MT5")+" Slot #"+Number(slot.slot_number||0);
+    const marketWatch=Array.isArray(slot.market_watch_symbols)
+      ? slot.market_watch_symbols
+          .map((item:any)=>String(item||"").trim())
+          .filter(Boolean)
+          .slice(0,24)
+      : [];
+    const current=String(slot.requested_symbol || slot.active_symbol || "").trim();
+    const typed=await promptPopup({
+      title:"เลือก Symbol · "+label,
+      tone:"warning",
+      message:
+        "กำหนด Symbol ให้ Slot นี้โดยตรง เช่น XAUUSD, XAUUSDm, XAUUSDc\n"+
+        (current ? "\nค่าที่เลือกอยู่: "+current : "")+
+        (marketWatch.length ? "\nMarket Watch ล่าสุด: "+marketWatch.join(", ") : "\nยังไม่มี Market Watch ล่าสุด · สามารถพิมพ์ Symbol ที่เห็นใน MT5 ของลูกค้าได้")+
+        "\n\nต้องหยุดบอทและไม่มี Position / Pending Order ก่อนดำเนินการ",
+      placeholder:current || "เช่น XAUUSD",
+      confirmLabel:"ใช้ Symbol นี้"
+    });
+    if(typed===null) return;
+    const symbol=String(typed||"").trim();
+    if(!symbol || symbol.length>64 || !/^[A-Za-z0-9._#-]+$/.test(symbol)) {
+      setMessage("Symbol ไม่ถูกต้อง");
+      return;
+    }
+
+    setCustomerAction("slot-select-symbol:"+slot.id);
+    try {
+      const result=await adminApi("/admin/slots/select-symbol", {
+        method:"POST",
+        body:JSON.stringify({ userId:user.id, slotId:slot.id, symbol })
+      });
+      setMessage(result?.message || "กำหนด Symbol ให้ Slot แล้ว");
+      await search(undefined,true);
+    } catch(e:any) {
+      setMessage(e.message);
+    } finally {
+      setCustomerAction("");
+    }
+  }
+
   async function refreshCustomerSlotSymbol(user:any, slot:any) {
     if (!slot?.id || !slot?.account_number) return;
     const label=(slot.mode==="CLOUD"?"Cloud VPS":"Local MT5")+" Slot #"+Number(slot.slot_number||0);
@@ -1458,11 +1501,24 @@ export default function AdminPage() {
                                   <span className={"owner-mode-badge "+String(slot.mode).toLowerCase()}>{slot.mode==="CLOUD"?"CLOUD VPS":"LOCAL"}</span>
                                   <div>
                                     <b>Slot #{Number(slot.slot_number || 0)} · {slot.account_number?"MT5 "+slot.account_number:"รอเชื่อม MT5"}</b>
-                                    <small>{slot.mode==="LOCAL"?(slot.mt5_online?"ONLINE":"OFFLINE"):(String(slot.actual_state||"OFFLINE").toUpperCase()==="RUNNING"?"ONLINE":"OFFLINE")}</small>
+                                    <small>
+                                      {slot.mode==="LOCAL"?(slot.mt5_online?"ONLINE":"OFFLINE"):(String(slot.actual_state||"OFFLINE").toUpperCase()==="RUNNING"?"ONLINE":"OFFLINE")}
+                                      {slot.requested_symbol ? " · เลือก "+slot.requested_symbol : ""}
+                                      {slot.active_symbol && String(slot.active_symbol).toUpperCase()!==String(slot.requested_symbol||"").toUpperCase() ? " · ใช้งานจริง "+slot.active_symbol : ""}
+                                      {slot.provisioning_error ? " · "+slot.provisioning_error : ""}
+                                    </small>
                                   </div>
                                   <div className="owner-slot-actions">
                                     {slot.account_number && (
                                       <>
+                                        <button
+                                          type="button"
+                                          className="btn owner-slot-select-symbol"
+                                          disabled={Boolean(customerAction)}
+                                          onClick={()=>void selectCustomerSlotSymbol(selectedCustomer,slot)}
+                                        >
+                                          {customerAction==="slot-select-symbol:"+slot.id?"กำลังตั้ง...":"เลือก Symbol"}
+                                        </button>
                                         {slot.mode==="CLOUD" && (
                                           <button
                                             type="button"
