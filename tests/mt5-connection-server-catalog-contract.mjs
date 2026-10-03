@@ -17,18 +17,28 @@ assert.match(
 );
 assert.match(
   dashboard,
-  /cloud-mt5-server-group[\s\S]*?REAL \/ LIVE[\s\S]*?cloud-mt5-server-group[\s\S]*?DEMO \/ TRIAL/,
-  "MT5 server picker must show REAL before DEMO"
+  /MT5 Server · ต้องตรงกับบัญชีของคุณทุกตัว/,
+  "MT5 server entry must tell the customer that the server name must match exactly"
 );
 assert.match(
   dashboard,
-  /ไม่พบในรายการ — กรอก Server เอง/,
-  "MT5 server picker must retain a manual fallback"
+  /คัดลอกจาก MT5 เช่น Exness-MT5Trial7/,
+  "MT5 server entry must instruct the customer to copy the exact terminal server"
+);
+assert.match(
+  dashboard,
+  /Trial6, Trial7, Trial14 ใช้แทนกันไม่ได้/,
+  "MT5 server entry must explain that similar Trial server numbers are not interchangeable"
+);
+assert.doesNotMatch(
+  dashboard,
+  /cloud-mt5-server-menu|<b>REAL \/ LIVE<\/b>|<b>DEMO \/ TRIAL<\/b>/,
+  "new MT5 connections must not offer a stale server catalog as clickable choices"
 );
 assert.match(
   dashboard,
   /cloud-mt5-server-combobox/,
-  "MT5 server must use one searchable/selectable combobox"
+  "MT5 server must remain a single exact-entry field"
 );
 assert.doesNotMatch(
   dashboard,
