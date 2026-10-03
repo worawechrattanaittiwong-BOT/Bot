@@ -119,8 +119,27 @@ internal sealed class CloudJob
         }
     }
 
+    public string SymbolResolutionMode
+    {
+        get
+        {
+            if (
+                Settings.ValueKind == JsonValueKind.Object &&
+                Settings.TryGetProperty("symbolResolutionMode", out var mode) &&
+                mode.ValueKind == JsonValueKind.String
+            )
+                return (mode.GetString() ?? "").Trim().ToUpperInvariant();
+            return "";
+        }
+    }
+
+    public bool ExactSymbolRequested =>
+        string.Equals(SymbolResolutionMode, "EXACT", StringComparison.Ordinal);
+
     public string Symbol =>
-        ResolveBrokerSymbol(RequestedSymbol, Broker, BrokerServer);
+        ExactSymbolRequested
+            ? RequestedSymbol
+            : ResolveBrokerSymbol(RequestedSymbol, Broker, BrokerServer);
 
     internal static string ResolveBrokerSymbol(
         string requested,
