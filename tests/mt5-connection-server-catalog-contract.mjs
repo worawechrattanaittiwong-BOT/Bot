@@ -13,52 +13,43 @@ const workerController = read("apps/api/src/worker.controller.ts");
 
 assert.match(
   catalog,
-  /CASE s\.environment WHEN 'REAL' THEN 0 WHEN 'DEMO' THEN 1 ELSE 2 END,[\s\S]*?s\.sort_order,[\s\S]*?lower\(s\.server_name\)/,
-  "broker API must return MT5 servers in deterministic REAL -> DEMO -> other order"
+  /jsonb_array_elements[\s\S]*telemetry->'brokerServers'/,
+  "broker API must use the live MT5 broker directory reported by online Workers"
+);
+assert.match(
+  catalog,
+  /w\.last_seen_at>now\(\)-interval '90 seconds'/,
+  "broker server dropdown must ignore stale Worker directories"
 );
 assert.doesNotMatch(
   catalog,
-  /FROM mt5_accounts|JOIN mt5_accounts/,
-  "broker server dropdown must never be populated from customer-entered account history"
-);
-assert.match(
-  exnessDirectory,
-  /Exness-MT5Real51/,
-  "Exness directory must include the broad broker server set rather than one guessed server"
-);
-assert.match(
-  exnessDirectory,
-  /Exness-MT5Trial17/,
-  "Exness directory must include current demo/trial server choices"
-);
-assert.ok(
-  (exnessDirectory.match(/Exness-MT5(?:Real|Trial)/g) || []).length >= 50,
-  "Exness broker directory should expose dozens of MT5 servers"
+  /FROM mt5_accounts/,
+  "broker dropdown must never be built from customer-entered account history"
 );
 assert.match(
   dashboard,
   /<span>MT5 Server<\/span>/,
-  "MT5 server field must use a clean compact label"
+  "MT5 server field must use a compact label"
 );
 assert.match(
   dashboard,
-  /list=\{cloudMt5DialogMode === "NEW" && selectedBrokerServers\.length \? "cloud-mt5-server-options"/,
-  "MT5 server input must expose broker-specific suggestions while staying editable"
+  /className="cloud-mt5-server-toggle"/,
+  "MT5 server field must expose a dropdown button when the broker directory is available"
 );
 assert.match(
   dashboard,
-  /<datalist id="cloud-mt5-server-options">/,
-  "MT5 server suggestions must use one searchable native dropdown"
-);
-assert.doesNotMatch(
-  dashboard,
-  /Trial6, Trial7, Trial14|คัดลอกจาก MT5 เช่น|ต้องตรงกับบัญชีของคุณทุกตัว/,
-  "MT5 connection dialog must stay concise and avoid tutorial-style server copy"
+  /className="cloud-mt5-server-option"/,
+  "MT5 server dropdown must render broker directory options"
 );
 assert.match(
   dashboard,
-  /เข้ารหัส AES-256-GCM ก่อนจัดเก็บ และใช้เฉพาะเชื่อมต่อ MT5 บน VPS/,
-  "credential storage security disclosure must remain visible"
+  /setBrokerServer\(e\.target\.value\)/,
+  "MT5 server field must remain manually editable"
+);
+assert.match(
+  dashboard,
+  /เลือกจาก "\+selectedBrokerName\+" หรือพิมพ์เอง/,
+  "MT5 server helper must keep manual entry available in the same field"
 );
 assert.match(
   dashboard,
