@@ -318,7 +318,9 @@ internal sealed class Mt5Runtime
         }
     }
 
-    internal PreparedInstance PrepareInstanceFiles(CloudJob job)
+    internal PreparedInstance PrepareInstanceFiles(
+        CloudJob job,
+        string? bootstrapSymbol = null)
     {
         var instancePath = GetInstancePath(job.InstanceId);
         var marker = Path.Combine(instancePath, "cloud-provisioned");
@@ -383,6 +385,10 @@ internal sealed class Mt5Runtime
             },
             Encoding.Unicode);
 
+        var effectiveBootstrapSymbol = string.IsNullOrWhiteSpace(bootstrapSymbol)
+            ? job.Symbol
+            : bootstrapSymbol.Trim();
+
         var startupPath = Path.Combine(instancePath, "cloud-start.ini");
         File.WriteAllLines(
             startupPath,
@@ -410,12 +416,17 @@ internal sealed class Mt5Runtime
                 "[StartUp]",
                 "Expert=FastBasketBot",
                 "ExpertParameters=SCENOVA-Cloud.set",
-                "Symbol=" + SafeIniValue(job.Symbol),
+                "Symbol=" + SafeIniValue(effectiveBootstrapSymbol),
                 "Period=M5"
             },
             Encoding.Unicode);
 
-        return new PreparedInstance(instancePath, terminal, presetPath, startupPath, job.Symbol);
+        return new PreparedInstance(
+            instancePath,
+            terminal,
+            presetPath,
+            startupPath,
+            effectiveBootstrapSymbol);
     }
 
     public EaApplyOutcome ApplyEaUpdate(
@@ -658,6 +669,156 @@ internal sealed class Mt5Runtime
         _maximizedProcessByInstance.Remove(instanceId);
     }
 
+    private static string ReadStartupSymbol(string startupPath)
+    {
+        try
+        {
+            if (!File.Exists(startupPath)) return "";
+            foreach (var line in File.ReadLines(startupPath, Encoding.Unicode))
+            {
+                if (line.StartsWith("Symbol=", StringComparison.OrdinalIgnoreCase))
+                    return line["Symbol=".Length..].Trim();
+            }
+        }
+        catch { }
+
+        return "";
+    }
+
+    private static bool SameGenerationPreflightFailure(
+        string failurePath,
+        long generation)
+    {
+        try
+        {
+            if (!File.Exists(failurePath)) return false;
+            return string.Equals(
+                File.ReadAllText(failurePath).Trim(),
+                generation.ToString(),
+                StringComparison.Ordinal);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private async Task<bool> TryRecoverSymbolBootstrapAsync(
+        CloudJob job,
+        WorkerClient client,
+        string instancePath,
+        CancellationToken cancellationToken)
+    {
+        // This path is exclusively for a flat, STOPPED runtime that has never
+        // produced a healthy EA heartbeat. It is intentionally forbidden while
+        // the bot is running or owns any SCENOVA position/pending order.
+        if (job.EaOnline ||
+            !string.Equals(job.DesiredState, "STOPPED", StringComparison.OrdinalIgnoreCase) ||
+            job.Positions > 0 ||
+            job.PendingOrders > 0)
+            return false;
+
+        var readyMarker = Path.Combine(
+            instancePath,
+            "MQL5",
+            "Files",
+            "scenova-ea-ready.txt");
+        if (EaReadyMarkerMatches(readyMarker, job.InstanceId))
+            return false;
+
+        var startup = Path.Combine(instancePath, "cloud-start.ini");
+        if (!File.Exists(startup))
+            return false;
+
+        DateTime lastWrite;
+        try { lastWrite = File.GetLastWriteTimeUtc(startup); }
+        catch { return false; }
+
+        // Give MT5/Broker/EA a full startup window before deciding the bootstrap
+        // chart is unusable. This is not a heartbeat-stale restart policy.
+        if (DateTime.UtcNow - lastWrite < TimeSpan.FromSeconds(35))
+            return false;
+
+        var failurePath = Path.Combine(instancePath, "symbol-preflight-failed.txt");
+        if (SameGenerationPreflightFailure(failurePath, job.ExecutionGeneration))
+            return true;
+
+        var candidates = job.BootstrapSymbolCandidates;
+        var current = ReadStartupSymbol(startup);
+        var currentIndex = -1;
+        for (var i = 0; i < candidates.Count; i++)
+        {
+            if (string.Equals(candidates[i], current, StringComparison.OrdinalIgnoreCase))
+            {
+                currentIndex = i;
+                break;
+            }
+        }
+
+        var nextIndex = currentIndex >= 0 ? currentIndex + 1 : 0;
+        if (nextIndex >= candidates.Count)
+        {
+            try
+            {
+                File.WriteAllText(
+                    failurePath,
+                    job.ExecutionGeneration.ToString(),
+                    new UTF8Encoding(false));
+            }
+            catch { }
+
+            try
+            {
+                await client.PostAsync("provision-result", new
+                {
+                    instanceId = job.InstanceId,
+                    errorCode = "SYMBOL_PREFLIGHT_FAILED"
+                }, cancellationToken);
+            }
+            catch { }
+
+            return true;
+        }
+
+        // Stop only the exact per-instance terminal and only under the flat /
+        // STOPPED guard above. Never recycle another customer's terminal.
+        if (!StopInstance(job.InstanceId))
+            return true;
+
+        try
+        {
+            var prepared = PrepareInstanceFiles(job, candidates[nextIndex]);
+            LaunchPrepared(prepared, requireEaAttach: false);
+
+            try
+            {
+                await client.PostAsync("provision-result", new
+                {
+                    instanceId = job.InstanceId,
+                    errorCode = ""
+                }, cancellationToken);
+            }
+            catch { }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            try
+            {
+                await client.PostAsync("provision-result", new
+                {
+                    instanceId = job.InstanceId,
+                    errorCode = NormalizeRuntimeError(
+                        "SYMBOL_PREFLIGHT_" + ex.Message)
+                }, cancellationToken);
+            }
+            catch { }
+
+            return true;
+        }
+    }
+
     public async Task StartOrRecoverAsync(
         CloudJob job,
         WorkerClient client,
@@ -704,6 +865,14 @@ internal sealed class Mt5Runtime
         {
             ShouldAutoLaunch(job.InstanceId, terminalRunning: true);
             TryApplyChartLayout(job, terminal);
+
+            if (!job.EaOnline &&
+                await TryRecoverSymbolBootstrapAsync(
+                    job,
+                    client,
+                    instancePath,
+                    cancellationToken))
+                return;
 
             if (job.EaOnline)
             {
