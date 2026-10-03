@@ -11,6 +11,8 @@ $cloudUpdate = Get-Content (Join-Path $root 'apps/api/src/cloud-update.service.t
 $cloudUpdateController = Get-Content (Join-Path $root 'apps/api/src/cloud-update.controller.ts') -Raw
 $cloudUpdateUi = Get-Content (Join-Path $root 'apps/web/components/CloudUpdatesPanel.tsx') -Raw
 $addonMigration = Get-Content (Join-Path $root 'database/051_cloud_addon_pricing.sql') -Raw
+$symbolReloadMigration = Get-Content (Join-Path $root 'database/041_cloud_symbol_reload.sql') -Raw
+$runtimeRebuildMigration = Get-Content (Join-Path $root 'database/058_cloud_runtime_rebuild.sql') -Raw
 $dashboard = Get-Content (Join-Path $root 'apps/web/app/dashboard/page.tsx') -Raw
 $worker = Get-Content (Join-Path $root 'apps/web/public/downloads/SCENOVA-CloudWorker.ps1') -Raw
 $workerLoop = Get-Content (Join-Path $root 'tools/windows-cloud-worker/Worker/WorkerLoop.cs') -Raw
@@ -65,6 +67,8 @@ Assert-Contains $workerApi 'wc.execution_generation=bi.execution_generation' 'wo
 Assert-Contains $workerApi 'STALE_GENERATION' 'stale generation cancellation missing'
 Assert-Contains $schema "'STOP_INSTANCE','RELOAD_INSTANCE','REBUILD_INSTANCE'" 'Cloud runtime rebuild command schema missing'
 Assert-Contains $workerApi '"REBUILD_INSTANCE"' 'Worker API rebuild command support missing'
+Assert-Contains $symbolReloadMigration "'STOP_INSTANCE','RELOAD_INSTANCE','REBUILD_INSTANCE'" 'replayed migration 041 must not reject later REBUILD_INSTANCE rows'
+Assert-Contains $runtimeRebuildMigration "'STOP_INSTANCE','RELOAD_INSTANCE','REBUILD_INSTANCE'" 'runtime rebuild migration command check missing'
 Assert-Contains $workerApi '"REBUILD_CONFIRMED"' 'Worker API rebuild acknowledgement missing'
 Assert-Contains $workerApi "runtime_stop_state='STOP_CONFIRMED'" 'server STOP_CONFIRMED transition missing'
 Assert-Contains $workerApi 'Automatic release is disabled' 'automatic runner release must remain disabled in Phase 2'
