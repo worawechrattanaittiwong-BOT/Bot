@@ -620,33 +620,47 @@ export class MaintenanceService {
     }
 
     // Do not deadlock reopening when the market is closed and Positions cannot
-    // be flattened. Accounts with exposure stay quarantined below in SAFE_STOP.
-    await this.db.query(
-      `${this.runtimeCte()}
-       UPDATE bot_instances bi
-       SET desired_state = CASE
-         WHEN r.reported_positions>0
-           OR r.reported_pending_orders>0
-           OR EXISTS (
-             SELECT 1
-             FROM bot_commands bc
-             WHERE bc.bot_instance_id=r.id
-               AND bc.command='CLOSE_ALL'
-               AND bc.status IN ('PENDING','DELIVERED')
-           )
-         THEN 'SAFE_STOP'
-         ELSE 'STOPPED'
-       END
-       FROM runtime r
-       WHERE r.id=bi.id`
-    );
-    await this.db.query(
-      `UPDATE system_maintenance
-       SET status='OFF',title=NULL,message=NULL,maintenance_at=NULL,force_close_at=NULL,
-           expected_resume_at=NULL,force_close=true,resumed_at=now(),updated_by=$1,updated_at=now()
-       WHERE id=1`,
-      [actor.slice(0, 120)]
-    );
+    // be flattened. This must be atomic: external sessions keep seeing
+    // DRAINING/MAINTENANCE until both the system state and account quarantine
+    // states are ready. Inside our transaction the maintenance guard sees OFF,
+    // so it does not rewrite SAFE_STOP back to STOPPED.
+    await this.db.transaction(async (client) => {
+      const locked = await client.query(
+        "SELECT status FROM system_maintenance WHERE id=1 FOR UPDATE"
+      );
+      const lockedStatus = String(locked.rows[0]?.status || "");
+      if (lockedStatus !== "OFF" && lockedStatus !== "DRAINING" && lockedStatus !== "MAINTENANCE") {
+        throw new ConflictException("ระบบไม่ได้อยู่ระหว่างปิดหรือ Maintenance");
+      }
+
+      await client.query(
+        `UPDATE system_maintenance
+         SET status='OFF',title=NULL,message=NULL,maintenance_at=NULL,force_close_at=NULL,
+             expected_resume_at=NULL,force_close=true,resumed_at=now(),updated_by=$1,updated_at=now()
+         WHERE id=1`,
+        [actor.slice(0, 120)]
+      );
+
+      await client.query(
+        `${this.runtimeCte()}
+         UPDATE bot_instances bi
+         SET desired_state = CASE
+           WHEN r.reported_positions>0
+             OR r.reported_pending_orders>0
+             OR EXISTS (
+               SELECT 1
+               FROM bot_commands bc
+               WHERE bc.bot_instance_id=r.id
+                 AND bc.command='CLOSE_ALL'
+                 AND bc.status IN ('PENDING','DELIVERED')
+             )
+           THEN 'SAFE_STOP'
+           ELSE 'STOPPED'
+         END
+         FROM runtime r
+         WHERE r.id=bi.id`
+      );
+    });
     return this.snapshot();
   }
 }
