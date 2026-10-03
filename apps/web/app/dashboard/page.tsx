@@ -1590,6 +1590,15 @@ export default function DashboardPage() {
   const selectedBrokerName = brokerCode === "OTHER"
     ? customBrokerName.trim()
     : (selectedBroker?.name || brokerCode);
+  const selectedBrokerServers = Array.from(new Map(
+    (selectedBroker?.servers || [])
+      .map((item:any)=>({
+        serverName:String(item?.serverName || "").trim(),
+        environment:String(item?.environment || "UNKNOWN").toUpperCase()
+      }))
+      .filter((item:any)=>item.serverName)
+      .map((item:any)=>[item.serverName.toLowerCase(),item])
+  ).values()) as Array<{serverName:string;environment:string}>;
   const selectedServer = brokerServer.trim();
   const hasLocalConnectionSlot = (data?.slots || []).some((slot:any) =>
     String(slot?.mode || "").toUpperCase() === "LOCAL" &&
@@ -4948,29 +4957,43 @@ export default function DashboardPage() {
               )}
 
               <div className="field cloud-mt5-server-field">
-                <span>MT5 Server · ต้องตรงกับบัญชีของคุณทุกตัว</span>
+                <span>MT5 Server</span>
                 <div className="cloud-mt5-server-combobox">
                   <div className="cloud-mt5-server-input-wrap">
                     <input
                       className="input"
                       value={brokerServer}
                       readOnly={cloudMt5DialogMode === "RECONNECT"}
+                      list={cloudMt5DialogMode === "NEW" && selectedBrokerServers.length ? "cloud-mt5-server-options" : undefined}
                       onChange={e=>{
                         setBrokerServer(e.target.value);
                         setCloudMt5DialogError("");
                       }}
-                      placeholder="คัดลอกจาก MT5 เช่น Exness-MT5Trial7"
+                      placeholder={selectedBrokerServers.length ? "เลือกหรือพิมพ์ Server" : "พิมพ์ MT5 Server"}
                       autoComplete="off"
                       autoCapitalize="none"
                       autoCorrect="off"
                       spellCheck={false}
-                      aria-label="MT5 Server ที่ตรงกับบัญชี"
+                      aria-label="MT5 Server"
                       aria-describedby="cloud-mt5-server-help"
                       required
                     />
+                    {cloudMt5DialogMode === "NEW" && selectedBrokerServers.length > 0 && (
+                      <datalist id="cloud-mt5-server-options">
+                        {selectedBrokerServers.map(server=>(
+                          <option
+                            key={server.serverName}
+                            value={server.serverName}
+                            label={(server.environment==="REAL"?"LIVE":server.environment==="DEMO"?"DEMO":"SERVER")+" · "+server.serverName}
+                          />
+                        ))}
+                      </datalist>
+                    )}
                   </div>
                   <small id="cloud-mt5-server-help" className="cloud-mt5-server-note">
-                    เปิดหน้า Login ของ MT5 แล้วคัดลอกชื่อ Server มาใส่ตรง ๆ · ห้ามเดาจากเลขที่คล้ายกัน เช่น Trial6, Trial7, Trial14 ใช้แทนกันไม่ได้
+                    {selectedBrokerServers.length
+                      ? "เลือกจากรายการ "+selectedBrokerName+" หรือพิมพ์ Server เอง"
+                      : "พิมพ์ชื่อ Server ตามที่แสดงใน MT5"}
                   </small>
                 </div>
               </div>
