@@ -180,6 +180,31 @@ internal static class ProvisioningSelfTest
             if (File.Exists(Path.Combine(created[0].Prepared.InstancePath, "MQL5", "Profiles", "lastprofile.ini")))
                 throw new InvalidOperationException("last profile hint was not reset");
 
+            var brokerDirectoryInstance = created[0].Prepared.InstancePath;
+            File.WriteAllText(
+                Path.Combine(brokerDirectoryInstance, "broker-platform.txt"),
+                "EXNESS|" + DateTimeOffset.UtcNow.ToString("O"),
+                new UTF8Encoding(false));
+            var brokerConfig = Path.Combine(brokerDirectoryInstance, "Config");
+            Directory.CreateDirectory(brokerConfig);
+            File.WriteAllBytes(
+                Path.Combine(brokerConfig, "servers.dat"),
+                Encoding.Unicode.GetBytes(
+                    "header\0Exness-MT5Trial6\0Exness-MT5Real25\0Exness-MT4Real1\0"));
+            var brokerDirectory = new BrokerServerDirectory(config).Read();
+            if (!brokerDirectory.Any(item =>
+                    item.BrokerCode == "EXNESS" &&
+                    item.ServerName == "Exness-MT5Trial6" &&
+                    item.Environment == "DEMO"))
+                throw new InvalidOperationException("Exness MT5 Trial server was not read from servers.dat");
+            if (!brokerDirectory.Any(item =>
+                    item.BrokerCode == "EXNESS" &&
+                    item.ServerName == "Exness-MT5Real25" &&
+                    item.Environment == "REAL"))
+                throw new InvalidOperationException("Exness MT5 Real server was not read from servers.dat");
+            if (brokerDirectory.Any(item => item.ServerName.Contains("MT4", StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException("MT4 server leaked into the MT5 server directory");
+
             var sentinel = File.ReadAllText(Path.Combine(template, "template-sentinel.txt"));
             if (!string.Equals(sentinel, "UNCHANGED", StringComparison.Ordinal))
                 throw new InvalidOperationException("template was mutated by provisioning");
@@ -194,6 +219,7 @@ internal static class ProvisioningSelfTest
             Console.WriteLine("PASS: Cloud broker symbol resolver maps Exness Gold/BTC to native m-suffix charts");
             Console.WriteLine("PASS: MT5 manual close rearms one automatic reopen without a launch loop");
             Console.WriteLine("PASS: MetaTrader automatic installer accepts success exit codes 0/1");
+            Console.WriteLine("PASS: live broker MT5 server directory is read from servers.dat without inventing names");
             Console.WriteLine("PASS: self-test never launches terminal64.exe or contacts a broker/backend");
             return 0;
         }

@@ -9,6 +9,7 @@ const seed = read("database/057_broker_server_catalog_verified.sql");
 const exnessDirectory = read("database/059_exness_mt5_server_directory.sql");
 const deploy = read("scripts/deploy-hostinger.sh");
 const worker = read("tools/windows-cloud-worker/Worker/Mt5Runtime.cs");
+const brokerDirectory = read("tools/windows-cloud-worker/Worker/BrokerServerDirectory.cs");
 const workerController = read("apps/api/src/worker.controller.ts");
 
 assert.match(
@@ -20,6 +21,16 @@ assert.doesNotMatch(
   catalog,
   /FROM mt5_accounts|JOIN mt5_accounts/,
   "broker server dropdown must never be populated from customer-entered account history"
+);
+assert.match(
+  catalog,
+  /telemetry->'brokerServers'/,
+  "broker API must prefer fresh server names read directly from broker MT5 directories"
+);
+assert.match(
+  catalog,
+  /w\.last_seen_at>now\(\)-interval '90 seconds'/,
+  "broker API must ignore stale Worker server directories"
 );
 assert.match(
   exnessDirectory,
@@ -151,6 +162,16 @@ assert.match(
   deploy,
   /database\/059_exness_mt5_server_directory\.sql/,
   "production deploy must apply the Exness MT5 server directory migration"
+);
+assert.match(
+  brokerDirectory,
+  /Config[\s\S]*servers\.dat/,
+  "Cloud Worker must read the broker-provided MT5 Config/servers.dat directory"
+);
+assert.match(
+  brokerDirectory,
+  /never invent|Never synthesize|Never invent/i,
+  "Cloud Worker broker directory must not invent server numbers"
 );
 assert.match(
   worker,
