@@ -1220,13 +1220,10 @@ export default function DashboardPage() {
   // stale connect/switch operation restored from the browser from covering the
   // authoritative Local <-> VPS handoff state.
   const operationTerminal = migrationOperation || serverOperation || cloudUpdateOperation;
+  const operationTerminalRunning = operationTerminal?.status === "RUNNING";
   const operationTerminalVisible =
     Boolean(operationTerminal) &&
-    !(
-      serverOperationMinimized &&
-      ["STOP","MIGRATION"].includes(String(operationTerminal?.kind || "")) &&
-      operationTerminal?.status === "RUNNING"
-    );
+    !(serverOperationMinimized && operationTerminalRunning);
   const statusNoticeCount = Number(marketSessionClosed || !isMt5ConnectionOnline || isHeartbeatDelayed) + Number(softwareUpdateRequired) + Number(cloudUpdateVisible);
 
   const maintenance = data?.maintenance || { status:"OFF", blockStarts:false, summary:{ openPositions:0, runningInstances:0 } };
@@ -3928,8 +3925,29 @@ export default function DashboardPage() {
         )}
 
 
+        {serverOperationMinimized && operationTerminal && operationTerminalRunning && (
+          <button
+            type="button"
+            className="cc-server-operation-minimized"
+            onClick={()=>setServerOperationMinimized(false)}
+            aria-label={"เปิดสถานะ " + String(operationTerminal.title || "การดำเนินการ")}
+          >
+            <span><i/>กำลังทำงานเบื้องหลัง</span>
+            <b>{operationTerminal.title}</b>
+            <em>เปิดสถานะ ↑</em>
+          </button>
+        )}
+
         {operationTerminalVisible && operationTerminal && (
-          <div className="cc-server-operation-backdrop" role="presentation">
+          <div
+            className="cc-server-operation-backdrop"
+            role="presentation"
+            onMouseDown={(event)=>{
+              if (event.target === event.currentTarget && operationTerminalRunning) {
+                setServerOperationMinimized(true);
+              }
+            }}
+          >
             <section
               id="cc-server-operation-dialog"
               className={"cc-server-operation-terminal status-" + String(operationTerminal.status || "RUNNING").toLowerCase()}
@@ -3945,12 +3963,12 @@ export default function DashboardPage() {
                     <h3 id="cc-server-operation-title">{operationTerminal.title}</h3>
                   </div>
                 </div>
-                {(operationTerminal.status === "FAILED" || operationTerminal.canClose || (["STOP","MIGRATION"].includes(String(operationTerminal.kind || "")) && operationTerminal.status === "RUNNING")) && (
+                {(operationTerminalRunning || operationTerminal.status === "FAILED" || operationTerminal.canClose) && (
                   <button
                     type="button"
-                    aria-label={operationTerminal.status === "RUNNING" && ["STOP","MIGRATION"].includes(String(operationTerminal.kind || "")) ? (operationTerminal.kind === "MIGRATION" ? "ย่อสถานะการย้ายระบบ MT5" : "ย่อสถานะ Safe Stop") : "ปิด"}
+                    aria-label={operationTerminalRunning ? "ย่อสถานะไว้และทำงานต่อเบื้องหลัง" : "ปิด"}
                     onClick={()=>{
-                      if (operationTerminal.status === "RUNNING" && ["STOP","MIGRATION"].includes(String(operationTerminal.kind || ""))) {
+                      if (operationTerminalRunning) {
                         setServerOperationMinimized(true);
                       } else if (operationTerminal.kind === "CLOUD_UPDATE") {
                         setDismissedCloudUpdateKey(String(operationTerminal.cloudUpdateKey || cloudUpdateStageKey));
@@ -4023,20 +4041,16 @@ export default function DashboardPage() {
                       ? "การอัปเดตจะดำเนินการต่อหลัง Bot เป็น STOPPED และ Position = 0"
                       : "ระบบกำลังติดตั้งและตรวจสอบ Release สำหรับบัญชีนี้"
                   : operationTerminal.status === "RUNNING"
-                    ? operationTerminal.kind === "STOP"
-                      ? "Safe Stop ยังดำเนินการต่อในพื้นหลัง และสามารถเปิดสถานะกลับจาก Dashboard"
-                      : operationTerminal.kind === "MIGRATION"
-                        ? "การย้ายระบบยังดำเนินการต่อในพื้นหลัง และสามารถเปิดสถานะกลับจาก Dashboard"
-                        : "ระบบกำลังตรวจสอบสถานะการดำเนินการโดยอัตโนมัติ"
+                    ? "งานยังดำเนินการต่อในพื้นหลัง · สามารถย่อหน้าต่างนี้แล้วใช้งานหน้าอื่นต่อได้"
                     : operationTerminal.status === "SUCCESS"
                       ? "ดำเนินการเสร็จสมบูรณ์ · หน้าต่างนี้จะปิดอัตโนมัติ"
                       : "การดำเนินการไม่สำเร็จ · กรุณาตรวจสอบรายละเอียดด้านบน"}</span>
-                {(operationTerminal.status === "FAILED" || operationTerminal.canClose || (["STOP","MIGRATION"].includes(String(operationTerminal.kind || "")) && operationTerminal.status === "RUNNING")) && (
+                {(operationTerminalRunning || operationTerminal.status === "FAILED" || operationTerminal.canClose) && (
                   <button
                     type="button"
                     className="btn"
                     onClick={()=>{
-                      if (operationTerminal.status === "RUNNING" && ["STOP","MIGRATION"].includes(String(operationTerminal.kind || ""))) {
+                      if (operationTerminalRunning) {
                         setServerOperationMinimized(true);
                       } else if (operationTerminal.kind === "CLOUD_UPDATE") {
                         setDismissedCloudUpdateKey(String(operationTerminal.cloudUpdateKey || cloudUpdateStageKey));
@@ -4046,7 +4060,7 @@ export default function DashboardPage() {
                         setServerOperation(null);
                       }
                     }}
-                  >{operationTerminal.status === "RUNNING" && ["STOP","MIGRATION"].includes(String(operationTerminal.kind || "")) ? "ย่อไว้" : "ปิด"}</button>
+                  >{operationTerminalRunning ? "ย่อไว้ · ทำงานต่อ" : "ปิด"}</button>
                 )}
               </footer>
             </section>

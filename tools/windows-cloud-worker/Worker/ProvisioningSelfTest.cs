@@ -86,6 +86,25 @@ internal static class ProvisioningSelfTest
                         StringComparison.Ordinal))
                     throw new InvalidOperationException("generic broker symbol was rewritten");
 
+                if (!string.Equals(exnessJob.Symbol, "XAUUSDm", StringComparison.Ordinal) ||
+                    !string.Equals(exnessJob.FallbackSymbol, "XAUUSD", StringComparison.Ordinal))
+                    throw new InvalidOperationException("Exness Gold bootstrap fallback was not prepared");
+
+                using (var exactSettings = JsonDocument.Parse("{\"startupSymbol\":\"XAUUSD\",\"symbolResolutionMode\":\"EXACT\"}"))
+                {
+                    var exactJob = new CloudJob
+                    {
+                        InstanceId = Guid.NewGuid().ToString(),
+                        AccountNumber = brokerAccount.RootElement.Clone(),
+                        Broker = "Exness",
+                        BrokerServer = "Exness-MT5Trial14",
+                        Settings = exactSettings.RootElement.Clone()
+                    };
+                    if (!string.Equals(exactJob.Symbol, "XAUUSD", StringComparison.Ordinal) ||
+                        !string.IsNullOrWhiteSpace(exactJob.FallbackSymbol))
+                        throw new InvalidOperationException("exact symbol selection must not be rewritten or fallback");
+                }
+
                 var genericJob = new CloudJob
                 {
                     InstanceId = Guid.NewGuid().ToString(),

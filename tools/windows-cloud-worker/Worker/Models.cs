@@ -141,6 +141,12 @@ internal sealed class CloudJob
             ? RequestedSymbol
             : ResolveBrokerSymbol(RequestedSymbol, Broker, BrokerServer);
 
+    public string FallbackSymbol =>
+        !ExactSymbolRequested &&
+        !string.Equals(Symbol, RequestedSymbol, StringComparison.OrdinalIgnoreCase)
+            ? RequestedSymbol
+            : "";
+
     internal static string ResolveBrokerSymbol(
         string requested,
         string? broker,

@@ -10,7 +10,8 @@ internal sealed record PreparedInstance(
     string TerminalPath,
     string PresetPath,
     string StartupPath,
-    string Symbol);
+    string Symbol,
+    string FallbackSymbol);
 
 internal sealed class Mt5Runtime
 {
@@ -420,7 +421,13 @@ internal sealed class Mt5Runtime
             },
             Encoding.Unicode);
 
-        return new PreparedInstance(instancePath, terminal, presetPath, startupPath, job.Symbol);
+        return new PreparedInstance(
+            instancePath,
+            terminal,
+            presetPath,
+            startupPath,
+            job.Symbol,
+            job.FallbackSymbol);
     }
 
     public EaApplyOutcome ApplyEaUpdate(
@@ -861,6 +868,29 @@ internal sealed class Mt5Runtime
             : clean[..Math.Min(96, clean.Length)];
     }
 
+    internal static void RewriteStartupSymbol(string startupPath, string symbol)
+    {
+        if (string.IsNullOrWhiteSpace(symbol))
+            throw new InvalidOperationException("STARTUP_SYMBOL_REQUIRED");
+
+        var lines = File.ReadAllLines(startupPath, Encoding.Unicode);
+        var replaced = false;
+        for (var i = 0; i < lines.Length; i++)
+        {
+            if (!lines[i].StartsWith("Symbol=", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            lines[i] = "Symbol=" + SafeIniValue(symbol);
+            replaced = true;
+            break;
+        }
+
+        if (!replaced)
+            throw new InvalidOperationException("STARTUP_SYMBOL_FIELD_MISSING");
+
+        File.WriteAllLines(startupPath, lines, Encoding.Unicode);
+    }
+
     private void LaunchPrepared(
         PreparedInstance prepared,
         bool requireEaAttach = true)
@@ -881,46 +911,84 @@ internal sealed class Mt5Runtime
             "Files",
             "scenova-ea-ready.txt");
 
-        try { if (File.Exists(readyMarker)) File.Delete(readyMarker); } catch { }
+        var startupSymbols = new[] { prepared.Symbol, prepared.FallbackSymbol }
+            .Where(symbol => !string.IsNullOrWhiteSpace(symbol))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
 
-        // Every intentional launch starts from one clean chart workspace.
-        // Never recycle the terminal here just because broker/EA initialization
-        // takes longer than expected.
-        ResetCloudChartWorkspace(prepared.InstancePath);
-
-        Process.Start(new ProcessStartInfo
+        for (var attempt = 0; attempt < startupSymbols.Length; attempt++)
         {
-            FileName = prepared.TerminalPath,
-            Arguments = $"/portable /config:\"{prepared.StartupPath}\"",
-            WorkingDirectory = prepared.InstancePath,
-            UseShellExecute = true,
-            WindowStyle = ProcessWindowStyle.Maximized
-        });
+            var startupSymbol = startupSymbols[attempt];
 
-        _autoLaunchAttempted.Add(instanceId);
-
-        var deadline = DateTimeOffset.UtcNow.AddSeconds(30);
-        while (DateTimeOffset.UtcNow < deadline)
-        {
-            var running = HasExactTerminal(prepared.TerminalPath);
-            if (running && EaReadyMarkerMatches(readyMarker, instanceId))
+            if (attempt > 0)
             {
-                TryMaximizeChart(prepared);
-                return;
+                if (HasExactTerminal(prepared.TerminalPath) &&
+                    !StopInstance(instanceId))
+                    throw new InvalidOperationException("SYMBOL_FALLBACK_STOP_FAILED");
+
+                _maximizedProcessByInstance.Remove(instanceId);
+                Thread.Sleep(350);
             }
 
-            Thread.Sleep(250);
-        }
+            try { if (File.Exists(readyMarker)) File.Delete(readyMarker); } catch { }
 
-        if (HasExactTerminal(prepared.TerminalPath))
-        {
-            TryMaximizeChart(prepared);
-            if (!requireEaAttach)
-                return;
+            RewriteStartupSymbol(prepared.StartupPath, startupSymbol);
 
-            // Explicit update/reload callers may treat this as verification
-            // failure, but normal supervision must never kill this terminal.
-            throw new InvalidOperationException("EA_ATTACH_TIMEOUT");
+            // Every intentional launch starts from one clean chart workspace.
+            // If the broker-specific bootstrap symbol does not attach the EA,
+            // retry once with the canonical requested symbol. This covers
+            // accounts whose Gold chart is XAUUSD instead of XAUUSDm without
+            // guessing beyond a symbol the customer/server already requested.
+            ResetCloudChartWorkspace(prepared.InstancePath);
+
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = prepared.TerminalPath,
+                Arguments = $"/portable /config:\"{prepared.StartupPath}\"",
+                WorkingDirectory = prepared.InstancePath,
+                UseShellExecute = true,
+                WindowStyle = ProcessWindowStyle.Maximized
+            });
+
+            _autoLaunchAttempted.Add(instanceId);
+
+            var deadline = DateTimeOffset.UtcNow.AddSeconds(30);
+            while (DateTimeOffset.UtcNow < deadline)
+            {
+                var running = HasExactTerminal(prepared.TerminalPath);
+                if (running && EaReadyMarkerMatches(readyMarker, instanceId))
+                {
+                    if (attempt > 0)
+                    {
+                        Console.WriteLine(
+                            $"SCENOVA symbol bootstrap fallback attached EA: {prepared.Symbol} -> {startupSymbol} ({instanceId})");
+                    }
+                    TryMaximizeChart(prepared);
+                    return;
+                }
+
+                Thread.Sleep(250);
+            }
+
+            var terminalRunning = HasExactTerminal(prepared.TerminalPath);
+            var hasAnotherSymbol = attempt + 1 < startupSymbols.Length;
+            if (terminalRunning && hasAnotherSymbol)
+            {
+                Console.WriteLine(
+                    $"SCENOVA symbol bootstrap retry: {startupSymbol} -> {startupSymbols[attempt + 1]} ({instanceId})");
+                continue;
+            }
+
+            if (terminalRunning)
+            {
+                TryMaximizeChart(prepared);
+                if (!requireEaAttach)
+                    return;
+
+                // Explicit update/reload callers may treat this as verification
+                // failure. Normal supervision leaves the terminal running.
+                throw new InvalidOperationException("EA_ATTACH_TIMEOUT");
+            }
         }
 
         throw new InvalidOperationException("TERMINAL_START_FAILED");
@@ -943,7 +1011,8 @@ internal sealed class Mt5Runtime
             terminalPath,
             Path.Combine(instancePath, "MQL5", "Presets", "SCENOVA-Cloud.set"),
             Path.Combine(instancePath, "cloud-start.ini"),
-            job.Symbol);
+            job.Symbol,
+            job.FallbackSymbol);
 
         if (TryMaximizeChart(prepared))
             _maximizedProcessByInstance[job.InstanceId] = terminal.Pid;
