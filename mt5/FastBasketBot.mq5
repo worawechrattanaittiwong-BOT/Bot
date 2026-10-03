@@ -5148,10 +5148,34 @@ bool ManageRaceBasket(double momentum)
       return true;
    }
 
+   // Demand/Supply handoff runs before legacy loss-state classification.
+   // This makes the requested structure rule authoritative even when the old
+   // position is currently negative.
+   RefreshMarketContext(false);
+   int breakDirection=RaceConfirmedZoneBreakDirection();
+   int zoneReversalDirection=RaceHeldZoneReversalDirection();
+
+   if(breakDirection!=0 && breakDirection!=direction)
+   {
+      string reason=direction>0
+         ? "RACE_DEMAND_BREAK_FOLLOW_SELL"
+         : "RACE_SUPPLY_BREAK_FOLLOW_BUY";
+      RaceCloseCycle(reason);
+      return true;
+   }
+
+   if(zoneReversalDirection!=0 && zoneReversalDirection!=direction)
+   {
+      string reason=zoneReversalDirection>0
+         ? "RACE_DEMAND_HOLD_REVERSAL_BUY"
+         : "RACE_SUPPLY_HOLD_REVERSAL_SELL";
+      RaceCloseCycle(reason);
+      return true;
+   }
+
    // RACE loss management remains isolated from every other mode. Broker SL
    // and configured money limits stay authoritative hard boundaries. Ordinary
-   // soft exits require a confirmed M5 structure/regime reversal; Demand/Supply
-   // breaks are handled as explicit structural invalidations.
+   // soft exits require a confirmed M5 structure/regime reversal.
    RaceV1UpdateExposureTelemetry(direction,0.0);
    g_raceExposureRiskMismatch =
       lossLimit > 0.0 &&
@@ -5285,38 +5309,7 @@ bool ManageRaceBasket(double momentum)
    }
 
 
-   // Refresh RACE-only structural context before add/reversal decisions.
-   RefreshMarketContext(false);
-   int breakDirection=RaceConfirmedZoneBreakDirection();
-   int zoneReversalDirection=RaceHeldZoneReversalDirection();
    int signalDirection=RaceAnalysisDirection(momentum);
-
-   // Demand/Supply owns an immediate structural handoff:
-   // - intact Demand against a SELL => close SELL, then BUY on the next flat tick
-   // - intact Supply against a BUY => close BUY, then SELL
-   // - confirmed zone break => abandon the failed reversal side and follow break
-   int structuralHandoff=0;
-   string structuralReason="NONE";
-   if(breakDirection!=0 && breakDirection!=direction)
-   {
-      structuralHandoff=breakDirection;
-      structuralReason=direction>0
-         ? "RACE_DEMAND_BREAK_FOLLOW_SELL"
-         : "RACE_SUPPLY_BREAK_FOLLOW_BUY";
-   }
-   else if(zoneReversalDirection!=0 && zoneReversalDirection!=direction)
-   {
-      structuralHandoff=zoneReversalDirection;
-      structuralReason=zoneReversalDirection>0
-         ? "RACE_DEMAND_HOLD_REVERSAL_BUY"
-         : "RACE_SUPPLY_HOLD_REVERSAL_SELL";
-   }
-
-   if(structuralHandoff!=0)
-   {
-      RaceCloseCycle(structuralReason);
-      return true;
-   }
 
    // A non-zone opposite signal in a sideway or transition only pauses adds.
    // It does not dump the open Basket. Ordinary exit still needs the slower
