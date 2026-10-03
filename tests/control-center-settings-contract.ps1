@@ -149,6 +149,8 @@ Need $bot 'clean.maxPositions = counterTotalPositions / 2;' 'API must map COUNTE
 Need $bot 'numberSetting("manualLot", 0.01, 100)' 'API must persist MANUAL Lot profile'
 Need $bot 'numberSetting("manualDailyProfitTargetMoney", 0, maxAccountMoney)' 'API must persist MANUAL optional risk profile'
 Need $db '"manualDailyProfitTargetMoney":0.0' 'New accounts must default MANUAL optional daily profit to OFF'
+Need $db '"counterMaxPositions":10' 'New accounts must default COUNTER to 10 total positions'
+Need $db '"counterSizingVersion":2' 'New accounts must use COUNTER total-slot sizing V2'
 
 Need $page 'cc-bot-manual-risk-add-all' 'MANUAL reveal-all button missing'
 Need $page '[riskProfile.basket]:true,[riskProfile.dailyLoss]:true,[riskProfile.dailyProfit]:true' 'MANUAL reveal-all must show all three hidden risk controls together'
