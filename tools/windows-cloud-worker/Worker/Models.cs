@@ -88,6 +88,8 @@ internal sealed class CloudJob
     public string RuntimeStopState { get; set; } = "NONE";
     public string TradingPassword { get; set; } = "";
     public string InstallToken { get; set; } = "";
+    public int Positions { get; set; }
+    public int PendingOrders { get; set; }
     public JsonElement Settings { get; set; }
 
     public string AccountNumberText =>
@@ -121,6 +123,63 @@ internal sealed class CloudJob
 
     public string Symbol =>
         ResolveBrokerSymbol(RequestedSymbol, Broker, BrokerServer);
+
+    public IReadOnlyList<string> BootstrapSymbolCandidates
+    {
+        get
+        {
+            var requested = RequestedSymbol.Trim();
+            var canonical = CanonicalFamily(requested);
+            var candidates = new List<string>();
+
+            static void AddUnique(List<string> target, string? value)
+            {
+                var clean = (value ?? "").Trim();
+                if (clean.Length == 0) return;
+                if (target.Any(item => string.Equals(item, clean, StringComparison.OrdinalIgnoreCase)))
+                    return;
+                target.Add(clean);
+            }
+
+            AddUnique(candidates, Symbol);
+            AddUnique(candidates, requested);
+
+            // Bootstrap retries are deliberately restricted to the SAME
+            // instrument family. A Gold request may probe common Gold suffixes,
+            // and a BTC request may probe BTC/XBT aliases, but SCENOVA never
+            // falls back to another asset merely to make an EA attach.
+            if (canonical == "XAUUSD")
+            {
+                foreach (var item in new[]
+                {
+                    "XAUUSD", "XAUUSDm", "XAUUSDc", "XAUUSD.pro", "XAUUSD.raw"
+                })
+                    AddUnique(candidates, item);
+            }
+            else if (canonical == "BTCUSD")
+            {
+                foreach (var item in new[]
+                {
+                    "BTCUSD", "BTCUSDm", "BTCUSDc", "BTCUSD.pro",
+                    "XBTUSD", "XBTUSDm"
+                })
+                    AddUnique(candidates, item);
+            }
+
+            return candidates.Take(6).ToArray();
+        }
+    }
+
+    internal static string CanonicalFamily(string? value)
+    {
+        var upper = (value ?? "").Trim().ToUpperInvariant();
+        if (upper.StartsWith("XAUUSD", StringComparison.Ordinal))
+            return "XAUUSD";
+        if (upper.StartsWith("BTCUSD", StringComparison.Ordinal) ||
+            upper.StartsWith("XBTUSD", StringComparison.Ordinal))
+            return "BTCUSD";
+        return upper;
+    }
 
     internal static string ResolveBrokerSymbol(
         string requested,
