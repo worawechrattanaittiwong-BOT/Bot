@@ -165,6 +165,18 @@ function formatPaymentDate(value: unknown) {
     hour12:false
   });
 }
+function normalizeCounterTotalPositions(value: unknown) {
+  const parsed = Math.trunc(Number(value));
+  if (!Number.isFinite(parsed)) return 10;
+  const stepped = Math.floor(parsed / 10) * 10;
+  return Math.max(10, Math.min(200, stepped));
+}
+
+function legacyCounterPerSideToTotal(value: unknown) {
+  const perSide = Math.max(1, Math.min(100, Math.trunc(Number(value) || 1)));
+  return normalizeCounterTotalPositions(perSide * 2);
+}
+
 const defaultSettings = {
   symbol: "XAUUSD",
   lot: 0.01,
@@ -175,6 +187,7 @@ const defaultSettings = {
   raceMaxPositions: 10,
   counterLot: 0.01,
   counterMaxPositions: 10,
+  counterSizingVersion: 2,
   flipLockLot: 0.01,
   manualLot: 0.01,
   manualMaxPositions: 10,
@@ -376,6 +389,21 @@ export default function DashboardPage() {
           if (storedSettings[loadedSizingProfile.lot] === undefined) nextSettings[loadedSizingProfile.lot] = legacyLot;
           if (loadedSizingProfile.max && storedSettings[loadedSizingProfile.max] === undefined) nextSettings[loadedSizingProfile.max] = legacyMaxPositions;
         }
+        // COUNTER V2 exposes one total-position number to the customer while
+        // the EA still consumes an independent per-side cap. Legacy saved
+        // counterMaxPositions values were per-side, so convert them once in the
+        // client before the next save without increasing the old exposure.
+        const storedCounterSizingVersion = Number(storedSettings.counterSizingVersion || 0);
+        if (storedCounterSizingVersion >= 2) {
+          nextSettings.counterMaxPositions = normalizeCounterTotalPositions(nextSettings.counterMaxPositions);
+        } else if (storedSettings.counterMaxPositions !== undefined) {
+          nextSettings.counterMaxPositions = legacyCounterPerSideToTotal(storedSettings.counterMaxPositions);
+        } else if (loadedControlMode === "COUNTER") {
+          nextSettings.counterMaxPositions = legacyCounterPerSideToTotal(legacyMaxPositions);
+        } else {
+          nextSettings.counterMaxPositions = 10;
+        }
+        nextSettings.counterSizingVersion = 2;
         const legacyMaxBasketLoss = Math.max(0, Number(nextSettings.maxBasketLossMoney || 0));
         const legacyDailyLoss = Math.max(0, Number(nextSettings.dailyLossMoney || 0));
         const legacyDailyProfit = Math.max(0, Number(nextSettings.dailyProfitTargetMoney || 0));
@@ -3495,6 +3523,7 @@ export default function DashboardPage() {
         "raceMaxPositions",
         "counterLot",
         "counterMaxPositions",
+        "counterSizingVersion",
         "flipLockLot",
         "manualLot",
         "manualMaxPositions",
@@ -3557,6 +3586,7 @@ export default function DashboardPage() {
         "autoMaxPositions",
         "raceMaxPositions",
         "counterMaxPositions",
+        "counterSizingVersion",
         "manualMaxPositions",
         "minOrderIntervalMs",
         "maxOrdersPerMinute",
@@ -3598,7 +3628,15 @@ export default function DashboardPage() {
       const activeSizingProfile = sizingProfiles[payload.controlMode];
       if (activeSizingProfile) {
         payload.lot = payload[activeSizingProfile.lot];
-        payload.maxPositions = payload.controlMode === "FLIP_LOCK" ? 1 : payload[activeSizingProfile.max || "maxPositions"];
+        if (payload.controlMode === "FLIP_LOCK") {
+          payload.maxPositions = 1;
+        } else if (payload.controlMode === "COUNTER") {
+          payload.counterMaxPositions = normalizeCounterTotalPositions(payload.counterMaxPositions);
+          payload.counterSizingVersion = 2;
+          payload.maxPositions = payload.counterMaxPositions / 2;
+        } else {
+          payload.maxPositions = payload[activeSizingProfile.max || "maxPositions"];
+        }
       }
       const modeRiskProfiles:Record<string,{basket:string;dailyLoss:string;dailyProfit:string}> = {
         AUTO:{basket:"autoMaxBasketLossMoney",dailyLoss:"autoDailyLossMoney",dailyProfit:"autoDailyProfitTargetMoney"},
@@ -6335,6 +6373,13 @@ function BotSettingsModal(props:any) {
   const editModeSizing = (kind:"lot"|"max",value:any) => {
     if (!activeSizingProfile) return;
     const profileKey = kind === "lot" ? activeSizingProfile.lot : activeSizingProfile.max;
+    if (kind === "max" && controlMode === "COUNTER") {
+      const total = normalizeCounterTotalPositions(value);
+      if (profileKey) props.onEdit?.(profileKey,total);
+      props.onEdit?.("counterSizingVersion",2);
+      props.onEdit?.("maxPositions",total/2);
+      return;
+    }
     if (profileKey) props.onEdit?.(profileKey,value);
     props.onEdit?.(kind === "lot" ? "lot" : "maxPositions",value);
   };
@@ -6361,7 +6406,7 @@ function BotSettingsModal(props:any) {
     AUTO:{title:"AUTO · VECTOR EDGE",subtitle:"Vector Edge / V20 เป็นเจ้าของเฉพาะ Position ที่ AUTO เปิดเอง · Lot ต่อไม้ใช้ค่าที่ตั้งแบบตายตัว · ไม่รับช่วง Position จากโหมดอื่น"},
     FLIP_LOCK:{title:"FLIP LOCK",subtitle:"M1 เท่านั้น · เปิด 1 Position พร้อม Safety SL · พอล็อกกำไรได้แล้ว SL จะตามราคาปัจจุบันห่าง 100 จุดและไม่ถอยกลับ · Lot คงที่ ไม่มี Martingale"},
     RACE:{title:"RACE",subtitle:"เพิ่มความถี่ในการเปิดสถานะเพื่อให้ครบจำนวนที่กำหนดเร็วขึ้น โดยแยกการบริหารรอบจากโหมดอัตโนมัติ"},
-    COUNTER:{title:"COUNTER",subtitle:"กราฟขึ้นเปิด SELL · กราฟลงเปิด BUY · BUY/SELL แยก Slot กัน · ไม่มี Stop Loss"},
+    COUNTER:{title:"COUNTER",subtitle:"กราฟขึ้นเปิด SELL · กราฟลงเปิด BUY · เลือกจำนวนไม้รวมแล้วแบ่ง BUY/SELL ครึ่งต่อครึ่ง · ไม่มี Stop Loss"},
     ZERO_GRID:{title:"ZERO GRID",subtitle:"วางคำสั่ง BUY STOP และ SELL STOP แบบสมมาตร รองรับ 1–30 ระดับต่อฝั่ง"},
     MANUAL:{title:"MANUAL",subtitle:"ใช้สมองเข้าเดียวกับ AUTO: Demand/Supply + Reaction + โครงสร้างตลาด แต่ Lot / จำนวนไม้ / Stop / Profit ใช้ค่าที่ผู้ใช้กำหนดเอง"}
   };
@@ -6421,12 +6466,12 @@ function BotSettingsModal(props:any) {
       title:"COUNTER",
       icon:"trend",
       systemType:"Inverse Live Price Flow · ไม่มีตัวกรองกลยุทธ์อื่น",
-      sizing:"Fixed Lot ต่อไม้ · BUY/SELL มีจำนวนไม้ต่อฝั่งแยกกัน · เติมทีละคำสั่งด้วย pacing ภายในระบบ",
+      sizing:"Fixed Lot ต่อไม้ · จำนวนไม้รวมแบ่ง BUY 50% / SELL 50% · เติมทีละคำสั่งด้วย pacing ภายในระบบ",
       exitStyle:"Per-position Profit เท่านั้น · ไม่มี Stop Loss / Basket Exit",
-      workflow:"ดูการเคลื่อนของราคา Bid แบบเดียวกับ live flow ของ RACE แต่กลับด้านตรง ๆ: กราฟขึ้นเปิด SELL และกราฟลงเปิด BUY · แต่ละฝั่งเติมได้ถึงจำนวนไม้ต่อฝั่งที่ตั้ง ดังนั้น BUY เต็มจะไม่บล็อก SELL และ SELL เต็มจะไม่บล็อก BUY",
+      workflow:"ดูการเคลื่อนของราคา Bid แบบเดียวกับ live flow ของ RACE แต่กลับด้านตรง ๆ: กราฟขึ้นเปิด SELL และกราฟลงเปิด BUY · จำนวนไม้รวมถูกแบ่งครึ่งให้ BUY/SELL อัตโนมัติ ดังนั้น BUY เต็มจะไม่บล็อก SELL และ SELL เต็มจะไม่บล็อก BUY",
       good:"โหมดนี้ทำตามกฎสวนราคาแบบตรง ๆ โดยไม่มี EMA, ATR, Structure, Volume หรือ Confidence มาช่วยเลือกทิศ",
       caution:"ไม่มี Stop Loss และไม่มีตัวกรองความเสี่ยงของโหมดอื่น ขาดทุนของไม้ที่ยังไม่ถึงกำไรสามารถค้างและเพิ่มขึ้นได้",
-      remember:"COUNTER = ขึ้น SELL · ลง BUY · BUY/SELL แยก Slot · ปิดเมื่อกำไรต่อไม้ถึงเป้า",
+      remember:"COUNTER = ขึ้น SELL · ลง BUY · จำนวนไม้รวมแบ่งครึ่ง BUY/SELL · ปิดเมื่อกำไรต่อไม้ถึงเป้า",
       capital:{
         minimum:"—",
         balanced:"—",
@@ -6503,6 +6548,11 @@ function BotSettingsModal(props:any) {
       props.onEdit?.("lot",targetLot);
       if (mode === "FLIP_LOCK") {
         props.onEdit?.("maxPositions",1);
+      } else if (mode === "COUNTER" && targetSizing.max) {
+        const total = normalizeCounterTotalPositions(props.settings?.[targetSizing.max] ?? 10);
+        props.onEdit?.("counterMaxPositions",total);
+        props.onEdit?.("counterSizingVersion",2);
+        props.onEdit?.("maxPositions",total/2);
       } else if (targetSizing.max) {
         props.onEdit?.("maxPositions",Math.max(1,Number(props.settings?.[targetSizing.max] ?? 1)));
       }
@@ -6663,10 +6713,10 @@ function BotSettingsModal(props:any) {
               <div className="cc-bot-v12-mode-select-wrap">
                 <label>
                   {settingHelpLabel("mode","โหมดการเทรด","เลือกวิธีที่บอทจะเข้าและจัดการออเดอร์","brain")}
-                  <select className={"input cc-bot-v12-mode-select cc-bot-v19-two-thirds-control "+(["RACE","FLIP_LOCK","ZERO_GRID"].includes(controlMode)?"is-rated-mode":"")} value={controlMode} disabled={props.locked} onChange={e=>applyControlMode(e.target.value)} style={{colorScheme:"dark"}}>
+                  <select className={"input cc-bot-v12-mode-select cc-bot-v19-two-thirds-control "+(["RACE","COUNTER","FLIP_LOCK","ZERO_GRID"].includes(controlMode)?"is-rated-mode":"")} value={controlMode} disabled={props.locked} onChange={e=>applyControlMode(e.target.value)} style={{colorScheme:"dark"}}>
                     <option value="AUTO">AUTO</option>
                     <option value="RACE" className="cc-rated-mode-option">★★★ RACE</option>
-                    <option value="COUNTER">COUNTER</option>
+                    <option value="COUNTER" className="cc-rated-mode-option">★★ COUNTER</option>
                     <option value="FLIP_LOCK" className="cc-rated-mode-option">★★ FLIP LOCK</option>
                     <option value="ZERO_GRID" className="cc-rated-mode-option" disabled={zeroGridBlockedForSymbol}>★ ZERO GRID{zeroGridBlockedForSymbol ? " · ไม่รองรับ BTC" : ""}</option>
                     <option value="MANUAL">MANUAL</option>
@@ -6680,7 +6730,7 @@ function BotSettingsModal(props:any) {
                   {id:"AUTO",icon:"brain",tag:"AUTO + VECTOR"},
                   {id:"FLIP_LOCK",icon:"trend",tag:"ล็อกกำไร + สลับฝั่ง"},
                   {id:"RACE",icon:"status",tag:"ดำเนินการเร็ว",recommended:true},
-                  {id:"COUNTER",icon:"trend",tag:"ขึ้น SELL · ลง BUY"},
+                  {id:"COUNTER",icon:"trend",tag:"★★ · ขึ้น SELL · ลง BUY"},
                   {id:"ZERO_GRID",icon:"layers",tag:zeroGridBlockedForSymbol?"ไม่รองรับ BTC":"กริดแบบ Hedging"},
                   {id:"MANUAL",icon:"settings",tag:"กำหนดรายละเอียด"}
                 ].map(mode=>{
@@ -6707,7 +6757,7 @@ function BotSettingsModal(props:any) {
                     <label className="cc-bot-v2-field">{settingHelpLabel("grid-profit","เป้ากำไรสุทธิ","กำไรรวมถึงยอดนี้ EA จะปิดทั้งรอบ","profit")}<MoneyInput value={props.settings.zeroGridMinNetProfitMoney || 0.5} currency={accountCurrency} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.("zeroGridMinNetProfitMoney",v)}/></label>
                   </> : controlMode==="COUNTER" ? <>
                     <label className="cc-bot-v2-field">{settingHelpLabel("lot-per-order","Lot ต่อไม้","กำหนดขนาด Lot ของแต่ละออเดอร์","lot")}<select className="input cc-bot-v19-two-thirds-control" value={String(activeLot)} onChange={e=>editModeSizing("lot",e.target.value)}>{[0.01,0.02,0.03,0.05,0.1,0.2,0.3,0.5,1].map(v=><option key={v} value={v}>{Number(v).toFixed(2)} Lot</option>)}</select></label>
-                    <label className="cc-bot-v2-field">{settingHelpLabel("counter-max","จำนวนไม้ต่อฝั่ง","กำหนดจำนวน BUY และ SELL สูงสุดแยกกัน","layers")}<select className="input cc-bot-v19-two-thirds-control" value={String(activeMaxPositions)} onChange={e=>editModeSizing("max",e.target.value)}>{[1,2,3,4,5,6,7,8,9,10,12,15,20,25,30,50,75,100].map(v=><option key={v} value={v}>{v} ไม้</option>)}</select></label>
+                    <label className="cc-bot-v2-field">{settingHelpLabel("counter-max","จำนวนไม้รวม","EA แบ่งจำนวนไม้รวมเป็น BUY 50% / SELL 50% อัตโนมัติ","layers")}<select className="input cc-bot-v19-two-thirds-control" value={String(normalizeCounterTotalPositions(activeMaxPositions))} onChange={e=>editModeSizing("max",e.target.value)}>{Array.from({length:20},(_,i)=>(i+1)*10).map(v=><option key={v} value={v}>{v} ไม้ · BUY {v/2} / SELL {v/2}</option>)}</select></label>
                     <label className="cc-bot-v2-field">{settingHelpLabel("counter-profit","กำไรต่อไม้","ไม้ไหนกำไรถึงยอดนี้ EA จะปิดไม้นั้น","profit")}<MoneyInput value={counterPerPositionProfitMoney} currency={accountCurrency} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.("counterPerPositionProfitMoney",v)}/></label>
                   </> : <>
                     <label className="cc-bot-v2-field">{settingHelpLabel("direction","ทิศทาง","ให้ EA เลือกฝั่งเอง หรือบังคับ BUY / SELL","trend")}<select className="input cc-bot-v19-two-thirds-control" value={entryMode} onChange={e=>props.onEdit?.("entryMode",e.target.value)}><option value="AUTO_MOMENTUM">อัตโนมัติ</option><option value="BUY_ONLY">BUY</option><option value="SELL_ONLY">SELL</option></select></label>
@@ -6722,7 +6772,7 @@ function BotSettingsModal(props:any) {
                     : controlMode==="MANUAL"
                       ? <div className="cc-bot-v2-engine-line"><ScenovaIcon name="settings" size={16}/><b>MANUAL · Shared Zone Brain</b><span>ใช้สมองเข้าเดียวกับ AUTO แต่ Lot / จำนวนไม้ / Stop / Profit เป็นค่าของ MANUAL · AUTO V20 จะไม่เข้ามาแก้ Position นี้</span></div>
                       : controlMode==="COUNTER"
-                        ? <div className="cc-bot-v2-engine-line"><ScenovaIcon name="trend" size={16}/><b>COUNTER · กฎเดียว</b><span>กราฟขึ้นเปิด SELL · กราฟลงเปิด BUY · BUY/SELL แยก Slot ตามจำนวนไม้ต่อฝั่ง · ค่อย ๆ เติมทีละไม้ตามระบบ pacing · ไม่มีตัวกรองการตัดสินใจอื่น</span></div>
+                        ? <div className="cc-bot-v2-engine-line"><ScenovaIcon name="trend" size={16}/><b>COUNTER · กฎเดียว</b><span>กราฟขึ้นเปิด SELL · กราฟลงเปิด BUY · จำนวนไม้รวมแบ่งครึ่งเป็น BUY/SELL · ค่อย ๆ เติมทีละไม้ตามระบบ pacing · ไม่มีตัวกรองการตัดสินใจอื่น</span></div>
                         : <div className="cc-bot-v2-engine-line"><ScenovaIcon name="spark" size={16}/><b>การเพิ่มสถานะอัตโนมัติ</b><span>EA กระจายจังหวะเพิ่มสถานะตาม ATR และแรงเคลื่อนไหวของตลาด</span></div>)}</div>
               </section>
 
@@ -6788,7 +6838,7 @@ function BotSettingsModal(props:any) {
               <dl>
                 <div><dt>Symbol</dt><dd>{props.symbol || "—"}</dd></div>
                 <div><dt>ทิศทาง</dt><dd>{controlMode==="COUNTER" ? "กราฟขึ้น → SELL · กราฟลง → BUY" : directionLabel}</dd></div>
-                <div><dt>การเปิดไม้</dt><dd>{controlMode==="FLIP_LOCK" ? "1 Position · "+activeLot.toFixed(2)+" Lot" : activeMaxPositions+" × "+activeLot.toFixed(2)+" Lot"}</dd></div>
+                <div><dt>การเปิดไม้</dt><dd>{controlMode==="FLIP_LOCK" ? "1 Position · "+activeLot.toFixed(2)+" Lot" : controlMode==="COUNTER" ? normalizeCounterTotalPositions(activeMaxPositions)+" ไม้รวม · BUY "+(normalizeCounterTotalPositions(activeMaxPositions)/2)+" / SELL "+(normalizeCounterTotalPositions(activeMaxPositions)/2) : activeMaxPositions+" × "+activeLot.toFixed(2)+" Lot"}</dd></div>
                 <div><dt>เป้ากำไร</dt><dd>{exitLabel}</dd></div>
                 <div><dt>Stop Loss</dt><dd>{slLabel}</dd></div>
                 <div><dt>EA Sync</dt><dd className="good">{props.syncLabel || "พร้อมส่งค่า"}</dd></div>
