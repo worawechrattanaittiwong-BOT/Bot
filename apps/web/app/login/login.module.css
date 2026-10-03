@@ -8,31 +8,32 @@
   min-height:100svh;
   overflow:hidden;
   color:#f7f5ff;
-  background:#05020c;
+  background:#050d1d;
 }
 .background{
-  position:absolute;
+  position:fixed;
   inset:0;
   z-index:0;
   display:block;
   width:100%;
   height:100%;
+  pointer-events:none;
+}
+.backgroundImage{
+  display:block;
+  width:100%;
+  height:100%;
   object-fit:cover;
   object-position:center center;
-  pointer-events:none;
-  filter:saturate(.96) contrast(1.06) brightness(.62) hue-rotate(12deg);
-  transform:scale(1.01);
 }
 .vignette{
-  position:absolute;
+  position:fixed;
   inset:0;
   z-index:1;
   pointer-events:none;
   background:
-    radial-gradient(circle at 78% 18%,rgba(113,61,255,.24),transparent 34%),
-    radial-gradient(circle at 20% 72%,rgba(31,122,255,.11),transparent 38%),
-    linear-gradient(90deg,rgba(4,2,13,.68) 0%,rgba(5,3,16,.35) 34%,rgba(4,2,13,.12) 56%,rgba(5,2,14,.48) 100%),
-    linear-gradient(180deg,rgba(4,2,12,.08) 0%,transparent 60%,rgba(4,2,12,.34) 100%);
+    linear-gradient(90deg,rgba(5,13,29,.28) 0%,rgba(5,13,29,.08) 48%,rgba(5,13,29,.16) 100%),
+    linear-gradient(180deg,rgba(5,13,29,.12) 0%,transparent 60%,rgba(5,13,29,.18) 100%);
 }
 .frame{
   position:relative;
@@ -141,4 +142,11 @@
   color:rgba(170,163,197,.7);
   font-weight:500;
   font-size:.82em;
+}
+
+@media (max-width:900px){
+  .backgroundImage{object-position:center top}
+  .vignette{
+    background:linear-gradient(180deg,rgba(5,13,29,.10),rgba(5,13,29,.20) 42%,rgba(5,13,29,.30) 100%);
+  }
 }

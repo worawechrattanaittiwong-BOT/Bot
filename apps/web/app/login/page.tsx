@@ -7,7 +7,26 @@ import { ScenovaIcon } from "../../components/ScenovaIcon";
 import styles from "./login.module.css";
 
 const LOGIN_EMAIL_KEY = "scenova_login_email";
-const LOGIN_BACKGROUND_URL = "/assets/scenova-login-landscape-v1.webp";
+const LOGIN_BACKGROUND_DESKTOP_URL = "/assets/scenova-login-globe-desktop-v1.webp";
+const LOGIN_BACKGROUND_MOBILE_URL = "/assets/scenova-login-globe-mobile-v1.webp";
+
+function LoginBackground() {
+  return (
+    <>
+      <picture className={styles.background} aria-hidden="true">
+        <source media="(max-width: 900px)" srcSet={LOGIN_BACKGROUND_MOBILE_URL} />
+        <img
+          className={styles.backgroundImage}
+          src={LOGIN_BACKGROUND_DESKTOP_URL}
+          alt=""
+          decoding="async"
+          fetchPriority="high"
+        />
+      </picture>
+      <div className={styles.vignette} aria-hidden="true" />
+    </>
+  );
+}
 
 export default function LoginPage() {
   const [register, setRegister] = useState(false);
@@ -172,7 +191,7 @@ export default function LoginPage() {
   if (checkingSession) {
     return (
       <main className={styles.page}>
-        <img className={styles.background} src={LOGIN_BACKGROUND_URL} alt="" aria-hidden="true" />
+        <LoginBackground />
         <section className={styles.sessionCard}>
           <ScenovaBrand className={styles.formLogo} />
           <div className={styles.sessionLoader}><span /> Checking your secure session...</div>
@@ -184,8 +203,7 @@ export default function LoginPage() {
 
   return (
     <main className={styles.page}>
-      <img className={styles.background} src={LOGIN_BACKGROUND_URL} alt="" aria-hidden="true" />
-      <div className={styles.vignette} aria-hidden="true" />
+      <LoginBackground />
       <a className={styles.skipLink} href="#access-form">Skip to sign in</a>
 
       <div className={styles.frame}>
