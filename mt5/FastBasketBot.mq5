@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.1.19"
-#define SCENOVA_EA_VERSION "1.1.19"
-#define SCENOVA_PRODUCT_VERSION "1.1.19"
+#property version   "1.1.20"
+#define SCENOVA_EA_VERSION "1.1.20"
+#define SCENOVA_PRODUCT_VERSION "1.1.20"
 #define SCENOVA_BUILD_ID "SOURCE"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_CONFIGURED_LOSS_ONLY_V1"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
@@ -187,6 +187,14 @@ input double          InpCounterPerPositionProfitMoney = 0.50;
 #define RACE_VOLUME_WINDOW_SECONDS 30
 #define RACE_SIGNAL_MAX_WAIT_SECONDS 60
 #define RACE_VOLUME_MIN_DOMINANCE 0.55
+// RACE 1.1.20 entry brain reads about 20 completed M5 candles. The legacy
+// 30-second sampler remains for compatibility telemetry only and does not
+// choose RACE entry, add, reversal or profit-run direction.
+#define RACE_M5_LOOKBACK_BARS 20
+#define RACE_FILL_INTERVAL_MS 2000
+#define RACE_FILL_PROGRESS_ATR 0.03
+#define RACE_ZONE_BREAK_BUFFER_ATR 0.12
+#define RACE_ZONE_NEAR_ATR 0.18
 #define RACE_AUTO_STOP_ATR_BASE 1.50
 #define RACE_AUTO_STOP_ATR_WIDE 1.60
 #define RACE_AUTO_STOP_ATR_FLOOR 1.00
@@ -404,6 +412,9 @@ bool   g_raceRecoveryWatch = false;
 string g_raceState = "IDLE";
 datetime g_raceCycleStartedAt = 0;
 datetime g_raceLastFillAt = 0;
+ulong  g_raceLastFillMs = 0;
+double g_raceLastFillPrice = 0.0;
+int    g_raceLastFillDirection = 0;
 ulong  g_raceLastExitBurstMs = 0;
 datetime g_raceExitCandidateSince = 0;
 double g_raceExitCandidatePeakAdverse = 0.0;
@@ -415,12 +426,9 @@ double g_racePerPositionProfitMoney = 0.50;
 double g_counterPerPositionProfitMoney = 0.50;
 datetime g_counterOrderWindowStart = 0;
 int      g_counterOrdersInWindow = 0;
-// RACE uses a rolling 30-second order-flow window as the primary side signal.
-// Exchange/deal-side flags are used when the broker publishes them; quote-only
-// symbols fall back to uptick/downtick tick-volume counts. A modest 55%
-// dominance floor avoids acting on near-ties without turning RACE into a slow
-// confidence-gated system. Intact Demand/Supply zones may still override only
-// at the boundary. Trend/EMA/timeframes stay excluded from RACE side selection.
+// Legacy 30-second order-flow sampler. Retained only for backward-compatible
+// telemetry/history. RACE 1.1.20 trading decisions do NOT read this window;
+// COUNTER keeps its own existing 2-second Bid helper unchanged.
 datetime g_raceVolumeBucketSecond[RACE_VOLUME_HISTORY_SECONDS];
 double   g_raceVolumeBucketBuy[RACE_VOLUME_HISTORY_SECONDS];
 double   g_raceVolumeBucketSell[RACE_VOLUME_HISTORY_SECONDS];
@@ -3332,6 +3340,9 @@ void ResetRaceRuntime()
    g_raceState = "IDLE";
    g_raceCycleStartedAt = 0;
    g_raceLastFillAt = 0;
+   g_raceLastFillMs = 0;
+   g_raceLastFillPrice = 0.0;
+   g_raceLastFillDirection = 0;
    g_raceLastExitBurstMs = 0;
    g_raceVNextFlowScore = 0.0;
    g_raceVNextStructureDirection = 0;
@@ -3378,13 +3389,11 @@ int RaceFilledUnits()
 
 bool RacePerPositionDualDirectionEnabled()
 {
-   if(g_raceProfitTargetMode!="POSITION" ||
-      g_racePerPositionProfitMoney<=0.0)
-      return false;
-
-   ENUM_ACCOUNT_MARGIN_MODE marginMode=
-      (ENUM_ACCOUNT_MARGIN_MODE)AccountInfoInteger(ACCOUNT_MARGIN_MODE);
-   return marginMode==ACCOUNT_MARGIN_MODE_RETAIL_HEDGING;
+   // RACE 1.1.20 owns one structural side at a time in every profit mode.
+   // A confirmed Demand/Supply reversal or break closes the old RACE exposure
+   // first; the next flat tick may follow the new side. This prevents a RACE
+   // cycle from trapping itself with simultaneous BUY and SELL inventory.
+   return false;
 }
 
 bool ManageRacePerPositionHedgeBasket(double momentum)
@@ -3637,6 +3646,221 @@ bool RaceZonePriorityActive(
    // A nearby zone must be stronger (70+) before it can override tick flow.
    return inside || (score>=70.0 && near);
 }
+
+int RaceM5TwentyBarRegime(double &scoreOut)
+{
+   scoreOut=0.0;
+
+   MqlRates rates[];
+   ArraySetAsSeries(rates,true);
+   int copied=CopyRates(_Symbol,PERIOD_M5,1,RACE_M5_LOOKBACK_BARS,rates);
+   if(copied<RACE_M5_LOOKBACK_BARS)
+      return 0;
+
+   double atrPrice=MathMax(
+      _Point*8.0,
+      AverageTrueRangePoints(PERIOD_M5,g_atrPeriod)*_Point
+   );
+   double stepNoise=MathMax(_Point*2.0,atrPrice*0.025);
+
+   int upSteps=0;
+   int downSteps=0;
+   int pauseSteps=0;
+   for(int i=0;i<copied-1;i++)
+   {
+      double delta=rates[i].close-rates[i+1].close;
+      if(delta>stepNoise) upSteps++;
+      else if(delta<-stepNoise) downSteps++;
+      else pauseSteps++;
+   }
+
+   double netMove=rates[0].close-rates[copied-1].close;
+   double netAtr=atrPrice>0.0 ? netMove/atrPrice : 0.0;
+   double imbalance=(double)(upSteps-downSteps)/(double)MathMax(1,copied-1);
+   scoreOut=MathMax(-100.0,MathMin(100.0,netAtr*28.0+imbalance*55.0));
+
+   // "ลง ลง ลง พัก ลง ลง" remains a down regime even with pauses. Alternating
+   // down/up/down/up stays neutral and is handled as a mean-reversion range.
+   bool downRegime=
+      downSteps>=9 &&
+      downSteps>=upSteps+3 &&
+      netAtr<=-0.35;
+   bool upRegime=
+      upSteps>=9 &&
+      upSteps>=downSteps+3 &&
+      netAtr>=0.35;
+
+   if(downRegime) return -1;
+   if(upRegime) return 1;
+   return 0;
+}
+
+int RaceM5LiveSwingDirection()
+{
+   MqlRates current[];
+   ArraySetAsSeries(current,true);
+   if(CopyRates(_Symbol,PERIOD_M5,0,1,current)<1)
+      return 0;
+
+   MqlTick tick;
+   if(!SymbolInfoTick(_Symbol,tick))
+      return 0;
+
+   double price=(tick.bid+tick.ask)*0.5;
+   double atrPrice=MathMax(
+      _Point*8.0,
+      AverageTrueRangePoints(PERIOD_M5,g_atrPeriod)*_Point
+   );
+   double noisePrice=MathMax(
+      MathMax(_Point*2.0,CurrentSpreadPoints()*_Point),
+      atrPrice*0.035
+   );
+   double delta=price-current[0].open;
+
+   if(delta>noisePrice) return 1;
+   if(delta<-noisePrice) return -1;
+
+   // When the forming M5 is still too small, use the latest completed candle
+   // only as a stable fallback; never fall back to the two-second Bid signal.
+   return RaceM5CandleDirection();
+}
+
+int RaceConfirmedZoneBreakDirection()
+{
+   MqlTick tick;
+   if(!SymbolInfoTick(_Symbol,tick))
+      return 0;
+
+   MqlRates closed[];
+   ArraySetAsSeries(closed,true);
+   if(CopyRates(_Symbol,PERIOD_M5,1,1,closed)<1)
+      return 0;
+
+   double atrPrice=MathMax(
+      _Point*8.0,
+      AverageTrueRangePoints(PERIOD_M5,g_atrPeriod)*_Point
+   );
+   double buffer=atrPrice*RACE_ZONE_BREAK_BUFFER_ATR;
+   double price=(tick.bid+tick.ask)*0.5;
+
+   bool demandValid=
+      g_demandZoneScore>=50.0 &&
+      g_demandZoneLow>0.0 &&
+      g_demandZoneHigh>=g_demandZoneLow;
+   bool supplyValid=
+      g_supplyZoneScore>=50.0 &&
+      g_supplyZoneLow>0.0 &&
+      g_supplyZoneHigh>=g_supplyZoneLow;
+
+   // A wick alone is not a break. The latest completed M5 must close beyond
+   // the far edge with buffer and live price must still be outside the zone.
+   if(demandValid &&
+      closed[0].close<g_demandZoneLow-buffer &&
+      price<g_demandZoneLow-buffer)
+      return -1;
+
+   if(supplyValid &&
+      closed[0].close>g_supplyZoneHigh+buffer &&
+      price>g_supplyZoneHigh+buffer)
+      return 1;
+
+   return 0;
+}
+
+int RaceHeldZoneReversalDirection()
+{
+   MqlTick tick;
+   if(!SymbolInfoTick(_Symbol,tick))
+      return 0;
+
+   double price=(tick.bid+tick.ask)*0.5;
+   double atrPrice=MathMax(
+      _Point*8.0,
+      AverageTrueRangePoints(PERIOD_M5,g_atrPeriod)*_Point
+   );
+   int breakDirection=RaceConfirmedZoneBreakDirection();
+
+   bool demandHeld=
+      breakDirection!=-1 &&
+      g_demandZoneScore>=50.0 &&
+      g_demandZoneLow>0.0 &&
+      g_demandZoneHigh>=g_demandZoneLow &&
+      PriceInsideOrNearZone(
+         price,
+         g_demandZoneLow,
+         g_demandZoneHigh,
+         atrPrice*RACE_ZONE_NEAR_ATR
+      );
+
+   bool supplyHeld=
+      breakDirection!=1 &&
+      g_supplyZoneScore>=50.0 &&
+      g_supplyZoneLow>0.0 &&
+      g_supplyZoneHigh>=g_supplyZoneLow &&
+      PriceInsideOrNearZone(
+         price,
+         g_supplyZoneLow,
+         g_supplyZoneHigh,
+         atrPrice*RACE_ZONE_NEAR_ATR
+      );
+
+   if(demandHeld && supplyHeld)
+   {
+      double demandMid=(g_demandZoneLow+g_demandZoneHigh)*0.5;
+      double supplyMid=(g_supplyZoneLow+g_supplyZoneHigh)*0.5;
+      return MathAbs(price-demandMid)<=MathAbs(price-supplyMid) ? 1 : -1;
+   }
+   if(demandHeld) return 1;
+   if(supplyHeld) return -1;
+   return 0;
+}
+
+bool RaceFillPacingReady(int direction)
+{
+   if(direction==0)
+      return false;
+
+   int positions=BasketPositionCount();
+   if(positions<=0 || g_raceLastFillMs==0)
+      return true;
+
+   ulong nowMs=GetTickCount64();
+   if(nowMs-g_raceLastFillMs<(ulong)RACE_FILL_INTERVAL_MS)
+   {
+      g_executionStatus="RACE_FILL_PACING";
+      return false;
+   }
+
+   // A new structural side after the old cycle has flattened is treated as a
+   // fresh first fill. Same-side additions need real favorable price progress.
+   if(g_raceLastFillDirection!=direction || g_raceLastFillPrice<=0.0)
+      return true;
+
+   MqlTick tick;
+   if(!SymbolInfoTick(_Symbol,tick))
+      return false;
+
+   double currentPrice=direction>0 ? tick.ask : tick.bid;
+   double atrPoints=AverageTrueRangePoints(PERIOD_M5,g_atrPeriod);
+   if(atrPoints<=0.0)
+      return false;
+
+   double requiredPoints=MathMax(
+      MathMax(1.0,CurrentSpreadPoints()*0.50),
+      atrPoints*RACE_FILL_PROGRESS_ATR
+   );
+   double progressPoints=direction>0
+      ? (currentPrice-g_raceLastFillPrice)/_Point
+      : (g_raceLastFillPrice-currentPrice)/_Point;
+
+   if(progressPoints+0.00000001<requiredPoints)
+   {
+      g_executionStatus="RACE_WAIT_PRICE_PROGRESS";
+      return false;
+   }
+   return true;
+}
+
 
 #include "include\\RaceFlowV2.mqh"
 #include "include\\RaceStructureV2.mqh"
@@ -4182,15 +4406,51 @@ int RaceAnalysisDirection(double momentum)
    if(g_entryMode == ENTRY_BUY_ONLY) return 1;
    if(g_entryMode == ENTRY_SELL_ONLY) return -1;
 
-   int direction=RaceLivePriceDirection();
+   // RACE 1.1.20: M5 structure is the brain. Refresh Demand/Supply only while
+   // RACE owns execution; AUTO/MANUAL/COUNTER/FLIP/ZERO decision paths are not
+   // called or modified here.
+   RefreshMarketContext(false);
 
-   // Keep the old analysis modules in the codebase for telemetry/exit logic,
-   // but they no longer participate in RACE entry side selection.
-   g_raceVNextFlowScore=0.0;
-   g_raceVNextStructureDirection=0;
-   g_raceVNextRejectionDirection=0;
+   int breakDirection=RaceConfirmedZoneBreakDirection();
+   int zoneReversal=RaceHeldZoneReversalDirection();
+
+   double regimeScore=0.0;
+   int regimeDirection=RaceM5TwentyBarRegime(regimeScore);
+   int liveSwing=RaceM5LiveSwingDirection();
+
+   int direction=0;
+   string phase="M5_SIDEWAY";
+
+   if(breakDirection!=0)
+   {
+      // Confirmed Demand/Supply break: follow the break.
+      direction=breakDirection;
+      phase=breakDirection>0 ? "SUPPLY_BREAK_BUY" : "DEMAND_BREAK_SELL";
+   }
+   else if(zoneReversal!=0)
+   {
+      // Intact boundary wins over trend chasing: Demand => BUY, Supply => SELL.
+      direction=zoneReversal;
+      phase=zoneReversal>0 ? "DEMAND_HOLD_BUY" : "SUPPLY_HOLD_SELL";
+   }
+   else if(regimeDirection!=0)
+   {
+      // A sequence such as down/down/down/pause/down/down follows the trend.
+      direction=regimeDirection;
+      phase=regimeDirection>0 ? "M5_20_UP_CONTINUATION" : "M5_20_DOWN_CONTINUATION";
+   }
+   else if(liveSwing!=0)
+   {
+      // Alternating M5 sequence is treated as a range: fade the current swing.
+      direction=-liveSwing;
+      phase=direction>0 ? "M5_SIDEWAY_BUY_DIP" : "M5_SIDEWAY_SELL_RALLY";
+   }
+
+   g_raceVNextFlowScore=regimeScore;
+   g_raceVNextStructureDirection=regimeDirection;
+   g_raceVNextRejectionDirection=zoneReversal;
    g_raceVNextDecisionScore=(double)direction;
-   g_raceVNextLegPhase="LIVE_PRICE";
+   g_raceVNextLegPhase=phase;
 
    return direction;
 }
@@ -4221,6 +4481,20 @@ bool RaceWrongDirectionConfirmed(
       return false;
    }
 
+   // Demand/Supply break is already confirmed by a completed M5 close plus a
+   // live price beyond the buffered far edge. This is a structural invalidation,
+   // not a fast tick reversal, so the old side may be abandoned immediately.
+   RefreshMarketContext(false);
+   int zoneBreakDirection=RaceConfirmedZoneBreakDirection();
+   if(zoneBreakDirection!=0 && zoneBreakDirection==-direction)
+   {
+      RaceResetExitCandidate();
+      reasonOut=direction>0
+         ? "RACE_DEMAND_BREAK_EXIT"
+         : "RACE_SUPPLY_BREAK_EXIT";
+      return true;
+   }
+
    datetime now=TimeCurrent();
    if(g_raceCycleStartedAt<=0 ||
       now-g_raceCycleStartedAt<RACE_EXIT_CYCLE_GRACE_SECONDS)
@@ -4236,8 +4510,6 @@ bool RaceWrongDirectionConfirmed(
       return false;
    }
 
-   // Do not confuse spread/cost noise with a failed trade. RACE only starts a
-   // soft-loss confirmation after the move is beyond its live exposure noise.
    RaceV1UpdateExposureTelemetry(direction,0.0);
    double adversePoints=RaceV1AdversePoints(direction);
    double noiseFloor=MathMax(
@@ -4250,12 +4522,14 @@ bool RaceWrongDirectionConfirmed(
       return false;
    }
 
-   // A soft exit requires BOTH a broken M5 structure and the 30-second order
-   // flow to have flipped. Either signal by itself is observation-only.
-   int rawVolumeDirection=RaceVolumeDirection();
-   bool oppositeVolume=rawVolumeDirection!=0 && rawVolumeDirection==-direction;
+   // Ordinary soft exit is deliberately slower: require broken M5 structure
+   // plus an opposite 20-bar M5 regime. No two-second or 30-second flow can
+   // close a RACE Basket.
+   double regimeScore=0.0;
+   int regimeDirection=RaceM5TwentyBarRegime(regimeScore);
+   bool oppositeRegime=regimeDirection!=0 && regimeDirection==-direction;
    bool structureBroken=RaceV2StructureBroken(direction);
-   if(!oppositeVolume || !structureBroken)
+   if(!oppositeRegime || !structureBroken)
    {
       RaceResetExitCandidate();
       return false;
@@ -4272,8 +4546,8 @@ bool RaceWrongDirectionConfirmed(
       g_raceExitCandidateSince=now;
       g_raceExitCandidatePeakAdverse=adversePoints;
       reasonOut=severe
-         ? "RACE_SOFT_EXIT_STRONG_CONFIRM"
-         : "RACE_SOFT_EXIT_CONFIRM";
+         ? "RACE_M5_REVERSAL_STRONG_CONFIRM"
+         : "RACE_M5_REVERSAL_CONFIRM";
       return false;
    }
 
@@ -4283,22 +4557,36 @@ bool RaceWrongDirectionConfirmed(
    if(now-g_raceExitCandidateSince<confirmSeconds)
    {
       reasonOut=severe
-         ? "RACE_SOFT_EXIT_STRONG_CONFIRM"
-         : "RACE_SOFT_EXIT_CONFIRM";
+         ? "RACE_M5_REVERSAL_STRONG_CONFIRM"
+         : "RACE_M5_REVERSAL_CONFIRM";
       return false;
    }
 
    reasonOut=severe
-      ? "RACE_SOFT_EXIT_STRONG_REVERSAL"
-      : "RACE_SOFT_EXIT_STRUCTURE_FLOW";
+      ? "RACE_M5_STRONG_REVERSAL"
+      : "RACE_M5_STRUCTURE_REVERSAL";
    return true;
 }
 
 bool RaceFlowStillRunning(int direction, double momentum)
 {
-   // RACE profit-run continuation follows the same 30-second volume majority
-   // used for entry. Trend, EMA and candle direction do not participate.
-   return RaceVolumeDirection() == direction;
+   // Profit management must not dump a trade on short noise. Keep running
+   // unless the M5 thesis has genuinely turned against the open side.
+   RefreshMarketContext(false);
+
+   int zoneBreakDirection=RaceConfirmedZoneBreakDirection();
+   if(zoneBreakDirection!=0 && zoneBreakDirection==-direction)
+      return false;
+
+   double regimeScore=0.0;
+   int regimeDirection=RaceM5TwentyBarRegime(regimeScore);
+   if(regimeDirection==0)
+      return true;
+
+   if(regimeDirection==direction)
+      return true;
+
+   return !RaceV2StructureBroken(direction);
 }
 
 double RaceAutoAtrStopMultiplier(double atrPoints)
@@ -4687,6 +4975,9 @@ bool ProcessRaceFill(int direction)
       g_executionStatus = "RACE_TRADE_PERMISSION";
       return false;
    }
+   if(!RaceFillPacingReady(direction))
+      return false;
+
    if(!CanSendOrder())
    {
       g_executionStatus = "RACE_ORDER_RATE_LIMIT";
@@ -4728,13 +5019,18 @@ bool ProcessRaceFill(int direction)
       projectedLossLimit > 0.0 &&
       g_raceExposureNoiseMoney > projectedLossLimit * 0.80;
 
-   g_entryModel = "RACE_LIVE_BID_2S";
-   g_entryTrigger = direction > 0 ? "RACE_PRICE_FLOW_BUY" : "RACE_PRICE_FLOW_SELL";
-   g_entryQuality = "RACE_LIVE_PRICE";
+   g_entryModel = "RACE_M5_20_STRUCTURE";
+   g_entryTrigger = direction > 0 ? "RACE_M5_BUY" : "RACE_M5_SELL";
+   g_entryQuality = g_raceVNextLegPhase;
    g_entryQualityScore = 0.0;
    g_raceDirection = direction;
    if(g_raceCycleStartedAt <= 0)
       g_raceCycleStartedAt = TimeCurrent();
+
+   MqlTick raceFillTick;
+   double raceRequestedPrice=0.0;
+   if(SymbolInfoTick(_Symbol,raceFillTick))
+      raceRequestedPrice=direction>0 ? raceFillTick.ask : raceFillTick.bid;
 
    bool accepted = SendMarketOrder(direction);
    RegisterOrderRequest();
@@ -4742,6 +5038,9 @@ bool ProcessRaceFill(int direction)
    {
       RaceReentryMarkExposure();
       g_raceLastFillAt = TimeCurrent();
+      g_raceLastFillMs = GetTickCount64();
+      g_raceLastFillPrice = raceRequestedPrice;
+      g_raceLastFillDirection = direction;
       RaceResetExitCandidate();
       int after = RaceFilledUnits();
       g_raceState = after >= g_maxPositions ? "FULL" : "FILLING";
@@ -4768,14 +5067,12 @@ bool StartRaceCycle(double momentum)
    if(BasketPositionCount() > 0 || RescuePositionCount() > 0)
       return false;
 
-   // No extra analyzer runs before a RACE entry. Direction is only the visible
-   // two-second Bid flow, followed by operational safety in ProcessRaceFill().
    ResetRaceRuntime();
 
    int direction=RaceAnalysisDirection(momentum);
    if(direction==0)
    {
-      g_executionStatus="RACE_PRICE_FLOW_WAIT";
+      g_executionStatus="RACE_M5_STRUCTURE_WAIT";
       return false;
    }
 
@@ -4852,9 +5149,9 @@ bool ManageRaceBasket(double momentum)
    }
 
    // RACE loss management remains isolated from every other mode. Broker SL
-   // and configured money limits stay authoritative hard boundaries; RACE may
-   // additionally soft-exit only after M5 structure is broken AND 30-second
-   // order flow has flipped for a confirmed period.
+   // and configured money limits stay authoritative hard boundaries. Ordinary
+   // soft exits require a confirmed M5 structure/regime reversal; Demand/Supply
+   // breaks are handled as explicit structural invalidations.
    RaceV1UpdateExposureTelemetry(direction,0.0);
    g_raceExposureRiskMismatch =
       lossLimit > 0.0 &&
@@ -4907,9 +5204,8 @@ bool ManageRaceBasket(double momentum)
    }
 
    // BASKET mode treats the configured money target as a PROFIT ARM. Once the
-   // live MT5 Basket reaches it, RACE stops adding exposure and lets a healthy
-   // 30-second flow run. POSITION mode keeps its explicit per-ticket close
-   // semantics unchanged.
+   // live MT5 Basket reaches it, RACE stops adding exposure and lets the M5
+   // structural thesis run. POSITION mode keeps its per-ticket target semantics.
    bool raceBasketProfitTarget =
       g_raceProfitTargetMode=="BASKET" &&
       g_raceCloseAllProfitMoney>0.0;
@@ -4967,7 +5263,7 @@ bool ManageRaceBasket(double momentum)
    }
 
    // Per-position mode closes only the RACE ticket that reached its configured
-   // money target. Other RACE tickets continue under the same 30-second engine.
+   // money target. New fills still obey the same one-side M5 structure engine.
    int harvested = racePerPositionProfitTarget
       ? RaceHarvestProfitablePositions()
       : 0;
@@ -4989,50 +5285,59 @@ bool ManageRaceBasket(double momentum)
    }
 
 
-   // Direction still comes from the rolling 30-second BUY/SELL pressure
-   // window. A pressure flip never adds on the stale side. Negative baskets
-   // may soft-exit only through the confirmed structure+flow rule above.
-   int volumeDirection = RaceAnalysisDirection(momentum);
-   if(volumeDirection != 0 && volumeDirection != direction)
-   {
-      if(RacePerPositionDualDirectionEnabled())
-      {
-         if(!filling)
-         {
-            g_raceState="FULL_WAIT_PROFIT";
-            g_executionStatus="RACE_WAIT_PER_POSITION_TARGET";
-            return true;
-         }
-         g_raceState="FILLING";
-         ProcessRaceFill(volumeDirection);
-         return true;
-      }
+   // Refresh RACE-only structural context before add/reversal decisions.
+   RefreshMarketContext(false);
+   int breakDirection=RaceConfirmedZoneBreakDirection();
+   int zoneReversalDirection=RaceHeldZoneReversalDirection();
+   int signalDirection=RaceAnalysisDirection(momentum);
 
-      if(cycleProfit >= 0.0 && !raceStrictProfitTarget)
-      {
-         RaceCloseCycle("RACE_VOLUME_ROLLOVER");
-         return true;
-      }
-      g_raceRecoveryWatch = true;
-      g_raceState = "ROLLOVER_WAIT";
-      g_executionStatus = volumeDirection > 0
-         ? "RACE_VOLUME_ROLLOVER_WAIT_BUY"
-         : "RACE_VOLUME_ROLLOVER_WAIT_SELL";
+   // Demand/Supply owns an immediate structural handoff:
+   // - intact Demand against a SELL => close SELL, then BUY on the next flat tick
+   // - intact Supply against a BUY => close BUY, then SELL
+   // - confirmed zone break => abandon the failed reversal side and follow break
+   int structuralHandoff=0;
+   string structuralReason="NONE";
+   if(breakDirection!=0 && breakDirection!=direction)
+   {
+      structuralHandoff=breakDirection;
+      structuralReason=direction>0
+         ? "RACE_DEMAND_BREAK_FOLLOW_SELL"
+         : "RACE_SUPPLY_BREAK_FOLLOW_BUY";
+   }
+   else if(zoneReversalDirection!=0 && zoneReversalDirection!=direction)
+   {
+      structuralHandoff=zoneReversalDirection;
+      structuralReason=zoneReversalDirection>0
+         ? "RACE_DEMAND_HOLD_REVERSAL_BUY"
+         : "RACE_SUPPLY_HOLD_REVERSAL_SELL";
+   }
+
+   if(structuralHandoff!=0)
+   {
+      RaceCloseCycle(structuralReason);
       return true;
    }
-   // Max Positions remains the requested RACE fill target, but it can no longer
-   // block an already-profitable ticket from being banked first.
+
+   // A non-zone opposite signal in a sideway or transition only pauses adds.
+   // It does not dump the open Basket. Ordinary exit still needs the slower
+   // M5 structure/regime confirmation above.
+   if(signalDirection!=0 && signalDirection!=direction)
+   {
+      g_raceRecoveryWatch=true;
+      g_raceState="STRUCTURE_WAIT";
+      g_executionStatus="RACE_OPPOSITE_M5_WAIT";
+      return true;
+   }
+
    if(filling)
    {
-      if(volumeDirection==0)
+      if(signalDirection==0)
       {
-         g_raceState="PRICE_FLOW_WAIT";
-         g_executionStatus="RACE_PRICE_FLOW_WAIT";
+         g_raceState="M5_STRUCTURE_WAIT";
+         g_executionStatus="RACE_M5_STRUCTURE_WAIT";
          return true;
       }
 
-      // Existing floating/cycle P/L is not an entry gate. Analysis owns the
-      // side and Max Positions owns the requested fill count.
       g_raceState="FILLING";
       ProcessRaceFill(direction);
       return true;
@@ -5065,7 +5370,7 @@ bool ManageRaceBasket(double momentum)
       g_executionStatus = racePerPositionProfitTarget
          ? "RACE_WAIT_PER_POSITION_TARGET"
          : "RACE_WAIT_BASKET_TARGET";
-      if(filling && volumeDirection == direction)
+      if(filling && signalDirection == direction)
          ProcessRaceFill(direction);
       return true;
    }
