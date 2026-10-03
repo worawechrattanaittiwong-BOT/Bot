@@ -200,5 +200,6 @@ internal sealed class WorkerTelemetry
     public bool TemplateReady { get; set; }
     public string Version { get; set; } = WorkerLoop.Version;
     public string SetupVersion { get; set; } = "";
+    public IReadOnlyList<BrokerServerDirectoryEntry> BrokerServers { get; set; } = Array.Empty<BrokerServerDirectoryEntry>();
     public IReadOnlyList<CloudInstanceDiagnostic> Instances { get; set; } = Array.Empty<CloudInstanceDiagnostic>();
 }
