@@ -196,14 +196,21 @@ export class AdminController {
              'actual_state',bi3.actual_state,
              'desired_state',bi3.desired_state,
              'positions',COALESCE(NULLIF(bi3.metrics->>'positions','')::int,0),
+             'pending_orders',COALESCE(NULLIF(bi3.metrics->>'accountScenovaPendingOrders','')::int,0),
              'account_number',a3.account_number,
-             'broker_server',a3.broker_server
+             'broker_server',a3.broker_server,
+             'active_symbol',bi3.metrics->>'symbol',
+             'requested_symbol',COALESCE(NULLIF(bs3.settings->>'startupSymbol',''),NULLIF(bs3.settings->>'symbol','')),
+             'symbol_selected_by',bs3.settings->>'symbolSelectedBy',
+             'market_watch_symbols',COALESCE(bi3.metrics->'marketWatchSymbols','[]'::jsonb),
+             'provisioning_error',bi3.provisioning_error
            )
            ORDER BY ls3.mode,ls3.slot_number
          ) AS customer_slots
          FROM license_slots ls3
          LEFT JOIN bot_instances bi3 ON bi3.slot_id=ls3.id
          LEFT JOIN mt5_accounts a3 ON a3.id=bi3.mt5_account_id
+         LEFT JOIN bot_settings bs3 ON bs3.bot_instance_id=bi3.id
          WHERE ls3.assigned_user_id=u.id
            AND ls3.status<>'DELETED'
        ) cs ON true
@@ -1376,6 +1383,159 @@ export class AdminController {
        LIMIT 1`,
       [slotId, userId]
     );
+  }
+
+  @Post("slots/select-symbol")
+  async selectCustomerSlotSymbol(
+    @Req() req: any,
+    @Body() body: { userId: string; slotId: string; symbol: string }
+  ) {
+    const slot = await this.adminCustomerSlot(body.userId, body.slotId);
+    if (!slot) throw new ConflictException("ไม่พบ Slot ของลูกค้ารายนี้");
+    if (!slot.instance_id || !slot.mt5_account_id) {
+      throw new ConflictException("Slot นี้ยังไม่ได้เชื่อมบัญชี MT5");
+    }
+
+    const requestedSymbol = String(body.symbol || "").trim();
+    if (!requestedSymbol || requestedSymbol.length > 64 || !/^[A-Za-z0-9._#-]+$/.test(requestedSymbol)) {
+      throw new ConflictException("Symbol ไม่ถูกต้อง");
+    }
+
+    const positions = Math.max(0, Number(slot.positions || 0));
+    const pendingOrders = Math.max(0, Number(slot.pending_orders || 0));
+    if (
+      positions > 0 || pendingOrders > 0 ||
+      String(slot.actual_state || "").toUpperCase() === "RUNNING" ||
+      String(slot.desired_state || "").toUpperCase() === "RUNNING"
+    ) {
+      throw new ConflictException("กรุณาหยุดบอทและให้ Position / Pending Order เป็น 0 ก่อนเปลี่ยน Symbol");
+    }
+
+    const mode = String(slot.mode || "").toUpperCase();
+    if (mode === "CLOUD") {
+      if (!slot.runner_id) throw new ConflictException("Cloud VPS Slot นี้ยังไม่ได้เชื่อม Worker");
+      if (String(slot.runtime_stop_state || "NONE").toUpperCase() !== "NONE") {
+        throw new ConflictException("Cloud VPS กำลังหยุด Runtime อยู่ กรุณารอให้สถานะกลับมา NONE ก่อน");
+      }
+      const worker = await this.db.one(
+        "SELECT last_seen_at,telemetry FROM worker_nodes WHERE runner_id=$1",
+        [slot.runner_id]
+      );
+      const workerOnline = Boolean(
+        worker?.last_seen_at && Date.now() - new Date(worker.last_seen_at).getTime() <= 30_000
+      );
+      if (!workerOnline) throw new ConflictException("Cloud Worker Offline กรุณาให้ Server กลับมา Online ก่อนเปลี่ยน Symbol");
+      const workerVersion = String(worker?.telemetry?.version || "");
+      if (!versionAtLeast(workerVersion, "2.2.29")) {
+        throw new ConflictException("Cloud Worker ยังไม่รองรับ Exact Symbol · กรุณาอัปเดต Server เป็น Worker 2.2.29+ ก่อน");
+      }
+    } else if (mode === "LOCAL") {
+      const agentOnline = Boolean(
+        slot.agent_last_seen_at && Date.now() - new Date(slot.agent_last_seen_at).getTime() <= 90_000
+      );
+      if (!agentOnline) throw new ConflictException("Windows Agent ของ Slot นี้ยัง Offline กรุณาเปิด Agent ก่อนเปลี่ยน Symbol");
+    } else {
+      throw new ConflictException("โหมด Slot ไม่ถูกต้อง");
+    }
+
+    const requestedAt = new Date().toISOString();
+    await this.db.query(
+      `INSERT INTO bot_settings(bot_instance_id,settings,updated_at)
+       VALUES($1,jsonb_build_object(
+         'startupSymbol',$2::text,'symbol',$2::text,
+         'symbolResolutionMode','EXACT','symbolSelectedBy','ADMIN'
+       ),now())
+       ON CONFLICT(bot_instance_id)
+       DO UPDATE SET settings=jsonb_set(
+         jsonb_set(
+           jsonb_set(
+             jsonb_set(COALESCE(bot_settings.settings,'{}'::jsonb),'{startupSymbol}',to_jsonb($2::text),true),
+             '{symbol}',to_jsonb($2::text),true
+           ),
+           '{symbolResolutionMode}',to_jsonb('EXACT'::text),true
+         ),
+         '{symbolSelectedBy}',to_jsonb('ADMIN'::text),true
+       ),updated_at=now()`,
+      [slot.instance_id, requestedSymbol]
+    );
+
+    await this.db.query(
+      `UPDATE bot_instances
+       SET desired_state=$2,
+           metrics=COALESCE(metrics,'{}'::jsonb) || jsonb_build_object(
+             'requestedStartupSymbol',$3::text,
+             'symbolChangeStatus','QUEUED',
+             'symbolChangeRequestedAt',$4::text,
+             'symbolChangeSource','ADMIN_EXACT'
+           )
+       WHERE id=$1`,
+      [slot.instance_id, mode === "CLOUD" ? "STOPPED" : "SAFE_STOP", requestedSymbol, requestedAt]
+    );
+
+    let actionId: string | null = null;
+    if (mode === "CLOUD") {
+      await this.db.query(
+        `INSERT INTO worker_commands(runner_id,bot_instance_id,execution_generation,command,status)
+         SELECT $1,$2,$3,'RELOAD_INSTANCE','PENDING'
+         WHERE NOT EXISTS (
+           SELECT 1 FROM worker_commands
+           WHERE bot_instance_id=$2
+             AND execution_generation=$3
+             AND command='RELOAD_INSTANCE'
+             AND status IN ('PENDING','DELIVERED')
+         )`,
+        [slot.runner_id, slot.instance_id, Number(slot.execution_generation || 1)]
+      );
+    } else {
+      actionId = randomUUID();
+      await this.db.query(
+        `UPDATE bot_instances
+         SET metrics=COALESCE(metrics,'{}'::jsonb) || jsonb_build_object(
+           'manualMt5ActionName','CONNECT_MT5',
+           'manualMt5ActionId',$2::text,
+           'manualMt5ActionRequestedAt',$3::text,
+           'manualMt5ActionStatus','PENDING',
+           'manualMt5ActionSource','ADMIN_EXACT_SYMBOL',
+           'manualMt5ActionMessage',$4::text
+         )
+         WHERE id=$1`,
+        [slot.instance_id, actionId, requestedAt, "Admin เลือก Symbol " + requestedSymbol + " ให้ Slot นี้"]
+      );
+      await this.db.query(
+        "UPDATE bot_commands SET status='ACKED',acked_at=now() WHERE bot_instance_id=$1 AND status IN ('PENDING','DELIVERED') AND command IN ('START','SAFE_STOP')",
+        [slot.instance_id]
+      );
+      await this.db.query(
+        "INSERT INTO bot_commands(bot_instance_id,command) VALUES($1,'SAFE_STOP')",
+        [slot.instance_id]
+      );
+    }
+
+    const actor = req.user?.sub ? "OWNER:" + String(req.user.sub) : "ADMIN_KEY";
+    await this.audit(actor, "ADMIN_SELECT_SLOT_SYMBOL", "bot_instance", slot.instance_id, {
+      userId: body.userId,
+      userCode: slot.user_code,
+      slotId: slot.id,
+      mode,
+      mt5AccountId: slot.mt5_account_id,
+      accountNumber: slot.account_number || null,
+      brokerServer: slot.broker_server || null,
+      requestedSymbol,
+      resolutionMode: "EXACT",
+      actionId
+    });
+
+    return {
+      ok: true,
+      slotId: slot.id,
+      mode,
+      symbol: requestedSymbol,
+      resolutionMode: "EXACT",
+      actionId,
+      message: mode === "CLOUD"
+        ? "กำหนด " + requestedSymbol + " ให้ Slot แล้ว · Cloud Worker กำลัง Reload MT5 ด้วย Symbol นี้ตรง ๆ"
+        : "กำหนด " + requestedSymbol + " ให้ Slot แล้ว · Windows Agent กำลังเชื่อม MT5 ใหม่ด้วย Symbol นี้"
+    };
   }
 
   @Post("slots/refresh-symbol")
