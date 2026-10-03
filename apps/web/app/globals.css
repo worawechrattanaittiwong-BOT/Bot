@@ -9439,7 +9439,16 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
 }
 
 .cloud-mt5-server-input-wrap .input{
-  padding-right:48px!important;
+  padding-right:14px!important;
+}
+
+.cloud-mt5-server-note{
+  display:block;
+  margin-top:7px;
+  color:#91a0b6;
+  font-size:11px;
+  font-weight:650;
+  line-height:1.45;
 }
 
 .cloud-mt5-server-toggle{
