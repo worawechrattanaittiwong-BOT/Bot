@@ -2,7 +2,7 @@ namespace Scenova.CloudWorker;
 
 internal sealed class WorkerLoop
 {
-    internal const string Version = "2.2.29";
+    internal const string Version = "2.2.30";
     private static readonly TimeSpan HeartbeatInterval = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan HeartbeatRequestTimeout = TimeSpan.FromSeconds(8);
     private static readonly TimeSpan TelemetryInterval = TimeSpan.FromSeconds(30);
