@@ -3156,6 +3156,23 @@ export class BotController {
       clean[key] = body[key];
     };
 
+    const normalizeCounterTotalPositions = (value: unknown) => {
+      const parsed = Math.trunc(Number(value));
+      if (!Number.isFinite(parsed)) return 10;
+      const stepped = Math.floor(parsed / 10) * 10;
+      return Math.max(10, Math.min(200, stepped));
+    };
+    const legacyCounterPerSideToTotal = (value: unknown) => {
+      const perSide = Math.max(1, Math.min(100, Math.trunc(Number(value) || 1)));
+      return normalizeCounterTotalPositions(perSide * 2);
+    };
+    const counterTotalForSettings = (
+      value: unknown,
+      sizingVersion: unknown
+    ) => Number(sizingVersion) >= 2
+      ? normalizeCounterTotalPositions(value)
+      : legacyCounterPerSideToTotal(value);
+
     if (body.symbol !== undefined) {
       const symbol = String(body.symbol || "").trim();
       if (!symbol || symbol.length > 64 || !/^[A-Za-z0-9._#-]+$/.test(symbol)) {
@@ -3173,7 +3190,36 @@ export class BotController {
     numberSetting("raceLot", 0.01, 100);
     numberSetting("raceMaxPositions", 1, 100, true);
     numberSetting("counterLot", 0.01, 100);
-    numberSetting("counterMaxPositions", 1, 100, true);
+    if (body.counterSizingVersion !== undefined && Number(body.counterSizingVersion) !== 2) {
+      throw new BadRequestException("counterSizingVersion ไม่ถูกต้อง");
+    }
+    if (body.counterMaxPositions !== undefined) {
+      const rawCounterMax = Number(body.counterMaxPositions);
+      if (!Number.isFinite(rawCounterMax) || !Number.isInteger(rawCounterMax)) {
+        throw new BadRequestException("counterMaxPositions ต้องเป็นจำนวนเต็ม");
+      }
+      const incomingCounterVersion = Number(
+        body.counterSizingVersion ??
+        currentSettings.counterSizingVersion ??
+        0
+      );
+      if (incomingCounterVersion >= 2) {
+        if (rawCounterMax < 10 || rawCounterMax > 200 || rawCounterMax % 10 !== 0) {
+          throw new BadRequestException("จำนวนไม้รวม COUNTER ต้องเป็น 10, 20, 30 ... ถึง 200");
+        }
+        clean.counterMaxPositions = rawCounterMax;
+      } else {
+        if (rawCounterMax < 1 || rawCounterMax > 100) {
+          throw new BadRequestException("counterMaxPositions เดิมไม่อยู่ในช่วงที่อนุญาต");
+        }
+        // Legacy clients sent a per-side cap. Convert it to the V2 total-slot
+        // profile so the same exposure is preserved (or rounded down safely).
+        clean.counterMaxPositions = legacyCounterPerSideToTotal(rawCounterMax);
+      }
+      clean.counterSizingVersion = 2;
+    } else if (body.counterSizingVersion !== undefined) {
+      clean.counterSizingVersion = 2;
+    }
     numberSetting("flipLockLot", 0.01, 100);
     numberSetting("manualLot", 0.01, 100);
     numberSetting("manualMaxPositions", 1, 100, true);
@@ -3461,7 +3507,25 @@ export class BotController {
       // but is ignored by the isolated RACE engine.
     } else if (activeProfileMode === "COUNTER") {
       clean.lot = storedNumber("counterLot", "lot", 0.01);
-      clean.maxPositions = Math.max(1, Math.trunc(storedNumber("counterMaxPositions", "maxPositions", 1)));
+      const counterStoredValue =
+        clean.counterMaxPositions ??
+        currentSettings.counterMaxPositions ??
+        currentSettings.maxPositions ??
+        10;
+      const counterStoredVersion =
+        clean.counterSizingVersion ??
+        currentSettings.counterSizingVersion ??
+        0;
+      const counterTotalPositions = counterTotalForSettings(
+        counterStoredValue,
+        counterStoredVersion
+      );
+      clean.counterMaxPositions = counterTotalPositions;
+      clean.counterSizingVersion = 2;
+      // The existing EA owns independent BUY/SELL capacity through canonical
+      // maxPositions. Keep that runtime contract and send exactly half of the
+      // customer-facing total: 10 total -> 5 BUY + 5 SELL, ... 200 -> 100+100.
+      clean.maxPositions = counterTotalPositions / 2;
       // COUNTER has no basket/daily risk controls. Runtime exits are per-position profit only.
       clean.maxBasketLossMoney = 0;
       clean.dailyLossMoney = 0;
