@@ -6761,7 +6761,7 @@ function BotSettingsModal(props:any) {
                         : <div className="cc-bot-v2-engine-line"><ScenovaIcon name="spark" size={16}/><b>การเพิ่มสถานะอัตโนมัติ</b><span>EA กระจายจังหวะเพิ่มสถานะตาม ATR และแรงเคลื่อนไหวของตลาด</span></div>)}</div>
               </section>
 
-              {(controlMode==="AUTO"||controlMode==="RACE"||controlMode==="MANUAL")&&(
+              {(controlMode==="RACE"||controlMode==="MANUAL")&&(
               <section className="cc-bot-v2-panel">
                 <div className="cc-bot-v2-section-title compact"><span>03</span><div><b>กำไร / Stop Loss</b></div></div>
                 {controlMode==="RACE" ? <div className="cc-bot-v2-fields exit-fields">
@@ -6773,9 +6773,6 @@ function BotSettingsModal(props:any) {
                     </div>
                   </div>
                   <label className="cc-bot-v2-field">{settingHelpLabel("race-profit-target",raceProfitTargetMode==="POSITION"?"เป้ากำไรต่อไม้":"เป้ากำไรทั้งชุด",raceProfitTargetMode==="POSITION"?"ไม้ไหนกำไรถึงยอดนี้ EA จะปิดไม้นั้น":"กำไรรวมถึงยอดนี้ EA จะปิดทั้งชุด","profit")}<MoneyInput value={raceProfitTargetMode==="POSITION"?racePerPositionProfitMoney:raceCloseAllProfitMoney} currency={accountCurrency} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.(raceProfitTargetMode==="POSITION"?"racePerPositionProfitMoney":"raceCloseAllProfitMoney",v)}/><small>ใช้เฉพาะ RACE · ถึงเป้าที่เลือกแล้วจึงปิดกำไร</small></label>
-                </div> : controlMode==="AUTO" ? <div className="cc-bot-v2-fields exit-fields">
-                  <label className="cc-bot-v2-field cc-bot-v19-auto-profit-field">{settingHelpLabel("auto-profit-target","เป้ากำไร AUTO","กำไรรวมถึงยอดนี้ EA จะปิดทั้งชุดทันที","profit")}<MoneyInput value={props.settings.autoProfitTargetMoney || 0} currency={accountCurrency} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.("autoProfitTargetMoney",v)}/><small>ใช้เฉพาะ AUTO · ถึงแล้วปิด Basket ทันที</small></label>
-                  <div className="cc-bot-v2-engine-line"><ScenovaIcon name="target" size={16}/><b>Hard Profit Target</b><span>ถึงจำนวนเงินที่ตั้งไว้แล้วปิดทั้งชุดทันที ไม่รอ Reversal / Giveback / EMA</span></div>
                 </div> : <div className="cc-bot-v2-fields exit-fields">
                   <div className="cc-bot-v2-field cc-bot-profit-kind-field">
                     {settingHelpLabel("profit-kind","รูปแบบกำไร","เลือกปิดกำไรรวมทั้งชุด หรือปิดทีละไม้","profit")}
@@ -6797,7 +6794,7 @@ function BotSettingsModal(props:any) {
               <section className="cc-bot-v2-panel">
                 <div className="cc-bot-v2-section-title compact"><span>04</span><div><b>Risk Controls</b></div></div>
                 <div className="cc-bot-v2-limit-grid">
-                  {(controlMode!=="MANUAL" || riskValue(riskProfile.basket,"maxBasketLossMoney")>0 || revealedManualRisk[riskProfile.basket])&&<div><div><ScenovaIcon name="risk" size={18}/>{settingHelpLabel("max-basket-loss","ขาดทุนสูงสุดต่อรอบ","ขาดทุนถึงยอดนี้ EA จะปิดออเดอร์ของรอบทันที")}</div><ToggleMoneyField alwaysShowInput label="เปิด" defaultValue="10" value={riskValue(riskProfile.basket,"maxBasketLossMoney")} currency={accountCurrency} suffix="เงินบัญชี" onChange={(v:string)=>updateRiskValue(riskProfile.basket,"maxBasketLossMoney",v)}/></div>}
+                  {controlMode!=="AUTO"&&(controlMode!=="MANUAL" || riskValue(riskProfile.basket,"maxBasketLossMoney")>0 || revealedManualRisk[riskProfile.basket])&&<div><div><ScenovaIcon name="risk" size={18}/>{settingHelpLabel("max-basket-loss","ขาดทุนสูงสุดต่อรอบ","ขาดทุนถึงยอดนี้ EA จะปิดออเดอร์ของรอบทันที")}</div><ToggleMoneyField alwaysShowInput label="เปิด" defaultValue="10" value={riskValue(riskProfile.basket,"maxBasketLossMoney")} currency={accountCurrency} suffix="เงินบัญชี" onChange={(v:string)=>updateRiskValue(riskProfile.basket,"maxBasketLossMoney",v)}/></div>}
                   {(controlMode!=="MANUAL" || riskValue(riskProfile.dailyLoss,"dailyLossMoney")>0 || revealedManualRisk[riskProfile.dailyLoss])&&<div><div><ScenovaIcon name="pnl" size={18}/>{settingHelpLabel("daily-loss","ขาดทุนสูงสุดต่อวัน","ขาดทุนรวมถึงยอดนี้ บอทจะหยุดเทรดทั้งวัน")}</div><ToggleMoneyField alwaysShowInput label="เปิด" defaultValue="25" value={riskValue(riskProfile.dailyLoss,"dailyLossMoney")} currency={accountCurrency} suffix="เงินบัญชี" onChange={(v:string)=>updateRiskValue(riskProfile.dailyLoss,"dailyLossMoney",v)}/></div>}
                   {(controlMode!=="MANUAL" || riskValue(riskProfile.dailyProfit,"dailyProfitTargetMoney")>0 || revealedManualRisk[riskProfile.dailyProfit])&&<div><div><ScenovaIcon name="target" size={18}/>{settingHelpLabel("daily-profit","เป้ากำไรต่อวัน","กำไรรวมถึงยอดนี้ บอทจะหยุดเพื่อเก็บกำไร")}</div><ToggleMoneyField alwaysShowInput label="เปิด" defaultValue="10" value={riskValue(riskProfile.dailyProfit,"dailyProfitTargetMoney")} currency={accountCurrency} suffix="เงินบัญชี" onChange={(v:string)=>updateRiskValue(riskProfile.dailyProfit,"dailyProfitTargetMoney",v)}/></div>}
                   {controlMode==="MANUAL"&&(

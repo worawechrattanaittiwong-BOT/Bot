@@ -7,6 +7,9 @@ function Read-Text([string]$path) {
 function Need([string]$text,[string]$needle,[string]$message) {
   if (-not $text.Contains($needle)) { throw $message }
 }
+function Forbid([string]$text,[string]$needle,[string]$message) {
+  if ($text.Contains($needle)) { throw $message }
+}
 
 $api = Read-Text 'apps/api/src/bot.controller.ts'
 $web = Read-Text 'apps/web/app/dashboard/page.tsx'
@@ -32,7 +35,8 @@ Need $api 'effectiveProfitProfileMode === "ZERO_GRID"' 'ZERO GRID must clear gen
 Need $api 'clean.profitTargetMode = "OFF";' 'isolated engines must disable generic profit target mode'
 Need $api 'MANUAL เลือกกำไรต่อไม้หรือกำไรรวมทั้งชุดได้อย่างใดอย่างหนึ่งเท่านั้น' 'MANUAL target conflict guard missing'
 
-Need $web 'เป้ากำไร AUTO' 'AUTO needs a dedicated visible profit input'
+Forbid $web 'settingHelpLabel("auto-profit-target"' 'AUTO money target control must be hidden from the dashboard'
+Forbid $web 'เป้ากำไร AUTO' 'AUTO money target label must be hidden from the dashboard'
 Need $web 'เป้ากำไร MANUAL ทั้งชุด' 'MANUAL needs a dedicated basket profit input'
 Need $web 'ใช้เฉพาะ MANUAL · ไม่เปลี่ยนค่า AUTO/RACE/COUNTER/ZERO' 'Dashboard must explain MANUAL target isolation'
 Need $web 'payload.basketProfitTargetMoney = Number(payload.autoProfitTargetMoney || 0);' 'Web save must map AUTO profile to runtime mirror'

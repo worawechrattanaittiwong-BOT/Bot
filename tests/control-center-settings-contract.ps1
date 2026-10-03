@@ -225,6 +225,9 @@ Need $page 'EA จะไม่เปิดออเดอร์เกินจ�
 Need $page 'กำหนดขนาด Lot ของแต่ละออเดอร์' 'Lot plain-language help missing'
 Need $css 'Control Center V60 · hover + long-press help for Bot Settings' 'Hover/long-press Bot Settings help styling missing'
 Need $css '.cc-bot-setting-help-popover' 'Help popover styling missing'
+Need $css ':has(.cc-bot-setting-help-popover)' 'Visible help must raise its whole row above neighboring controls'
+Need $css 'z-index:10020;' 'Help popover must render above selects and inputs'
+Need $css 'overflow:visible!important;' 'Visible help row must not clip the popover'
 Need $css '-webkit-touch-callout:none;' 'Mobile long-press help must suppress the native callout'
 
 Need $css 'Control Center V59 · mobile authoritative alignment' 'Current mobile authoritative alignment layer missing'

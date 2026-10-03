@@ -5929,7 +5929,7 @@
   position:absolute!important;
   left:0;
   top:calc(100% + 6px);
-  z-index:90;
+  z-index:10020;
   display:block!important;
   box-sizing:border-box;
   width:max-content;
@@ -5949,6 +5949,17 @@
 .cc-v19-settings-card .cc-bot-v2-limit-grid .cc-bot-setting-help-label{
   display:inline-flex!important;
   flex-direction:row!important;
+}
+
+/* Keep active help above selects/inputs and outside the 38px row clipping. */
+.cc-v19-settings-card .cc-bot-v2-fields>.cc-bot-v2-field:has(.cc-bot-setting-help-popover),
+.cc-v19-settings-card .cc-bot-v2-limit-grid>div:has(.cc-bot-setting-help-popover){
+  position:relative!important;
+  z-index:10000!important;
+  overflow:visible!important;
+}
+.cc-v19-settings-card .cc-bot-setting-help-label:has(.cc-bot-setting-help-popover){
+  z-index:10010!important;
 }
 @media(max-width:760px){
   .cc-v19-settings-card .cc-bot-setting-help-title{

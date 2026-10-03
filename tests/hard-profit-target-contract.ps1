@@ -50,8 +50,8 @@ Need $api 'else if (requestedProfitMode === "AUTO")' 'API must preserve AUTO Bas
 Forbid $api 'requestedProfitMode === "AUTO" || requestedProfitMode === "OFF"' 'API must not clear AUTO Basket target'
 Need $api 'clean.zeroGridCloseReserveMoney = 0;' 'API must normalize ZERO reserve to zero'
 
-Need $web 'เป้ากำไร AUTO' 'AUTO hard target input must be mode-specific'
-Need $web 'ถึงจำนวนเงินที่ตั้งไว้แล้วปิดทั้งชุดทันที' 'AUTO hard target explanation'
+Forbid $web 'settingHelpLabel("auto-profit-target"' 'AUTO money target control must be hidden from the dashboard'
+Forbid $web 'เป้ากำไร AUTO' 'AUTO money target label must be hidden from the dashboard'
 Forbid $web 'เงินสำรองสำหรับค่าปิด' 'ZERO hidden reserve UI'
 Need $web 'payload.profitRunTrailPercent = 0;' 'run-on must be disabled for hard targets'
 
