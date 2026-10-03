@@ -861,14 +861,14 @@ export default function AdminPage() {
     const confirmed=await confirmPopup({
       title:"เปิดระบบหลัง Maintenance",
       tone:"warning",
-      message:"ยืนยันว่าอัปเดตเสร็จแล้วและต้องการเปิดให้ลูกค้ากด Start ได้อีกครั้ง?",
+      message:"ยืนยันเปิดระบบ? บัญชีที่ยังมี Position/Pending หรือ Close All ค้าง จะถูกคงไว้ใน Safe Stop และยังเปิดรอบใหม่ไม่ได้",
       confirmLabel:"เปิดระบบ"
     });
     if (!confirmed) return;
     setMaintenanceBusy(true);
     try {
       await adminApi("/admin/maintenance/resume", { method: "POST" });
-      setMessage("เปิดระบบหลัง Maintenance แล้ว บอทจะยังคง STOPPED จนกว่าผู้ใช้จะกด Start เอง");
+      setMessage("เปิดระบบหลัง Maintenance แล้ว บัญชีที่ยังมี Position/Pending จะคงอยู่ใน Safe Stop จนกว่าจะเคลียร์สำเร็จ");
       await search(undefined, true);
     } catch (e:any) {
       setMessage(e.message);
@@ -1058,7 +1058,7 @@ export default function AdminPage() {
                 <button className="btn primary" disabled={maintenanceBusy || maintenance.status === "DRAINING" || maintenance.status === "MAINTENANCE"} onClick={announceMaintenance}>ประกาศกำหนดอัปเดต</button>
                 <button className="btn danger" disabled={maintenanceBusy || maintenance.status === "DRAINING" || maintenance.status === "MAINTENANCE"} onClick={shutdownForMaintenance}>ปิดระบบอย่างปลอดภัยตอนนี้</button>
                 {maintenance.status === "SCHEDULED" && <button className="btn" disabled={maintenanceBusy} onClick={cancelMaintenance}>ยกเลิกประกาศ</button>}
-                {maintenance.status === "MAINTENANCE" && <button className="btn primary" disabled={maintenanceBusy} onClick={resumeMaintenance}>เปิดระบบหลังอัปเดต</button>}
+                {(maintenance.status === "DRAINING" || maintenance.status === "MAINTENANCE") && <button className="btn primary" disabled={maintenanceBusy} onClick={resumeMaintenance}>เปิดระบบหลังอัปเดต</button>}
               </div>
 
               {maintenanceBlockers.length > 0 && (

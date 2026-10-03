@@ -613,35 +613,32 @@ export class MaintenanceService {
 
   async resume(actor: string) {
     const current = await this.current();
-    if (current.status === "DRAINING") {
-      await this.tryFinishDrain();
+    const status = String(current?.status || "");
+    if (status === "OFF") return this.snapshot();
+    if (status !== "DRAINING" && status !== "MAINTENANCE") {
+      throw new ConflictException("ระบบไม่ได้อยู่ระหว่างปิดหรือ Maintenance");
     }
 
-    const refreshed = await this.row();
-    if (refreshed?.status !== "MAINTENANCE") {
-      throw new ConflictException("ระบบไม่ได้อยู่ในโหมด Maintenance");
-    }
-
-    // Stale snapshots are allowed to enter MAINTENANCE so the owner can upgrade,
-    // but reopening must stay blocked until MT5/EA proves every Position is 0.
-    const blockers = await this.liveBlockers();
-    const running = Number(blockers?.running || 0);
-    const positions = Number(blockers?.positions || 0);
-    const pendingOrders = Number(blockers?.pending_orders || 0);
-    const unresolvedCloseAll = Number(blockers?.unresolved_close_all || 0);
-    const stalePositions = Number(blockers?.stale_reported_positions || 0);
-    if (running > 0 || positions > 0 || pendingOrders > 0 || unresolvedCloseAll > 0) {
-      throw new ConflictException(
-        stalePositions > 0
-          ? "ยังมี Position จากข้อมูล MT5 ล่าสุดที่ยังไม่ได้ยืนยันว่าเป็น 0 กรุณาเปิด EA/MT5 ให้ heartbeat ยืนยัน หรือส่ง Close All ให้สำเร็จก่อนเปิดระบบ"
-          : unresolvedCloseAll > 0
-            ? "ยังมีคำสั่ง Force Flat/CLOSE_ALL ที่ MT5 ยังไม่ได้ยืนยัน ระบบยังเปิดกลับไม่ได้"
-            : "ยังมี Bot Running, Position หรือ Pending Order ค้างอยู่ ระบบยังเปิดกลับไม่ได้"
-      );
-    }
-
+    // Do not deadlock reopening when the market is closed and Positions cannot
+    // be flattened. Accounts with exposure stay quarantined below in SAFE_STOP.
     await this.db.query(
-      "UPDATE bot_instances SET desired_state='STOPPED' WHERE desired_state<>'RUNNING'"
+      `${this.runtimeCte()}
+       UPDATE bot_instances bi
+       SET desired_state = CASE
+         WHEN r.reported_positions>0
+           OR r.reported_pending_orders>0
+           OR EXISTS (
+             SELECT 1
+             FROM bot_commands bc
+             WHERE bc.bot_instance_id=r.id
+               AND bc.command='CLOSE_ALL'
+               AND bc.status IN ('PENDING','DELIVERED')
+           )
+         THEN 'SAFE_STOP'
+         ELSE 'STOPPED'
+       END
+       FROM runtime r
+       WHERE r.id=bi.id`
     );
     await this.db.query(
       `UPDATE system_maintenance

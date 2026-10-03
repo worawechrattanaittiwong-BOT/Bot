@@ -109,9 +109,8 @@ CLOSE_ID=$(psql -h localhost -U bot -d bot -Atc "select id from bot_commands whe
 test -n "$CLOSE_ID"
 test "$(printf '%s' "$FORCE" | jq -r '.summary.unresolvedCloseAll')" -ge 1
 
-PRE_RESUME_HTTP=$(curl -sS -o /tmp/resume-before-force-flat-ack.json -w '%{http_code}' \
-  -X POST "$BASE/admin/maintenance/resume" -H "authorization: Bearer $OWNER_TOKEN")
-assert_eq "$PRE_RESUME_HTTP" "409"
+echo '[regression] maintenance remains in DRAINING until the owner explicitly resumes'
+assert_eq "$(psql -h localhost -U bot -d bot -Atc "select status from system_maintenance where id=1;")" "DRAINING"
 
 echo '[regression] application and DB layers both block every Start path during maintenance'
 START_HTTP=$(curl -sS -o /tmp/start-during-maint.json -w '%{http_code}' \
@@ -136,6 +135,14 @@ test "$STATE_RC" -ne 0
 test "$COMMAND_RC" -ne 0
 assert_eq "$(psql -h localhost -U bot -d bot -Atc "select desired_state from bot_instances where id='$INSTANCE';")" "STOPPED"
 
+echo '[regression] owner can reopen while CLOSE_ALL is unresolved; affected account stays SAFE_STOP'
+RESUME_WITH_OPEN=$(curl -fsS -X POST "$BASE/admin/maintenance/resume" -H "authorization: Bearer $OWNER_TOKEN")
+assert_eq "$(printf '%s' "$RESUME_WITH_OPEN" | jq -r '.status')" "OFF"
+assert_eq "$(psql -h localhost -U bot -d bot -Atc "select desired_state from bot_instances where id='$INSTANCE';")" "SAFE_STOP"
+START_AFTER_RESUME_HTTP=$(curl -sS -o /tmp/start-after-maint-resume.json -w '%{http_code}' \
+  -X POST "$BASE/bot/start?slotId=$SLOT_ID" -H "authorization: Bearer $USER_TOKEN")
+assert_eq "$START_AFTER_RESUME_HTTP" "409"
+
 echo '[regression] legacy/symbol-only ACK cannot clear account-wide CLOSE_ALL'
 OLD_ACK=$(curl -fsS -X POST "$BASE/ea/ack" -H 'content-type: application/json' \
   -d "{\"instanceId\":\"$INSTANCE\",\"installToken\":\"$INSTALL_TOKEN\",\"commandId\":$CLOSE_ID,\"state\":\"STOPPED\",\"executionStatus\":\"CI_OLD_CLOSE_ALL_ACK\"}")
@@ -152,7 +159,7 @@ ACK=$(curl -fsS -X POST "$BASE/ea/ack" -H 'content-type: application/json' \
 test "$(printf '%s' "$ACK" | jq -r '.ok')" = 'true'
 assert_eq "$(psql -h localhost -U bot -d bot -Atc "select payload->>'ackSource' from bot_commands where id=$CLOSE_ID;")" "EA"
 
-echo '[regression] maintenance can resume only after the fake CI instance is flat'
+echo '[regression] resume remains idempotent after the fake CI instance is flat'
 RESUME=$(curl -fsS -X POST "$BASE/admin/maintenance/resume" -H "authorization: Bearer $OWNER_TOKEN")
 assert_eq "$(printf '%s' "$RESUME" | jq -r '.status')" "OFF"
 
