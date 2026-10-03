@@ -2,6 +2,7 @@ $ErrorActionPreference = 'Stop'
 
 $root = Split-Path -Parent $PSScriptRoot
 $schema = Get-Content (Join-Path $root 'apps/api/src/cloud-schema.ts') -Raw
+$symbolReloadMigration = Get-Content (Join-Path $root 'database/041_cloud_symbol_reload.sql') -Raw
 $controller = Get-Content (Join-Path $root 'apps/api/src/runtime-safety.controller.ts') -Raw
 $service = Get-Content (Join-Path $root 'apps/api/src/runtime-safety.service.ts') -Raw
 $workerApi = Get-Content (Join-Path $root 'apps/api/src/worker.controller.ts') -Raw
@@ -64,6 +65,7 @@ Assert-Contains $service 'Worker STOP_CONFIRMED is required before rotating a bo
 Assert-Contains $workerApi 'wc.execution_generation=bi.execution_generation' 'worker command generation filter missing'
 Assert-Contains $workerApi 'STALE_GENERATION' 'stale generation cancellation missing'
 Assert-Contains $schema "'STOP_INSTANCE','RELOAD_INSTANCE','REBUILD_INSTANCE'" 'Cloud runtime rebuild command schema missing'
+Assert-Contains $symbolReloadMigration "'STOP_INSTANCE','RELOAD_INSTANCE','REBUILD_INSTANCE'" 'replayed symbol-reload migration must not reject REBUILD_INSTANCE rows'
 Assert-Contains $workerApi '"REBUILD_INSTANCE"' 'Worker API rebuild command support missing'
 Assert-Contains $workerApi '"REBUILD_CONFIRMED"' 'Worker API rebuild acknowledgement missing'
 Assert-Contains $workerApi "runtime_stop_state='STOP_CONFIRMED'" 'server STOP_CONFIRMED transition missing'
