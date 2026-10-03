@@ -41,9 +41,9 @@ Need $send 'request.tp=hardMoneyProfitTarget ? 0.0 : autoPlan.tpPrice;' 'AUTO-ge
 Need $send 'AUTO_V20_BROKER_PROTECTION_INVALID' 'AUTO broker-protection validation missing'
 
 # Isolation: AUTO remains its own execution owner and precision code must not call other engines.
-Need $enabled 'g_engineMode!="AUTO"' 'AUTO engine isolation missing'
-Need $enabled 'EffectiveExecutionMode()=="AUTO"' 'AUTO execution isolation missing'
-Need $enabled 'g_controlMode=="AUTO"' 'AUTO control isolation missing'
+Need $enabled 'if(g_engineMode != "AUTO") return false;' 'AUTO engine isolation missing'
+Need $enabled 'EffectiveExecutionMode() == "AUTO"' 'AUTO execution isolation missing'
+Need $enabled 'g_controlMode == "AUTO"' 'AUTO control isolation missing'
 Forbid $precision 'Race' 'AUTO precision must not call RACE'
 Forbid $precision 'ZeroGrid' 'AUTO precision must not call ZERO GRID'
 Forbid $precision 'FlipLock' 'AUTO precision must not call FLIP LOCK'
