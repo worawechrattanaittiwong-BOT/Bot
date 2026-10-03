@@ -98,7 +98,7 @@ STALE_COMMAND_ID=$(psql -h localhost -U bot -d bot -Atq -c "insert into bot_comm
 test -n "$STALE_COMMAND_ID"
 
 echo '[regression] simulate a market-closed Position that cannot be flattened yet'
-psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -c "update bot_instances set metrics=jsonb_set(coalesce(metrics,'{}'::jsonb),'{positions}','1'::jsonb,true) where id='$INSTANCE';" >/dev/null
+psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -c "update bot_instances set metrics=coalesce(metrics,'{}'::jsonb) || '{\"positions\":1,\"accountScenovaPositions\":1,\"accountScenovaPendingOrders\":0,\"accountFlatConfirmed\":false}'::jsonb where id='$INSTANCE';" >/dev/null
 
 echo '[regression] Owner FORCE FLAT freezes starts, supersedes stale commands and leaves durable CLOSE_ALL'
 FORCE=$(curl -fsS -X POST "$BASE/admin/maintenance/force-flat-all" \
