@@ -168,6 +168,8 @@ export class WorkerController {
       `SELECT
          bi.id instance_id,bi.desired_state,bi.execution_generation,bi.runtime_stop_state,
          bi.cloud_recovery_state,bi.cloud_recovery_attempts,bi.cloud_recovery_next_at,
+         COALESCE(NULLIF(bi.metrics->>'accountScenovaPositions','')::int,NULLIF(bi.metrics->>'positions','')::int,0) positions,
+         COALESCE(NULLIF(bi.metrics->>'accountScenovaPendingOrders','')::int,0) pending_orders,
          (bi.last_seen_at>now()-interval '30 seconds') ea_online,
          a.id mt5_account_id,a.account_number,a.broker,a.broker_server,a.mode,
          c.ciphertext credential_ciphertext,c.iv credential_iv,c.auth_tag credential_tag,
@@ -206,6 +208,8 @@ export class WorkerController {
         iv: job.token_iv,
         authTag: job.token_tag
       }),
+      positions: Math.max(0, Number(job.positions || 0)),
+      pendingOrders: Math.max(0, Number(job.pending_orders || 0)),
       settings: job.settings || {}
     };
   }
