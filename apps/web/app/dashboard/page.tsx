@@ -5005,6 +5005,9 @@ export default function DashboardPage() {
                     required
                   />
                 </span>
+                <small className="cloud-mt5-password-note">
+                  เข้ารหัส AES-256-GCM ก่อนจัดเก็บ และใช้เฉพาะเชื่อมต่อ MT5 บน VPS
+                </small>
               </label>
             </div>
 
