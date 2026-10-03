@@ -2190,18 +2190,14 @@
 }
 
 
-/* ===== Control Center V34 · MANUAL-rhythm settings =====
-   Settings follows the visible rows of each mode; neighboring cards keep
-   their dashboard baseline independently. */
+/* ===== Control Center V34 · 430px MANUAL-rhythm settings =====
+   Keep every mode visually as compact as MANUAL, add a little more breathing
+   room inside the settings frame, and use a 430px card baseline. */
 .cc-v19-three-card-grid{
   align-items:start!important;
 }
-.cc-v19-settings-card{
-  align-self:start!important;
-  height:auto!important;
-  min-height:0!important;
-  max-height:none!important;
-}
+.cc-v19-three-card-grid>section,
+.cc-v19-settings-card,
 .cc-v19-three-card-grid .cc-v17-running-positions,
 .cc-v19-three-card-grid .cc-v12-mode-performance{
   align-self:start!important;
@@ -2210,15 +2206,15 @@
   max-height:430px!important;
 }
 
-/* Bot Settings shell follows the selected mode content. */
+/* Bot Settings shell: 44px header + 386px scrollable body = 430px total. */
 .cc-v19-settings-card .cc-bot-embedded-frame,
 .cc-v19-settings-card .cc-bot-v2-embedded{
-  height:auto!important;
-  min-height:0!important;
-  max-height:none!important;
+  height:430px!important;
+  min-height:430px!important;
+  max-height:430px!important;
 }
 .cc-v19-settings-card .cc-bot-v2-embedded{
-  --settings-row:38px;
+  --settings-row:46px;
   --settings-control-h:32px;
 }
 
@@ -2242,7 +2238,7 @@
 .cc-v19-settings-card .cc-bot-v2-limit-grid>div,
 .cc-v19-settings-card .cc-bot-manual-risk-add{
   height:auto!important;
-  min-height:38px!important;
+  min-height:46px!important;
   max-height:none!important;
   margin:0!important;
   padding:2px 2px!important;
@@ -2344,7 +2340,7 @@
   padding:2px!important;
 }
 
-/* Every standard setting row uses exactly the MANUAL row height. */
+/* Every standard setting row matches the 46px trading-mode row. */
 .cc-v19-settings-card .cc-bot-v2-fields>.cc-bot-v2-field{
   box-sizing:border-box!important;
   display:grid!important;
@@ -2352,16 +2348,16 @@
   align-items:center!important;
   gap:14px!important;
   width:100%!important;
-  height:38px!important;
-  min-height:38px!important;
-  max-height:38px!important;
+  height:46px!important;
+  min-height:46px!important;
+  max-height:46px!important;
   margin:0!important;
   padding:2px!important;
   border-bottom:1px solid rgba(76,91,128,.22)!important;
   overflow:hidden!important;
 }
 
-/* Every risk row uses the same 38px rhythm too. */
+/* Every risk row uses the same 46px trading-mode rhythm too. */
 .cc-v19-settings-card .cc-bot-v2-limit-grid>div{
   box-sizing:border-box!important;
   display:grid!important;
@@ -2413,9 +2409,9 @@
   align-items:center!important;
   gap:6px!important;
   width:100%!important;
-  height:38px!important;
-  min-height:38px!important;
-  max-height:38px!important;
+  height:46px!important;
+  min-height:46px!important;
+  max-height:46px!important;
   margin:0!important;
   padding:2px 0!important;
 }
@@ -2430,9 +2426,9 @@
 .cc-v19-settings-card .cc-bot-manual-risk-add{
   box-sizing:border-box!important;
   width:100%!important;
-  height:38px!important;
-  min-height:38px!important;
-  max-height:38px!important;
+  height:46px!important;
+  min-height:46px!important;
+  max-height:46px!important;
   margin:0!important;
   padding:2px!important;
 }
@@ -2453,18 +2449,18 @@
 .cc-v19-settings-card .cc-bot-mode-flip_lock .cc-bot-v2-limit-grid>div,
 .cc-v19-settings-card .cc-bot-mode-zero_grid .cc-bot-v2-limit-grid>div,
 .cc-v19-settings-card .cc-bot-mode-manual .cc-bot-v2-limit-grid>div{
-  height:38px!important;
-  min-height:38px!important;
-  max-height:38px!important;
+  height:46px!important;
+  min-height:46px!important;
+  max-height:46px!important;
 }
 
-/* Settings shell follows the visible rows of the selected mode. */
+/* Fixed 430px settings shell remains unchanged. */
 .cc-v19-settings-card,
 .cc-v19-settings-card .cc-bot-embedded-frame,
 .cc-v19-settings-card .cc-bot-v2-embedded{
-  height:auto!important;
-  min-height:0!important;
-  max-height:none!important;
+  height:430px!important;
+  min-height:430px!important;
+  max-height:430px!important;
 }
 
 /* ===== Control Center V38 · centered dropdown text =====
@@ -2613,13 +2609,11 @@
   flex:0 0 auto!important;
 }
 
-/* Keep only one settings-row of breathing room below the final visible field. */
+/* Keep the total settings card at 430px after giving the header more air. */
 .cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-body{
-  height:auto!important;
-  min-height:0!important;
-  max-height:none!important;
-  padding-bottom:var(--settings-row)!important;
-  overflow:visible!important;
+  height:380px!important;
+  min-height:380px!important;
+  max-height:380px!important;
 }
 
 @media(max-width:1180px){
@@ -4262,14 +4256,13 @@
   min-width:max-content!important;
 }
 
-/* Risk rows use the exact MANUAL standard-row geometry.
-   A 34px amount control belongs inside the same 38px / 2px-padding row as the
-   MANUAL profit target; the old 44px / 6px rule left only 32px of inner space
-   and pushed the amount box onto the divider. */
+/* Risk rows use the exact trading-mode row geometry.
+   Keep a 34px amount control centered inside the same 46px row rhythm used by
+   the trading-mode selector so adjacent 10 / 25 / 10 rows never look crowded. */
 .cc-v19-settings-card .cc-bot-v2-limit-grid>div{
-  height:38px!important;
-  min-height:38px!important;
-  max-height:38px!important;
+  height:46px!important;
+  min-height:46px!important;
+  max-height:46px!important;
   padding:2px!important;
 }
 .cc-v19-settings-card .cc-bot-v2-limit-grid .toggle-money-field{
@@ -5377,15 +5370,16 @@
 
 
 /* ===== Control Center V56 · desktop three-card breathing room ===== */
-/* Desktop only: widen Bot Settings and keep neighboring cards stable.
-   Settings itself follows its visible rows with one-row bottom breathing room. */
+/* Desktop only: widen Bot Settings, narrow Live Execution, and give all
+   three primary cards a little more vertical breathing room. */
 @media(min-width:1181px){
   .cc-v19-three-card-grid{
     grid-template-columns:36.33fr 30.33fr 33.34fr!important;
     gap:10px!important;
-    align-items:start!important;
   }
 
+  .cc-v19-three-card-grid>section,
+  .cc-v19-settings-card,
   .cc-v19-three-card-grid .cc-v17-running-positions,
   .cc-v19-three-card-grid .cc-v12-mode-performance{
     height:470px!important;
@@ -5393,28 +5387,24 @@
     max-height:470px!important;
   }
 
-  .cc-v19-settings-card,
   .cc-v19-settings-card .cc-bot-embedded-frame,
   .cc-v19-settings-card .cc-bot-v2-embedded{
-    align-self:start!important;
-    height:auto!important;
-    min-height:0!important;
-    max-height:none!important;
+    height:470px!important;
+    min-height:470px!important;
+    max-height:470px!important;
   }
 
   .cc-v19-settings-card .cc-bot-v2-embedded .cc-bot-v2-body{
-    height:auto!important;
-    min-height:0!important;
-    max-height:none!important;
-    padding-bottom:var(--settings-row)!important;
-    overflow:visible!important;
+    height:420px!important;
+    min-height:420px!important;
+    max-height:420px!important;
   }
 
   .cc-v19-settings-card .cc-bot-v2-fields>.cc-bot-v2-field,
   .cc-v19-settings-card .cc-bot-v2-limit-grid>div{
-    height:41px!important;
-    min-height:41px!important;
-    max-height:41px!important;
+    height:46px!important;
+    min-height:46px!important;
+    max-height:46px!important;
     padding-top:3px!important;
     padding-bottom:3px!important;
   }
