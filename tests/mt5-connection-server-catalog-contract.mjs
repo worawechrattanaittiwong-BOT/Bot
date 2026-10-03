@@ -16,29 +16,39 @@ assert.match(
   "broker API must return MT5 servers in deterministic REAL -> DEMO -> other order"
 );
 assert.match(
-  dashboard,
-  /MT5 Server · ต้องตรงกับบัญชีของคุณทุกตัว/,
-  "MT5 server entry must tell the customer that the server name must match exactly"
+  catalog,
+  /FROM mt5_accounts[\s\S]*status='ACTIVE'/,
+  "broker API must include previously authenticated active MT5 server names as suggestions"
+);
+assert.match(
+  catalog,
+  /seen = new Set[\s\S]*brokerNames = new Set/,
+  "broker API must deduplicate observed server suggestions per broker"
 );
 assert.match(
   dashboard,
-  /คัดลอกจาก MT5 เช่น Exness-MT5Trial7/,
-  "MT5 server entry must instruct the customer to copy the exact terminal server"
+  /<span>MT5 Server<\/span>/,
+  "MT5 server field must use a clean compact label"
 );
 assert.match(
   dashboard,
-  /Trial6, Trial7, Trial14 ใช้แทนกันไม่ได้/,
-  "MT5 server entry must explain that similar Trial server numbers are not interchangeable"
+  /list=\{cloudMt5DialogMode === "NEW" && selectedBrokerServers\.length \? "cloud-mt5-server-options"/,
+  "MT5 server input must expose broker-specific suggestions while staying editable"
 );
-assert.doesNotMatch(
+assert.match(
   dashboard,
-  /cloud-mt5-server-menu|<b>REAL \/ LIVE<\/b>|<b>DEMO \/ TRIAL<\/b>/,
-  "new MT5 connections must not offer a stale server catalog as clickable choices"
+  /<datalist id="cloud-mt5-server-options">/,
+  "MT5 server suggestions must use one searchable native dropdown"
+);
+assert.match(
+  dashboard,
+  /เลือกจากรายการ ".*selectedBrokerName.*" หรือพิมพ์ Server เอง|เลือกจากรายการ "\+selectedBrokerName\+" หรือพิมพ์ Server เอง/,
+  "MT5 server helper must clearly allow dropdown selection or manual entry"
 );
 assert.match(
   dashboard,
   /cloud-mt5-server-combobox/,
-  "MT5 server must remain a single exact-entry field"
+  "MT5 server must remain one combined dropdown/manual-entry control"
 );
 assert.doesNotMatch(
   dashboard,
