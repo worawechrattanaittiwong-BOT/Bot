@@ -33,9 +33,16 @@ assert.doesNotMatch(
   /WebRequest\s*\(/,
   "200ms observability must never perform network I/O inside the EA"
 );
+const liveSnapshotFunction =
+  ea.match(/void PublishCloudLiveExecutionSnapshot\(\)[\s\S]*?\n\}/)?.[0] || "";
 assert.match(
-  ea,
-  /\"eventType\":\"LIVE_EXECUTION\"[\s\S]*?\"openPositions\":%s/,
+  liveSnapshotFunction,
+  /LIVE_EXECUTION/,
+  "Cloud live snapshot must identify the LIVE_EXECUTION event"
+);
+assert.match(
+  liveSnapshotFunction,
+  /OpenPositionsTelemetryJson\(\)/,
   "Cloud live snapshot must carry open positions and current P/L"
 );
 
