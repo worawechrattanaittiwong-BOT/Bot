@@ -9838,3 +9838,63 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
     line-height:1.5;
   }
 }
+
+
+/* ===== Large reading confirm · BTC risk warning =====
+   Desktop-only large reading surface for long-form confirmations.
+   Other system confirmations keep the normal compact size. */
+@media(min-width:761px){
+  .sc-system-popup-layer.is-confirm .sc-system-popup.sc-system-popup-large{
+    width:min(700px,calc(100vw - 64px));
+    grid-template-columns:50px minmax(0,1fr);
+    gap:18px;
+    padding:24px 26px;
+    border-radius:20px;
+  }
+
+  .sc-system-popup-layer.is-confirm .sc-system-popup.sc-system-popup-large .sc-system-popup-icon{
+    width:50px;
+    height:50px;
+    align-self:start;
+    margin-top:1px;
+    border-radius:14px;
+    font-size:24px;
+  }
+
+  .sc-system-popup-layer.is-confirm .sc-system-popup.sc-system-popup-large .sc-system-popup-copy>b{
+    margin-bottom:8px;
+    font-size:21px;
+    line-height:1.25;
+  }
+
+  .sc-system-popup-layer.is-confirm .sc-system-popup.sc-system-popup-large .sc-system-popup-copy>p{
+    font-size:15px;
+    line-height:1.68;
+  }
+
+  .sc-system-popup-layer.is-confirm .sc-system-popup.sc-system-popup-large .sc-system-popup-acknowledge{
+    padding:13px 15px;
+    gap:11px;
+    border-radius:12px;
+    font-size:14px;
+    line-height:1.5;
+  }
+
+  .sc-system-popup-layer.is-confirm .sc-system-popup.sc-system-popup-large .sc-system-popup-acknowledge input{
+    width:19px;
+    height:19px;
+    margin-top:1px;
+  }
+
+  .sc-system-popup-layer.is-confirm .sc-system-popup.sc-system-popup-large .sc-system-popup-actions{
+    gap:10px;
+    margin-top:5px;
+  }
+
+  .sc-system-popup-layer.is-confirm .sc-system-popup.sc-system-popup-large .sc-system-popup-actions button{
+    min-height:48px;
+    border-radius:11px;
+    font-size:14px;
+  }
+}
+/* ===== /Large reading confirm ===== */
