@@ -391,7 +391,7 @@ export class BrokerFinanceService {
       `INSERT INTO broker_rebate_policies(
          broker_id,benefit_level_id,rebate_bps,active,updated_by,updated_at
        )
-       SELECT b.id,l.id,$3,$4,$5,now()
+       SELECT b.id,l.id,$2,$3,$4,now()
        FROM brokers b
        JOIN broker_benefit_levels l ON l.broker_id=b.id
        WHERE b.code='EXNESS' AND l.code=$1
@@ -401,7 +401,7 @@ export class BrokerFinanceService {
          updated_by=EXCLUDED.updated_by,
          updated_at=now()
        RETURNING *`,
-      [levelCode, levelCode, rebateBps, active, actor.slice(0,160)]
+      [levelCode, rebateBps, active, actor.slice(0,160)]
     );
     if (!row) throw new ConflictException("ไม่พบ Benefit Level นี้");
 
