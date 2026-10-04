@@ -48,6 +48,7 @@ export class AdminBrokerAutomationController {
       autoImportCommissions?: boolean;
       autoReleaseRebates?: boolean;
       commissionAmountScale?: number;
+      authIdentityField?: string;
     }
   ) {
     return this.api.saveConnection(body || {}, actor(req));
