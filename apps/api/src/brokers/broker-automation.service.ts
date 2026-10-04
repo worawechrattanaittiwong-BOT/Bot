@@ -3,6 +3,7 @@ import {
   OnApplicationBootstrap,
   OnModuleDestroy
 } from "@nestjs/common";
+import { randomUUID } from "crypto";
 import { DbService } from "../db.service";
 import { BrokerBenefitService } from "./broker-benefit.service";
 import { BrokerFinanceService } from "./broker-finance.service";
@@ -226,6 +227,32 @@ export class BrokerAutomationService
 
   async runSync(triggerType: TriggerType = "MANUAL") {
     const state = await this.api.state();
+    const lockToken = randomUUID();
+    const lock = await this.db.one(
+      `UPDATE broker_api_connections SET
+         sync_lock_token=$2,
+         sync_lock_until=now()+interval '10 minutes',
+         updated_at=now()
+       WHERE broker_code=$1
+         AND (sync_lock_until IS NULL OR sync_lock_until<=now())
+       RETURNING broker_code`,
+      ["EXNESS", lockToken]
+    );
+    if (!lock) {
+      return {
+        ok: true,
+        status: "SKIPPED",
+        reason: "SYNC_ALREADY_RUNNING",
+        counts: {
+          clientsSeen: 0,
+          clientsVerified: 0,
+          commissionsSeen: 0,
+          commissionsImported: 0,
+          rebatesReleased: 0
+        }
+      };
+    }
+
     const run = await this.createRun(triggerType);
     const counts = {
       clientsSeen: 0,
@@ -296,7 +323,13 @@ export class BrokerAutomationService
                   grossCommissionMinor,
                   currency,
                   occurredAt,
-                  rawReference: JSON.stringify(item).slice(0,1900)
+                  rawReference: JSON.stringify({
+                    source: "EXNESS_API",
+                    eventId,
+                    externalClientRef: this.clientRef(item) || null,
+                    accountLast4: this.accountNumber(item).slice(-4) || null,
+                    symbol: this.symbol(item) || null
+                  })
                 },
                 "EXNESS_API"
               );
@@ -353,6 +386,15 @@ export class BrokerAutomationService
          WHERE broker_code='EXNESS'`
       );
       return { ok: false, status: "FAILED", counts, error: detail };
+    } finally {
+      await this.db.query(
+        `UPDATE broker_api_connections SET
+           sync_lock_token=NULL,
+           sync_lock_until=NULL,
+           updated_at=now()
+         WHERE broker_code='EXNESS' AND sync_lock_token=$1`,
+        [lockToken]
+      ).catch(() => {});
     }
   }
 
