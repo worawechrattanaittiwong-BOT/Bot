@@ -385,6 +385,60 @@ export class BrokerBenefitService {
     return this.userSummary(userId);
   }
 
+  async verifyClientFromApi(
+    userId: string,
+    externalClientRefValue: unknown,
+    actor = "EXNESS_API"
+  ) {
+    await this.ensureSchema();
+    const externalClientRef = String(externalClientRefValue || "").trim().slice(0,180);
+
+    const user = await this.db.one(
+      "SELECT id,status FROM users WHERE id=$1",
+      [userId]
+    );
+    if (!user || user.status === "DELETED") return null;
+
+    const broker = await this.db.one(
+      "SELECT id FROM brokers WHERE code='EXNESS' LIMIT 1"
+    );
+    if (!broker) return null;
+
+    const defaultLevel = await this.db.one(
+      `SELECT id FROM broker_benefit_levels
+       WHERE broker_id=$1 AND code='STANDARD' AND active=true
+       LIMIT 1`,
+      [broker.id]
+    );
+    if (!defaultLevel) return null;
+
+    const row = await this.db.one(
+      `INSERT INTO broker_partner_clients(
+         broker_id,user_id,status,benefit_level_id,verification_source,
+         external_client_ref,note,verified_at,verified_by,updated_at
+       )
+       VALUES($1,$2,'VERIFIED',$3,'API',$4,'Verified by Exness Partnership API',now(),$5,now())
+       ON CONFLICT(broker_id,user_id) DO UPDATE SET
+         status='VERIFIED',
+         benefit_level_id=COALESCE(broker_partner_clients.benefit_level_id,EXCLUDED.benefit_level_id),
+         verification_source='API',
+         external_client_ref=COALESCE(NULLIF(EXCLUDED.external_client_ref,''),broker_partner_clients.external_client_ref),
+         verified_at=now(),
+         verified_by=$5,
+         updated_at=now()
+       RETURNING id`,
+      [
+        broker.id,
+        userId,
+        defaultLevel.id,
+        externalClientRef || null,
+        actor.slice(0,160)
+      ]
+    );
+
+    return row;
+  }
+
   async safeCheckoutBenefit(
     tx: PoolClient,
     userId: string
