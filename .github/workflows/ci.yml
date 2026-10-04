@@ -140,6 +140,9 @@ jobs:
       - name: MT5 local execution plane contract
         shell: pwsh
         run: ./tests/local-execution-plane-contract.ps1
+      - name: Live Execution 200ms end-to-end contract
+        shell: pwsh
+        run: ./tests/live-execution-200ms-contract.ps1
       - name: ZERO GRID stability simulation regression
         run: node ./tests/zero-grid-v1-simulation.mjs
       - name: LOCAL explicit account switch no customer Slot contract
