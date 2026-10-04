@@ -12,13 +12,15 @@
     "next": "15.5.27",
     "react": "19.3.0",
     "react-dom": "19.3.0",
-    "qrcode": "^1.5.4"
+    "qrcode": "^1.5.4",
+    "three": "0.180.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "typescript": "^5.7.2",
-    "@types/qrcode": "^1.5.5"
+    "@types/qrcode": "^1.5.5",
+    "@types/three": "0.180.0"
   }
 }

@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import QRCode from "qrcode";
 import { api } from "../lib/api";
+import { usePathname } from "next/navigation";
+import { ScenovaMascotLauncher } from "./mascot/ScenovaMascotLauncher";
 
 type MirrorSession = {
   sessionId: string;
@@ -59,6 +61,7 @@ function clampFrame(frame: CardFrame): CardFrame {
 }
 
 export function MobileMirrorOverlay() {
+  const pathname = usePathname();
   const [enabled, setEnabled] = useState(false);
   const [session, setSession] = useState<MirrorSession | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState("");
@@ -93,7 +96,7 @@ export function MobileMirrorOverlay() {
     const resize = () => setFrame(current => clampFrame(current));
     window.addEventListener("resize", resize);
     return () => window.removeEventListener("resize", resize);
-  }, []);
+  }, [pathname]);
 
   useEffect(() => {
     sessionRef.current = session;
@@ -205,8 +208,10 @@ export function MobileMirrorOverlay() {
       setSession(next);
       setQrDataUrl(qr);
       setPairing(true);
+      return true;
     } catch (error: any) {
       setMessage(error?.message || "สร้าง QR ไม่สำเร็จ");
+      return false;
     }
   }
 
@@ -291,23 +296,7 @@ export function MobileMirrorOverlay() {
   return (
     <>
       {!pairing && !live && (
-        <button
-          type="button"
-          className="cc-mobile-mirror-launch"
-          onClick={startPairing}
-          aria-label="เชื่อมต่อหน้าจอมือถือ"
-          title="เชื่อมต่อหน้าจอมือถือ"
-          style={{
-            position:"fixed", right:20, bottom:20, zIndex:90,
-            width:48, height:48, borderRadius:15,
-            border:"1px solid rgba(137,118,255,.55)",
-            background:"linear-gradient(145deg,#17172f,#101528)",
-            color:"#f3f1ff", boxShadow:"0 12px 30px rgba(0,0,0,.32)",
-            cursor:"pointer", fontSize:22
-          }}
-        >
-          📱
-        </button>
+        <ScenovaMascotLauncher className="cc-mobile-mirror-launch" onConnectMobile={startPairing} error={message} />
       )}
 
       {pairing && (
@@ -424,15 +413,6 @@ export function MobileMirrorOverlay() {
         </div>
       )}
 
-      {!pairing && !live && message && (
-        <div style={{
-          position:"fixed",right:20,bottom:78,zIndex:91,maxWidth:280,
-          padding:"9px 11px",borderRadius:10,background:"#20190d",
-          border:"1px solid rgba(240,196,82,.35)",color:"#f0d18a",fontSize:12
-        }}>
-          {message}
-        </div>
-      )}
     </>
   );
 }
