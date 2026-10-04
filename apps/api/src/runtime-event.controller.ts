@@ -22,7 +22,8 @@ const RUNTIME_EVENT_TYPES = new Set([
   "STATE_CHANGED",
   "MT5_CONNECTED",
   "MT5_DISCONNECTED",
-  "SYMBOL_CHANGED"
+  "SYMBOL_CHANGED",
+  "LIVE_EXECUTION"
 ]);
 
 function safeState(value: unknown) {
@@ -83,10 +84,17 @@ export class RuntimeEventWorkerController {
       ? body.openPositions.slice(0, 200)
       : null;
     const occurredAt = Math.max(0, Number(body?.occurredAt || 0));
+    const occurredAtMsRaw = Number(body?.occurredAtMs || 0);
+    const occurredAtMs = Number.isFinite(occurredAtMsRaw) && occurredAtMsRaw > 0
+      ? Math.trunc(occurredAtMsRaw)
+      : occurredAt > 0
+        ? Math.trunc(occurredAt * 1000)
+        : 0;
     const receivedAt = Date.now();
-    const sourceAgeMs = occurredAt > 0
-      ? Math.max(0, receivedAt - occurredAt * 1000)
+    const sourceAgeMs = occurredAtMs > 0
+      ? Math.max(0, receivedAt - occurredAtMs)
       : null;
+    const isLiveExecution = eventType === "LIVE_EXECUTION";
 
     const metricsPatch: Record<string, any> = {
       realtimeEventType: eventType,
@@ -97,17 +105,29 @@ export class RuntimeEventWorkerController {
     if (openPositions !== null) metricsPatch.openPositions = openPositions;
     if (symbol) metricsPatch.symbol = symbol;
     if (executionStatus) metricsPatch.executionStatus = executionStatus;
+    if (isLiveExecution) {
+      metricsPatch.liveExecutionAtMs = occurredAtMs || receivedAt;
+      metricsPatch.liveExecutionReceivedAtMs = receivedAt;
+      metricsPatch.liveExecutionIntervalMs = 200;
+      metricsPatch.liveExecutionTransport = "CLOUD_SSE";
+    }
 
-    await this.db.query(
-      `UPDATE bot_instances
-       SET metrics=COALESCE(metrics,'{}'::jsonb) || $2::jsonb,
-           actual_state=CASE
-             WHEN $3::text IN ('RUNNING','STOPPED','SAFE_STOP') THEN $3::text
-             ELSE actual_state
-           END
-       WHERE id=$1`,
-      [instanceId, JSON.stringify(metricsPatch), state || null]
-    );
+    // 200ms Cloud execution snapshots are ephemeral display telemetry.
+    // Do not write PostgreSQL five times per second per live account. The
+    // normal heartbeat and open/close runtime events remain the durable
+    // dashboard fallback and persist current metrics as before.
+    if (!isLiveExecution) {
+      await this.db.query(
+        `UPDATE bot_instances
+         SET metrics=COALESCE(metrics,'{}'::jsonb) || $2::jsonb,
+             actual_state=CASE
+               WHEN $3::text IN ('RUNNING','STOPPED','SAFE_STOP') THEN $3::text
+               ELSE actual_state
+             END
+         WHERE id=$1`,
+        [instanceId, JSON.stringify(metricsPatch), state || null]
+      );
+    }
 
     this.events.publish(String(instance.assigned_user_id), {
       eventId,
@@ -115,6 +135,7 @@ export class RuntimeEventWorkerController {
       instanceId,
       slotId: String(instance.slot_id),
       occurredAt,
+      occurredAtMs,
       receivedAt,
       state: state || null,
       positions,
