@@ -6379,8 +6379,15 @@ function BotSettingsModal(props:any) {
     const onKeyDown=(event:KeyboardEvent)=>{
       if(event.key==="Escape") setModeGuideOpen(false);
     };
+    const previousOverflow=document.body.style.overflow;
+    document.body.classList.add("cc-mode-guide-active");
+    document.body.style.overflow="hidden";
     window.addEventListener("keydown",onKeyDown);
-    return()=>window.removeEventListener("keydown",onKeyDown);
+    return()=>{
+      window.removeEventListener("keydown",onKeyDown);
+      document.body.classList.remove("cc-mode-guide-active");
+      document.body.style.overflow=previousOverflow;
+    };
   },[modeGuideOpen]);
   const accountCurrency = normalizeAccountCurrency(props.metrics?.currency);
   const savedAccountCurrency = String(props.settings?.accountCurrency || "").trim().toUpperCase();
