@@ -149,17 +149,26 @@
 .good{color:#64eab0!important}
 .bad{color:#ff6978!important}
 .warn{color:#f2c96d!important}
+.currencyPeriodRow{
+  display:grid;
+  grid-template-columns:minmax(430px,32%) minmax(0,1fr);
+  gap:8px;
+  align-items:stretch;
+  margin-bottom:9px;
+}
 .currencyStrip{
   display:flex;
+  min-width:0;
   gap:8px;
-  margin-bottom:9px;
+  margin-bottom:0;
   overflow-x:auto;
   padding-bottom:1px;
   scrollbar-width:thin;
   scrollbar-color:#3c356c transparent;
 }
 .currencyStrip article{
-  flex:0 0 min(420px,44vw);
+  flex:1 0 100%;
+  min-width:420px;
   display:grid;
   grid-template-columns:95px repeat(5,minmax(82px,1fr));
   align-items:center;
@@ -193,8 +202,9 @@
   display:flex;
   align-items:center;
   gap:8px;
+  min-width:0;
   min-height:46px;
-  margin-bottom:9px;
+  margin-bottom:0;
   padding:7px 9px;
   border:1px solid #273654;
   border-radius:10px;
@@ -504,11 +514,15 @@
 
 @media(max-width:1500px){
   .summaryGrid{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .currencyPeriodRow{grid-template-columns:minmax(410px,38%) minmax(0,1fr)}
+  .periodIntro{min-width:220px}
   .cards{grid-template-columns:repeat(3,minmax(0,1fr))}
   .toolbar{grid-template-columns:minmax(240px,1.5fr) repeat(2,minmax(130px,.7fr)) repeat(2,minmax(120px,.65fr))}
   .resultCount{grid-column:1/-1;text-align:right}
 }
 @media(max-width:1180px){
+  .currencyPeriodRow{grid-template-columns:1fr}
+  .currencyStrip article{flex-basis:100%}
   .periodBar{flex-wrap:wrap}
   .periodIntro{width:100%;min-width:0}
   .periodApplied{margin-left:0}
@@ -543,7 +557,7 @@
   .summaryGrid{gap:6px}
   .summaryGrid>div{min-height:70px;padding:9px}
   .summaryGrid b{font-size:16px}
-  .currencyStrip article{flex-basis:680px}
+  .currencyStrip article{min-width:680px;flex-basis:680px}
   .toolbar{grid-template-columns:1fr}
   .searchBox,.resultCount{grid-column:auto}
   .cards{grid-template-columns:1fr}
