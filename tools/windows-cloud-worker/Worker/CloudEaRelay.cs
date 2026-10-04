@@ -177,7 +177,7 @@ internal sealed class CloudEaRelay
         catch (IOException) { return; }
         catch (UnauthorizedAccessException) { return; }
 
-        if (payload.Length < 32 || !payload.Contains(""LIVE_EXECUTION"", StringComparison.Ordinal))
+        if (payload.Length < 32 || !payload.Contains("\"LIVE_EXECUTION\"", StringComparison.Ordinal))
             return;
 
         try
