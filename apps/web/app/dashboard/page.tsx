@@ -438,13 +438,17 @@ export default function DashboardPage() {
           nextSettings.zeroGridCloseReserveMoney = 0;
         }
         if (loadedControlMode === "COUNTER") {
-          if (!Number.isFinite(Number(nextSettings.counterPerPositionProfitMoney)) || Number(nextSettings.counterPerPositionProfitMoney) <= 0) nextSettings.counterPerPositionProfitMoney = 0.5;
+          if (!Number.isFinite(Number(nextSettings.counterPerPositionProfitMoney)) || Number(nextSettings.counterPerPositionProfitMoney) <= 0) nextSettings.counterPerPositionProfitMoney = 1;
         }
         if (loadedControlMode === "RACE") {
           const raceProfitMode = String(nextSettings.raceProfitTargetMode || "").toUpperCase();
           nextSettings.raceProfitTargetMode = ["BASKET","POSITION","OFF"].includes(raceProfitMode)
             ? raceProfitMode
-            : (nextSettings.raceCloseAllProfitEnabled === false ? "OFF" : "BASKET");
+            : (storedSettings.raceCloseAllProfitEnabled === true
+                ? "BASKET"
+                : storedSettings.raceCloseAllProfitEnabled === false
+                  ? "OFF"
+                  : "POSITION");
           nextSettings.raceCloseAllProfitEnabled = nextSettings.raceProfitTargetMode === "BASKET";
           if (!Number.isFinite(Number(nextSettings.raceCloseAllProfitMoney)) || Number(nextSettings.raceCloseAllProfitMoney) <= 0) nextSettings.raceCloseAllProfitMoney = 0.5;
           if (!Number.isFinite(Number(nextSettings.racePerPositionProfitMoney)) || Number(nextSettings.racePerPositionProfitMoney) <= 0) nextSettings.racePerPositionProfitMoney = 0.5;
