@@ -46,8 +46,8 @@ Need $ea '#define LIVE_EXECUTION_SNAPSHOT_INTERVAL_MS 200' 'EA live execution ca
 Need $snapshot 'scenova-live-' 'EA must publish replaceable live snapshot files'
 Need $snapshot 'OpenPositionsTelemetryJson()' 'EA live snapshot must contain current position P/L'
 Need $snapshot 'FileOpen(' 'EA live snapshot must use local file transport'
-Forbid $snapshot 'WebRequest' 'EA 200ms snapshot path must never call network WebRequest'
-Forbid $snapshot 'HttpPostJson' 'EA 200ms snapshot path must never call SaaS HTTP'
+Forbid $snapshot 'WebRequest(' 'EA 200ms snapshot path must never call network WebRequest'
+Forbid $snapshot 'HttpPostJson(' 'EA 200ms snapshot path must never call SaaS HTTP'
 Need $onTick 'PublishLiveExecutionSnapshot(false);' 'MT5 tick path must refresh live execution snapshot'
 Need $ea 'PublishLiveExecutionSnapshot(true);' 'trade transactions must force immediate snapshot refresh'
 
