@@ -28,7 +28,7 @@ export class BrokerController {
       this.brokers.exnessSummary(userId),
       this.benefits.userSummary(userId)
     ]);
-    return { ...base, partner, phase: { ...base.phase, current: 2, partnerVerificationEnabled: true, benefitsEnabled: true } };
+    return { ...base, partner, phase: { ...base.phase, current: 3, partnerVerificationEnabled: true, benefitsEnabled: true, rebateEnabled: true } };
   }
 
   @Post("exness/registration-link")
