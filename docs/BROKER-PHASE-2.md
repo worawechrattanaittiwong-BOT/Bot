@@ -16,6 +16,7 @@ Phase 2 adds manual Exness Partner verification and SCENOVA partner benefits.
   - PLUS = 20%
   - VIP = 30%
 - Automatic SCENOVA package discount for VERIFIED clients.
+- Benefit audit is stored in a separate broker ledger; existing Local/Cloud order schemas are unchanged.
 - Local and Cloud checkout use the better of:
   - Broker Partner Benefit
   - Promotion Code
