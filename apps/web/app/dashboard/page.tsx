@@ -3298,6 +3298,72 @@ export default function DashboardPage() {
       return;
     }
 
+    if (path.startsWith("/bot/start")) {
+      const startSymbol = String(
+        metrics.symbol ||
+        settings.startupSymbol ||
+        settings.symbol ||
+        tradingSymbol ||
+        ""
+      ).trim().toUpperCase();
+      const isBitcoinStart = startSymbol.includes("BTC") || startSymbol.includes("XBT");
+
+      if (isBitcoinStart) {
+        const slotKey = String(
+          selectedSlotIdRef.current ||
+          data?.selectedSlot?.id ||
+          data?.instance?.id ||
+          "slot"
+        );
+        const acknowledgementKey =
+          "scenova:btc-risk:v1:" + slotKey + ":" + activeControlMode;
+        let alreadyAcknowledged = false;
+        try {
+          alreadyAcknowledged = window.localStorage.getItem(acknowledgementKey) === "1";
+        } catch {}
+
+        if (!alreadyAcknowledged) {
+          const modeLots:Record<string,any> = {
+            AUTO: settings.autoLot,
+            RACE: settings.raceLot,
+            COUNTER: settings.counterLot,
+            FLIP_LOCK: settings.flipLockLot,
+            MANUAL: settings.manualLot
+          };
+          const startLot = Math.max(
+            0.01,
+            Number(modeLots[activeControlMode] ?? settings.lot ?? 0.01)
+          );
+          const modeSpecificWarning =
+            activeControlMode === "COUNTER"
+              ? "\n\nคำเตือนเพิ่มเติม: COUNTER ไม่มี Broker SL ต่อออเดอร์และอาจสะสมหลาย Position พร้อมกัน จึงมีความเสี่ยงสูงขึ้นเมื่อใช้กับ BTC"
+              : activeControlMode === "FLIP_LOCK"
+                ? "\n\nคำเตือนเพิ่มเติม: BTC อาจเกิดไส้เทียนและการเคลื่อนไหวฉับพลัน ทำให้ SL และการ Flip เกิดถี่กว่าตลาดทอง"
+                : "";
+
+          const acknowledged = await confirmPopup({
+            title:"แจ้งเตือนก่อนเทรด BTC",
+            tone:"warning",
+            message:
+              "SCENOVA รองรับ BTC/XBT ในโหมดนี้ แต่ระบบกลยุทธ์และค่าการทำงานของบอทปัจจุบันพัฒนาและปรับจูนโดยอิงพฤติกรรมของ XAUUSD เป็นหลัก และยังไม่ได้ปรับจูนเฉพาะสำหรับตลาด BTC\n\n" +
+              "BTC มีความผันผวนสูง ราคาและ Spread อาจเปลี่ยนแปลงรวดเร็ว รวมถึงเกิดไส้เทียนยาวได้ในช่วงเวลาสั้น ๆ ผลการทำงานจึงอาจแตกต่างจากการใช้งานกับทอง\n\n" +
+              "แนะนำให้เริ่มด้วย Lot ขนาดเล็กและติดตามผลก่อนเพิ่มความเสี่ยง" +
+              modeSpecificWarning +
+              "\n\nSymbol: " + startSymbol +
+              "\nโหมด: " + activeControlMode +
+              "\nLot: " + startLot.toFixed(2),
+            acknowledgeLabel:"ฉันเข้าใจความเสี่ยงและข้อจำกัดของการใช้งานบอทกับ BTC",
+            cancelLabel:"ยกเลิก",
+            confirmLabel:"รับทราบและเริ่มบอท"
+          });
+          if (!acknowledged) return;
+          try {
+            window.localStorage.setItem(acknowledgementKey,"1");
+          } catch {}
+        }
+      }
+    }
+
     if (singleClickBotCommand) {
       botCommandLockRef.current = true;
       setBotCommandLocked(true);
@@ -6351,6 +6417,12 @@ function BotSettingsModal(props:any) {
   const controlMode = ["AUTO","FLIP_LOCK","RACE","COUNTER","ZERO_GRID","MANUAL"].includes(requestedControlMode)
     ? requestedControlMode
     : inferredControlMode;
+  const btcModeRiskDetail =
+    controlMode === "COUNTER"
+      ? " · COUNTER ไม่มี Broker SL ต่อออเดอร์และอาจสะสมหลาย Position"
+      : controlMode === "FLIP_LOCK"
+        ? " · ความผันผวนและไส้เทียนของ BTC อาจทำให้ SL / Flip เกิดถี่ขึ้น"
+        : "";
   const sizingProfiles:Record<string,{lot:string;max?:string}> = {
     AUTO:{lot:"autoLot",max:"autoMaxPositions"},
     RACE:{lot:"raceLot",max:"raceMaxPositions"},
@@ -6703,7 +6775,7 @@ function BotSettingsModal(props:any) {
               aria-label={"เปิดคู่มือโหมด "+controlMode}
               title="อ่านแนวทางการใช้งานแต่ละโหมด"
             ><span>!</span></button>
-            {isBitcoinSymbol&&<div className="cc-bot-v2-summary-note"><ScenovaIcon name="status" size={17}/><span><b>BTC Mode Support</b><small>AUTO · RACE · COUNTER · FLIP LOCK · MANUAL ใช้งานได้ · ZERO GRID ถูกบล็อก</small></span></div>}
+            {isBitcoinSymbol&&<div className="cc-bot-v2-summary-note cc-btc-risk-note"><ScenovaIcon name="warning" size={17}/><span><b>BTC · High Volatility</b><small>รองรับ BTC/XBT แต่ระบบกลยุทธ์และค่าการทำงานปัจจุบันปรับจูนโดยอิง XAUUSD เป็นหลัก และยังไม่ได้ปรับจูนเฉพาะสำหรับ BTC · AUTO / RACE / COUNTER / FLIP LOCK / MANUAL ใช้งานได้ · ZERO GRID ถูกบล็อก{btcModeRiskDetail}</small></span></div>}
             {embedded ? (
               <div className="cc-bot-v12-mode-select-wrap">
                 <label>
