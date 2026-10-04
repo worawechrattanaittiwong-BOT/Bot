@@ -11,6 +11,7 @@ type AutomationState = {
     baseUrl: string;
     authPath: string;
     summaryPath: string;
+    authIdentityField: string;
     clientReportPath: string;
     commissionReportPath: string;
     autoVerifyClients: boolean;
@@ -56,6 +57,7 @@ export function AdminBrokerAutomationPanel() {
   const [form, setForm] = useState({
     email: "",
     password: "",
+    authIdentityField: "email",
     enabled: false,
     syncIntervalMinutes: 15,
     clientReportPath: "",
@@ -74,6 +76,7 @@ export function AdminBrokerAutomationPanel() {
       ...current,
       email: "",
       password: "",
+      authIdentityField: String(c.authIdentityField || "email"),
       enabled: Boolean(c.enabled),
       syncIntervalMinutes: Number(c.syncIntervalMinutes || 15),
       clientReportPath: String(c.clientReportPath || ""),
@@ -224,6 +227,20 @@ export function AdminBrokerAutomationPanel() {
         </div>
 
         <div className={styles.apiPaths}>
+          <label>
+            <span>Auth Identity Field</span>
+            <select
+              value={form.authIdentityField}
+              onChange={event => setForm(current => ({
+                ...current,
+                authIdentityField: event.target.value
+              }))}
+            >
+              <option value="email">email</option>
+              <option value="login">login</option>
+            </select>
+            <small>เลือกตาม field ที่แสดงใน Exness Official API Schema</small>
+          </label>
           <label>
             <span>Client Report Path</span>
             <input
