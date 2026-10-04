@@ -57,6 +57,9 @@ export class ExnessPartnershipApiService {
         updated_at timestamptz NOT NULL DEFAULT now()
       );
 
+      ALTER TABLE broker_api_connections
+        ADD COLUMN IF NOT EXISTS commission_amount_scale integer NOT NULL DEFAULT 100;
+
       CREATE TABLE IF NOT EXISTS broker_sync_runs (
         id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         broker_code varchar(32) NOT NULL,
@@ -158,6 +161,20 @@ export class ExnessPartnershipApiService {
     await this.saveSecret("EXNESS_PARTNER_EMAIL", "Exness Partner Email", email, actor);
     await this.saveSecret("EXNESS_PARTNER_PASSWORD", "Exness Partner Password", password, actor);
 
+    const credentialsChanged = Boolean(email || password);
+    if (credentialsChanged) {
+      await this.db.query(
+        `UPDATE broker_api_connections SET
+           last_test_status='NOT_TESTED',
+           last_test_detail='Credentials changed · Test Connection required',
+           last_tested_at=NULL,
+           enabled=false,
+           next_sync_at=NULL,
+           updated_at=now()
+         WHERE broker_code='EXNESS'`
+      );
+    }
+
     const interval = Math.max(5, Math.min(1440, Math.trunc(Number(input.syncIntervalMinutes || 15))));
     const commissionAmountScale = Math.max(
       1,
@@ -172,6 +189,12 @@ export class ExnessPartnershipApiService {
       );
       if (!configured) {
         throw new ConflictException("กรุณาบันทึก Exness Partner Email และ Password ก่อนเปิด Automation");
+      }
+      const tested = await this.db.one(
+        "SELECT last_test_status FROM broker_api_connections WHERE broker_code='EXNESS'"
+      );
+      if (String(tested?.last_test_status || "") !== "PASS") {
+        throw new ConflictException("กรุณา Test Connection ให้ผ่านก่อนเปิด Automation");
       }
     }
 
@@ -292,7 +315,7 @@ export class ExnessPartnershipApiService {
         ok: true,
         status: "PASS",
         detail,
-        summary
+        summaryReceived: Boolean(summary)
       };
     } catch (error: any) {
       const detail = String(error?.message || "Connection failed").slice(0,900);
@@ -319,12 +342,12 @@ export class ExnessPartnershipApiService {
   async rawReports(token: string) {
     await this.ensureSchema();
     const row = await this.db.one(
-      "SELECT client_report_path,commission_report_path,commission_amount_scale FROM broker_api_connections WHERE broker_code='EXNESS'"
+      "SELECT client_report_path,commission_report_path,commission_amount_scale,auto_verify_clients,auto_import_commissions FROM broker_api_connections WHERE broker_code='EXNESS'"
     );
-    const clients = row?.client_report_path
+    const clients = row?.auto_verify_clients && row?.client_report_path
       ? this.arrayFromPayload(await this.request(String(row.client_report_path), token))
       : [];
-    const commissions = row?.commission_report_path
+    const commissions = row?.auto_import_commissions && row?.commission_report_path
       ? this.arrayFromPayload(await this.request(String(row.commission_report_path), token))
       : [];
     return {
