@@ -444,44 +444,46 @@ export default function FleetMonitorPage() {
           <div><span>{primaryCurrency ? primaryCurrency.currency + " P/L · " + selectedRangeLabel : "P/L · " + selectedRangeLabel}</span><b className={num(primaryCurrency?.netProfit) >= 0 ? styles.good : styles.bad}>{primaryCurrency ? money(primaryCurrency.netProfit, primaryCurrency.currency, true) : "—"}</b><small>Trade Journal ตามช่วงที่เลือก</small></div>
         </section>
 
-        <section className={styles.currencyStrip}>
-          {data.summary.currencyTotals.map((item) => (
-            <article key={item.currency}>
-              <header><b>{item.currency}</b><span>{item.accounts} บัญชี</span></header>
-              <div><span>Balance · Live</span><b>{fixed(item.balance)}</b></div>
-              <div><span>Equity · Live</span><b>{fixed(item.equity)}</b></div>
-              <div><span>Floating · Live</span><b className={item.floatingProfit >= 0 ? styles.good : styles.bad}>{fixed(item.floatingProfit)}</b></div>
-              <div><span>วันนี้</span><b className={item.todayClosedProfit >= 0 ? styles.good : styles.bad}>{fixed(item.todayClosedProfit)}</b></div>
-              <div><span>P/L · {selectedRangeLabel}</span><b className={item.netProfit >= 0 ? styles.good : styles.bad}>{fixed(item.netProfit)}</b></div>
-            </article>
-          ))}
-        </section>
-
-        <section className={styles.periodBar}>
-          <div className={styles.periodIntro}>
-            <ScenovaIcon name="report" size={16}/>
-            <span><b>ช่วงเวลาผลงาน</b><small>เวลาไทย (Asia/Bangkok) · ใช้กับ P/L, Win Rate, Baskets, Entries และ Drawdown</small></span>
+        <section className={styles.currencyPeriodRow}>
+          <div className={styles.currencyStrip}>
+            {data.summary.currencyTotals.map((item) => (
+              <article key={item.currency}>
+                <header><b>{item.currency}</b><span>{item.accounts} บัญชี</span></header>
+                <div><span>Balance · Live</span><b>{fixed(item.balance)}</b></div>
+                <div><span>Equity · Live</span><b>{fixed(item.equity)}</b></div>
+                <div><span>Floating · Live</span><b className={item.floatingProfit >= 0 ? styles.good : styles.bad}>{fixed(item.floatingProfit)}</b></div>
+                <div><span>วันนี้</span><b className={item.todayClosedProfit >= 0 ? styles.good : styles.bad}>{fixed(item.todayClosedProfit)}</b></div>
+                <div><span>P/L · {selectedRangeLabel}</span><b className={item.netProfit >= 0 ? styles.good : styles.bad}>{fixed(item.netProfit)}</b></div>
+              </article>
+            ))}
           </div>
-          <select value={rangeMode} onChange={(event) => setRangeMode(event.target.value as RangeMode)}>
-            <option value="ALL">ทั้งหมด</option>
-            <option value="TODAY">วันนี้</option>
-            <option value="7D">7 วันที่ผ่านมา</option>
-            <option value="30D">30 วันที่ผ่านมา</option>
-            <option value="CUSTOM">กำหนดวัน/เวลาเอง</option>
-          </select>
-          {rangeMode === "CUSTOM" ? (
-            <>
-              <label className={styles.dateField}>
-                <span>เริ่ม</span>
-                <input type="datetime-local" value={customFrom} onChange={(event) => setCustomFrom(event.target.value)}/>
-              </label>
-              <label className={styles.dateField}>
-                <span>สิ้นสุด</span>
-                <input type="datetime-local" value={customTo} onChange={(event) => setCustomTo(event.target.value)}/>
-              </label>
-            </>
-          ) : null}
-          <span className={styles.periodApplied}>กำลังแสดง: <b>{selectedRangeLabel}</b></span>
+
+          <div className={styles.periodBar}>
+            <div className={styles.periodIntro}>
+              <ScenovaIcon name="report" size={16}/>
+              <span><b>ช่วงเวลาผลงาน</b><small>เวลาไทย (Asia/Bangkok) · ใช้กับ P/L, Win Rate, Baskets, Entries และ Drawdown</small></span>
+            </div>
+            <select value={rangeMode} onChange={(event) => setRangeMode(event.target.value as RangeMode)}>
+              <option value="ALL">ทั้งหมด</option>
+              <option value="TODAY">วันนี้</option>
+              <option value="7D">7 วันที่ผ่านมา</option>
+              <option value="30D">30 วันที่ผ่านมา</option>
+              <option value="CUSTOM">กำหนดวัน/เวลาเอง</option>
+            </select>
+            {rangeMode === "CUSTOM" ? (
+              <>
+                <label className={styles.dateField}>
+                  <span>เริ่ม</span>
+                  <input type="datetime-local" value={customFrom} onChange={(event) => setCustomFrom(event.target.value)}/>
+                </label>
+                <label className={styles.dateField}>
+                  <span>สิ้นสุด</span>
+                  <input type="datetime-local" value={customTo} onChange={(event) => setCustomTo(event.target.value)}/>
+                </label>
+              </>
+            ) : null}
+            <span className={styles.periodApplied}>กำลังแสดง: <b>{selectedRangeLabel}</b></span>
+          </div>
         </section>
 
         <section className={styles.toolbar}>
