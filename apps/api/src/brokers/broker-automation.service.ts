@@ -365,6 +365,7 @@ export class BrokerAutomationService
          updated_at=now()
        WHERE broker_code='EXNESS'
          AND enabled=true
+         AND last_test_status='PASS'
          AND (next_sync_at IS NULL OR next_sync_at<=now())
        RETURNING broker_code`
     );
