@@ -10,6 +10,8 @@ import {
 import { ScenovaIcon } from "../../components/ScenovaIcon";
 import { adminApi, api, getToken } from "../../lib/api";
 import styles from "./page.module.css";
+import { RebatePanel } from "./components/RebatePanel";
+import { AdminBrokerFinancePanel } from "./components/AdminBrokerFinancePanel";
 
 type Account = {
   user: {
@@ -485,14 +487,14 @@ export default function BrokerPage() {
         <div className={styles.shell}>
           <header className={styles.hero}>
             <div>
-              <span className={styles.eyebrow}>SCENOVA BROKER CENTER · PHASE 2</span>
+              <span className={styles.eyebrow}>SCENOVA BROKER CENTER · PHASE 3</span>
               <h1>Broker</h1>
               <p>
                 Exness Partner Link, Partner Verification และ Partner Benefits
                 แยกจาก Trading Bot, Cloud, Local และ EA เดิม
               </p>
             </div>
-            <span className={styles.phaseBadge}>PHASE 2 ACTIVE</span>
+            <span className={styles.phaseBadge}>PHASE 3 ACTIVE</span>
           </header>
 
           {error && <div className={styles.error}>{error}</div>}
@@ -601,10 +603,12 @@ export default function BrokerPage() {
 
           <section className={styles.phaseStrip}>
             <div className={styles.phaseDone}><b>1</b><span>Broker Center</span><small>พร้อมแล้ว</small></div>
-            <div className={styles.phaseCurrent}><b>2</b><span>Partner Verify + Benefits</span><small>กำลังทำงาน</small></div>
-            <div><b>3</b><span>Commission + Rebate</span><small>ยังไม่เปิด</small></div>
+            <div className={styles.phaseDone}><b>2</b><span>Partner Verify + Benefits</span><small>พร้อมแล้ว</small></div>
+            <div className={styles.phaseCurrent}><b>3</b><span>Commission + Rebate</span><small>กำลังทำงาน</small></div>
             <div><b>4</b><span>API Automation</span><small>ยังไม่เปิด</small></div>
           </section>
+
+          <RebatePanel/>
 
           {elevated && (
             <>
@@ -727,6 +731,8 @@ export default function BrokerPage() {
                   )}
                 </div>
               </section>
+
+              <AdminBrokerFinancePanel/>
             </>
           )}
         </div>
