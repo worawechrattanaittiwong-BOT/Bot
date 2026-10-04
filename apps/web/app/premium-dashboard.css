@@ -4899,6 +4899,8 @@ body.cc-mode-guide-active .cc-mobile-mirror-launch{
   aspect-ratio:9/16;
   align-self:stretch;
   max-height:116px;
+  position:relative;
+  overflow:hidden;
   display:grid;
   place-items:center;
   padding:4px;
@@ -4906,6 +4908,37 @@ body.cc-mode-guide-active .cc-mobile-mirror-launch{
   border-radius:14px;
   background:linear-gradient(160deg,rgba(255,255,255,.06),rgba(255,255,255,.015));
   box-shadow:0 10px 28px rgba(0,0,0,.22);
+}
+button.cc-mode-guide-video-poster{
+  appearance:none;
+  cursor:pointer;
+  color:inherit;
+  font:inherit;
+}
+.cc-mode-guide-video-poster.has-preview{
+  padding:0;
+  background:#05080e;
+}
+.cc-mode-guide-video-poster-video{
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  background:#05080e;
+  pointer-events:none;
+}
+.cc-mode-guide-video-poster-shade{
+  position:absolute;
+  inset:0;
+  background:linear-gradient(180deg,rgba(2,5,10,.10),rgba(3,6,12,.18) 45%,rgba(3,6,12,.72));
+  pointer-events:none;
+}
+.cc-mode-guide-video-poster.has-preview:hover .cc-mode-guide-video-poster-video{
+  transform:scale(1.025);
+}
+.cc-mode-guide-video-poster.has-preview .cc-mode-guide-video-poster-video{
+  transition:transform .18s ease;
 }
 .cc-mode-guide-video-poster-screen{
   width:100%;
@@ -4933,36 +4966,49 @@ body.cc-mode-guide-active .cc-mobile-mirror-launch{
 }
 .cc-mode-guide-video-poster-kicker{
   position:absolute;
+  z-index:2;
   top:7px;
   right:7px;
   padding:2px 5px;
   border:1px solid rgba(255,255,255,.14);
   border-radius:999px;
-  background:rgba(5,10,18,.48);
-  color:#a9b6c9;
+  background:rgba(5,10,18,.62);
+  color:#d0d8e5;
   font-size:var(--ui-type-caption);
   font-weight:900;
 }
 .cc-mode-guide-video-poster-play{
+  position:relative;
+  z-index:2;
   width:32px;
   height:32px;
   display:grid;
   place-items:center;
-  border:1px solid color-mix(in srgb,var(--mode-guide-accent) 52%,#fff0);
+  border:1px solid color-mix(in srgb,var(--mode-guide-accent) 62%,#fff0);
   border-radius:50%;
-  background:var(--mode-guide-accent-soft);
+  background:rgba(8,13,22,.72);
   color:var(--mode-guide-accent);
-  box-shadow:0 0 24px color-mix(in srgb,var(--mode-guide-accent) 14%,transparent);
+  box-shadow:0 0 24px color-mix(in srgb,var(--mode-guide-accent) 18%,transparent);
 }
-.cc-mode-guide-video-poster-screen small{
+.cc-mode-guide-video-poster-screen small,
+.cc-mode-guide-video-poster>small{
+  position:relative;
+  z-index:2;
   max-width:100%;
   overflow:hidden;
-  color:#7f8ca1;
+  color:#aeb9cb;
   font-size:var(--ui-type-caption);
   font-weight:900;
   letter-spacing:.08em;
   text-overflow:ellipsis;
   white-space:nowrap;
+}
+.cc-mode-guide-video-poster>small{
+  position:absolute;
+  left:6px;
+  right:6px;
+  bottom:7px;
+  text-align:center;
 }
 
 .cc-mode-guide-video-zone-copy{min-width:0}
@@ -5731,16 +5777,27 @@ body.cc-mode-guide-active .cc-mobile-mirror-launch{
   }
   .cc-mode-guide-video-zone{
     min-height:0;
+    height:auto;
+    max-height:none;
     grid-template-columns:58px minmax(0,1fr);
+    grid-template-areas:
+      "poster copy"
+      "actions actions";
+    grid-template-rows:auto auto;
+    align-items:start;
     gap:12px;
     padding:12px;
     border-radius:15px;
   }
+  .cc-mode-guide-video-zone.is-empty{min-height:0}
   .cc-mode-guide-video-poster{
+    grid-area:poster;
+    align-self:start;
     width:54px;
     max-height:92px;
     border-radius:11px;
   }
+  .cc-mode-guide-video-zone-copy{grid-area:copy}
   .cc-mode-guide-video-poster-screen{
     min-height:82px;
     border-radius:8px;
@@ -5757,11 +5814,18 @@ body.cc-mode-guide-active .cc-mobile-mirror-launch{
   }
   .cc-mode-guide-video-meta{margin-top:7px}
   .cc-mode-guide-video-actions{
-    grid-column:1/-1;
-    grid-template-columns:1fr 1fr;
+    grid-area:actions;
+    grid-column:auto;
+    width:100%;
     min-width:0;
+    margin-top:1px;
+    grid-template-columns:1fr 1fr;
+    align-self:stretch;
   }
-  .cc-mode-guide-video-actions>*{width:100%}
+  .cc-mode-guide-video-actions>*{
+    width:100%;
+    min-height:44px;
+  }
   .cc-mode-guide-video-actions>.cc-mode-guide-video-empty{grid-column:1/-1}
   .cc-mode-guide-video-admin{
     position:fixed;
