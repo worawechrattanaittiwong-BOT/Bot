@@ -7142,21 +7142,21 @@ button.cc-mode-guide-video-poster{
   .cc-mode-guide-video-poster-screen{min-height:46px}
   .cc-mode-guide-video-poster-play{width:24px;height:24px}
   .cc-mode-guide-video-zone-copy h3{font-size:11px}
-  .cc-mode-guide-video-eyebrow{font-size:10px}
+  .cc-mode-guide-video-eyebrow{font-size:11px}
   .cc-mode-guide-video-actions{grid-area:actions;grid-column:auto;width:auto;margin-top:0;display:flex}
-  .cc-mode-guide-video-actions>*{width:auto;min-width:70px;min-height:34px;padding:6px 8px;font-size:10px}
+  .cc-mode-guide-video-actions>*{width:auto;min-width:70px;min-height:34px;padding:6px 8px;font-size:11px}
   .cc-mode-guide-summary,.cc-mode-guide-market,.cc-mode-guide-capital{padding:9px;border-radius:12px}
   .cc-mode-guide-section-title{margin-bottom:7px}
   .cc-mode-guide-section-title>b,.cc-mode-guide-capital>header b{font-size:14px}
   .cc-mode-guide-summary-row,.cc-mode-guide-market-row{min-height:38px;grid-template-columns:22px 80px minmax(0,1fr);gap:6px;padding:6px 7px}
-  .cc-mode-guide-summary-row>small,.cc-mode-guide-market-row>small{font-size:10.5px}
+  .cc-mode-guide-summary-row>small,.cc-mode-guide-market-row>small{font-size:11px}
   .cc-mode-guide-summary-row>b,.cc-mode-guide-market-row>b{font-size:11.5px}
   .cc-mode-guide-capital>header{display:block;margin-bottom:7px}
   .cc-mode-guide-capital-tiers{grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}
   .cc-mode-guide-capital-tiers>div{padding:8px 6px}
-  .cc-mode-guide-capital-tiers small{margin-bottom:2px;font-size:10px}
+  .cc-mode-guide-capital-tiers small{margin-bottom:2px;font-size:11px}
   .cc-mode-guide-capital-tiers strong{font-size:13px;white-space:nowrap}
-  .cc-mode-guide-capital>p{margin-top:6px;font-size:10px}
+  .cc-mode-guide-capital>p{margin-top:6px;font-size:11px}
   .cc-mode-guide-footer{padding:7px 9px max(9px,env(safe-area-inset-bottom))}
 }
 /* ===== /Control Center V62 ===== */
