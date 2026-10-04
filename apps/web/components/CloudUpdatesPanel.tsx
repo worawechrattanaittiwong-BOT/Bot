@@ -14,6 +14,7 @@ type UpdateJob = {
   state:string;
   target_version:string|null;
   target_sha256:string|null;
+  target_build_id:string|null;
   total:number;
   waiting_safe:number;
   delivered:number;
@@ -33,8 +34,15 @@ type RunnerUpdateStatus = {
   updateAvailable:boolean;
 };
 
+type ProductionRelease = {
+  version:string;
+  sha256:string;
+  buildId:string|null;
+  runtimeContract:string;
+};
+
 type UpdateSnapshot = {
-  currentRelease:{version:string;sha256:string;runtimeContract:string}|null;
+  currentRelease:ProductionRelease|null;
   runnerStatus:Record<string,RunnerUpdateStatus>;
   jobs:UpdateJob[];
 };
@@ -65,6 +73,20 @@ function jobLabel(job:UpdateJob) {
   if(job.delivered>0) return "กำลังติดตั้ง";
   if(job.state==="RUNNING") return job.action==="ROLLBACK" ? "กำลัง Rollback" : "กำลังอัปเดต";
   return job.state;
+}
+
+function releaseIdentityDiffers(job:UpdateJob,release:ProductionRelease) {
+  const jobVersion=String(job.target_version||"").trim().replace(/^v/i,"");
+  const releaseVersion=String(release.version||"").trim().replace(/^v/i,"");
+  const jobSha=String(job.target_sha256||"").trim().toLowerCase();
+  const releaseSha=String(release.sha256||"").trim().toLowerCase();
+  const jobBuild=String(job.target_build_id||"").trim();
+  const releaseBuild=String(release.buildId||"").trim();
+
+  if(jobVersion!==releaseVersion) return true;
+  if(jobSha!==releaseSha) return true;
+  if(jobBuild && releaseBuild && jobBuild!==releaseBuild) return true;
+  return false;
 }
 
 function runnerStateLabel(state:RunnerUiState,activeJob?:UpdateJob) {
@@ -120,8 +142,7 @@ export function CloudUpdatesPanel({nodes}:{nodes:any[]}) {
       release &&
       activeJob &&
       activeJob.action==="UPDATE" &&
-      activeJob.target_version &&
-      activeJob.target_version!==release.version &&
+      releaseIdentityDiffers(activeJob,release) &&
       activeJob.delivered===0 &&
       activeJob.verifying===0 &&
       activeJob.waiting_safe>0
@@ -134,11 +155,11 @@ export function CloudUpdatesPanel({nodes}:{nodes:any[]}) {
     try{
       const ok=await confirmPopup({
         title:canSupersede
-          ? "แทนคิวเก่าด้วย EA v"+release?.version
+          ? "แทนคิวเก่าด้วย Production EA ล่าสุด"
           : "ปล่อย EA Update ให้ลูกค้า",
         tone:"warning",
         message:canSupersede
-          ? "ยกเลิกเฉพาะคิว "+activeJob?.target_version+" ที่ยังรอ Safe Stop และแทนด้วย v"+release?.version+"? บัญชีที่กำลังเทรดจะไม่ถูกหยุด และเมื่อกด Stop จะอัปเดตตรงเป็นเวอร์ชันล่าสุด"
+          ? "ยกเลิกเฉพาะคิวเดิมที่ยังรอ Safe Stop และแทนด้วย Production EA ล่าสุด (v"+release?.version+" / Build "+String(release?.buildId||"ล่าสุด").slice(0,12)+")? บัญชีที่กำลังเทรดจะไม่ถูกหยุด และเมื่อกด Stop จะอัปเดตตรงเป็น Build ล่าสุดทันที"
           : "เตรียม EA เวอร์ชันล่าสุดบน "+runnerId+"? บัญชีที่กำลังเทรดจะไม่ถูกหยุด ระบบจะรอให้ลูกค้าแต่ละบัญชีกด Stop และ Position เป็น 0 แล้วอัปเดตบัญชีนั้นอัตโนมัติ",
         confirmLabel:canSupersede ? "แทนด้วยเวอร์ชันล่าสุด" : "ปล่อยอัปเดต"
       });
@@ -150,7 +171,7 @@ export function CloudUpdatesPanel({nodes}:{nodes:any[]}) {
       });
       setNotice(
         canSupersede
-          ? "แทนคิวเก่าบน "+runnerId+" ด้วย EA v"+release?.version+" แล้ว · บัญชีที่หยุดภายหลังจะอัปเดตตรงเป็นเวอร์ชันล่าสุด"
+          ? "แทนคิวเก่าบน "+runnerId+" ด้วย Production EA ล่าสุดแล้ว · บัญชีที่หยุดภายหลังจะอัปเดตตรงเป็น Build ล่าสุด"
           : "ปล่อย EA Update บน "+runnerId+" แล้ว · ระบบจะดำเนินการทีละบัญชีเมื่อเข้าสู่ Safe State"
       );
       await load();
@@ -243,8 +264,7 @@ export function CloudUpdatesPanel({nodes}:{nodes:any[]}) {
             hasRealUpdate &&
             activeJob &&
             activeJob.action==="UPDATE" &&
-            activeJob.target_version &&
-            activeJob.target_version!==release.version &&
+            releaseIdentityDiffers(activeJob,release) &&
             activeJob.delivered===0 &&
             activeJob.verifying===0 &&
             activeJob.waiting_safe>0
@@ -320,7 +340,7 @@ export function CloudUpdatesPanel({nodes}:{nodes:any[]}) {
               disabled={!canRelease}
               onClick={()=>start(runnerId)}
             >
-              {canSupersede ? "ปล่อย v"+release?.version+" แทน "+activeJob?.target_version :
+              {canSupersede ? "ปล่อย Build ล่าสุดแทนคิวเดิม" :
                state==="READY" ? "ปล่อย EA Update" :
                state==="CREATING" ? "กำลังปล่อย..." :
                state==="WAITING_SAFE" ? "รอ Safe Stop" :
