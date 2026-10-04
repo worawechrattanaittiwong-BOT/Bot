@@ -15630,30 +15630,9 @@ int AutoV20PrecisionDirection(double momentum)
       selected=direction>0 ? g_autoV20Buy : g_autoV20Sell;
    }
 
-   // AUTO V22 makes the first order deliberately selective. Positions 2-4
-   // still rely mainly on winner-only progress + swing confirmation, while
-   // position 5+ keeps the stricter legacy score floor.
-   if(count<=0)
-   {
-      double firstMinimumConfidence=60.0;
-      double firstMinimumRank=62.0;
-      if(g_marketRegime=="HIGH_VOLATILITY")
-      {
-         firstMinimumConfidence+=4.0;
-         firstMinimumRank+=4.0;
-      }
-      else if(g_marketRegime=="RANGE")
-         firstMinimumRank+=3.0;
-
-      if(selected.confidence<firstMinimumConfidence ||
-         selected.rankScore<firstMinimumRank)
-      {
-         g_autoV20RejectReason="AUTO_V22_FIRST_QUALITY_NOT_READY";
-         g_adaptiveBlockReason=g_autoV20RejectReason;
-         return 0;
-      }
-   }
-   else if(!relaxedFirstFour)
+   // Positions 2-4 rely mainly on winner-only progress + swing
+   // confirmation. Position 5+ keeps the stricter legacy score floor.
+   if(!relaxedFirstFour)
    {
       double minimumConfidence=62.0;
       double minimumRank=66.0;
@@ -15683,6 +15662,29 @@ int AutoV20PrecisionDirection(double momentum)
          : "SUPPLY_ZONE_REACTION";
       double zoneQuality=direction>0 ? g_demandZoneScore : g_supplyZoneScore;
       selected.rankScore=MathMax(selected.rankScore,MathMin(100.0,zoneQuality));
+   }
+
+   // The first AUTO order is deliberately the most selective. Run this after
+   // Zone-First can contribute its real location quality.
+   if(count<=0)
+   {
+      double firstMinimumConfidence=60.0;
+      double firstMinimumRank=62.0;
+      if(g_marketRegime=="HIGH_VOLATILITY")
+      {
+         firstMinimumConfidence+=4.0;
+         firstMinimumRank+=4.0;
+      }
+      else if(g_marketRegime=="RANGE")
+         firstMinimumRank+=3.0;
+
+      if(selected.confidence<firstMinimumConfidence ||
+         selected.rankScore<firstMinimumRank)
+      {
+         g_autoV20RejectReason="AUTO_V22_FIRST_QUALITY_NOT_READY";
+         g_adaptiveBlockReason=g_autoV20RejectReason;
+         return 0;
+      }
    }
 
    // AUTO V22 first-entry contract:
