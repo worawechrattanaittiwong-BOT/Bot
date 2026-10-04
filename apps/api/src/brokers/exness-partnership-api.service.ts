@@ -16,6 +16,7 @@ type ConnectionInput = {
   autoVerifyClients?: boolean;
   autoImportCommissions?: boolean;
   autoReleaseRebates?: boolean;
+  commissionAmountScale?: number;
 };
 
 @Injectable()
@@ -42,6 +43,8 @@ export class ExnessPartnershipApiService {
         auto_verify_clients boolean NOT NULL DEFAULT false,
         auto_import_commissions boolean NOT NULL DEFAULT false,
         auto_release_rebates boolean NOT NULL DEFAULT false,
+        commission_amount_scale integer NOT NULL DEFAULT 100
+          CHECK (commission_amount_scale BETWEEN 1 AND 1000000),
         sync_interval_minutes integer NOT NULL DEFAULT 15
           CHECK (sync_interval_minutes BETWEEN 5 AND 1440),
         last_test_status varchar(24) NOT NULL DEFAULT 'NOT_TESTED',
@@ -129,6 +132,7 @@ export class ExnessPartnershipApiService {
       autoVerifyClients: Boolean(row?.auto_verify_clients),
       autoImportCommissions: Boolean(row?.auto_import_commissions),
       autoReleaseRebates: Boolean(row?.auto_release_rebates),
+      commissionAmountScale: Number(row?.commission_amount_scale || 100),
       syncIntervalMinutes: Number(row?.sync_interval_minutes || 15),
       lastTestStatus: String(row?.last_test_status || "NOT_TESTED"),
       lastTestDetail: String(row?.last_test_detail || ""),
@@ -155,6 +159,10 @@ export class ExnessPartnershipApiService {
     await this.saveSecret("EXNESS_PARTNER_PASSWORD", "Exness Partner Password", password, actor);
 
     const interval = Math.max(5, Math.min(1440, Math.trunc(Number(input.syncIntervalMinutes || 15))));
+    const commissionAmountScale = Math.max(
+      1,
+      Math.min(1000000, Math.trunc(Number(input.commissionAmountScale || 100)))
+    );
     const enabled = input.enabled === true;
 
     if (enabled) {
@@ -175,9 +183,10 @@ export class ExnessPartnershipApiService {
          auto_verify_clients=$5,
          auto_import_commissions=$6,
          auto_release_rebates=$7,
-         sync_interval_minutes=$8,
+         commission_amount_scale=$8,
+         sync_interval_minutes=$9,
          next_sync_at=CASE WHEN $4 THEN now() ELSE NULL END,
-         updated_by=$9,
+         updated_by=$10,
          updated_at=now()
        WHERE broker_code=$1`,
       [
@@ -188,6 +197,7 @@ export class ExnessPartnershipApiService {
         input.autoVerifyClients === true,
         input.autoImportCommissions === true,
         input.autoReleaseRebates === true,
+        commissionAmountScale,
         interval,
         actor.slice(0,160)
       ]
@@ -309,7 +319,7 @@ export class ExnessPartnershipApiService {
   async rawReports(token: string) {
     await this.ensureSchema();
     const row = await this.db.one(
-      "SELECT client_report_path,commission_report_path FROM broker_api_connections WHERE broker_code='EXNESS'"
+      "SELECT client_report_path,commission_report_path,commission_amount_scale FROM broker_api_connections WHERE broker_code='EXNESS'"
     );
     const clients = row?.client_report_path
       ? this.arrayFromPayload(await this.request(String(row.client_report_path), token))
@@ -317,6 +327,10 @@ export class ExnessPartnershipApiService {
     const commissions = row?.commission_report_path
       ? this.arrayFromPayload(await this.request(String(row.commission_report_path), token))
       : [];
-    return { clients, commissions };
+    return {
+      clients,
+      commissions,
+      commissionAmountScale: Number(row?.commission_amount_scale || 100)
+    };
   }
 }
