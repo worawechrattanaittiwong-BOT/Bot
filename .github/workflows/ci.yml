@@ -73,6 +73,8 @@ jobs:
       - name: Mobile Mirror isolated floating-card contract
         shell: pwsh
         run: ./tests/mobile-mirror-isolation-contract.ps1
+      - name: Broker Phase 2 isolation contract
+        run: node ./tests/broker-phase2-contract.mjs
       - name: Referral program contract
         run: node ./tests/referral-program-contract.mjs
       - name: Commission withdrawal Phase 2 contract
