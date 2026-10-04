@@ -27,7 +27,7 @@ server {
     listen [::]:80;
     server_name $DOMAIN www.$DOMAIN;
 
-    client_max_body_size 20m;
+    client_max_body_size 320m;
 
     # MT5 WebRequest is synchronous. Isolate heartbeat traffic and close the
     # client connection after each response so Windows MT5 cannot reuse a stale
