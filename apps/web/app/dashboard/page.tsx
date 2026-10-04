@@ -9,6 +9,7 @@ import { Mt5ConnectionExperience, VpsMigrationProgressCard } from "../../compone
 import { EaDecisionCenter } from "../../components/EaDecisionCenter";
 import { BotPerformanceSummary } from "../../components/BotPerformanceSummary";
 import { useSystemPopup } from "../../components/SystemPopupProvider";
+import { TradingModeGuideVideos } from "../../components/TradingModeGuideVideos";
 
 type Dashboard = {
   user: any;
@@ -4452,6 +4453,7 @@ export default function DashboardPage() {
                     spreadValueLabel={spreadValueLabel}
                     spreadLimitLabel={spreadLimitLabel}
                     spreadStatusLabel={spreadStatusLabel[spreadStatus]||spreadStatus}
+                    canManageGuideVideos={isOwner}
                     onEdit={editSetting}
                     onSave={async(e:any)=>{ await saveSettings(e); }}
                   />
@@ -6964,6 +6966,10 @@ function BotSettingsModal(props:any) {
           </nav>
 
           <div className="cc-mode-guide-content">
+            <TradingModeGuideVideos
+              modeKey={modeGuideMode}
+              isAdmin={Boolean(props.canManageGuideVideos)}
+            />
             <section className="cc-mode-guide-system" aria-label="โครงสร้างกลยุทธ์">
               <div><small>ระบบหลัก</small><b>{activeModeGuide.systemType}</b></div>
               <div><small>Lot / การเพิ่มไม้</small><b>{activeModeGuide.sizing}</b></div>
