@@ -84,6 +84,10 @@ export default function OnboardingPage() {
         </a>
         <div className={styles.headerActions}>
           <span className={styles.secureBadge}><ScenovaIcon name="shield" size={15}/> Secure Setup</span>
+          <a className={styles.homeButton} href="/dashboard?view=overview">
+            <ScenovaIcon name="overview" size={15}/>
+            <span>หน้าหลัก</span>
+          </a>
           <button type="button" onClick={logout}>Sign out</button>
         </div>
       </header>
