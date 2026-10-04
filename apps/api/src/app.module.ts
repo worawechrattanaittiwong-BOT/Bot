@@ -72,6 +72,9 @@ import { BrokerService } from "./brokers/broker.service";
 import { BrokerBenefitService } from "./brokers/broker-benefit.service";
 import { AdminBrokerFinanceController, BrokerRebateController } from "./brokers/broker-finance.controller";
 import { BrokerFinanceService } from "./brokers/broker-finance.service";
+import { AdminBrokerAutomationController } from "./brokers/broker-automation.controller";
+import { BrokerAutomationService } from "./brokers/broker-automation.service";
+import { ExnessPartnershipApiService } from "./brokers/exness-partnership-api.service";
 
 @Module({
   imports: [
@@ -80,8 +83,10 @@ import { BrokerFinanceService } from "./brokers/broker-finance.service";
       signOptions: { expiresIn: "7d" }
     })
   ],
-  controllers: [AdminBrokerFinanceController, BrokerRebateController, AdminBrokerController, BrokerController, ModeGuideVideoAdminController, ModeGuideVideoController, AdminPaymentQrSettingsController, InAppCampaignAssetController, InAppCampaignAdminController, InAppCampaignController, RuntimeEventWorkerController, RuntimeEventStreamController, ServerSoftwareUpdateAdminController, ServerSoftwareUpdateWorkerController, CloudUpdateAdminController, CloudUpdateWorkerController, CloudServerAdminController, ServerEnrollmentController, OwnerManagementController, OwnerMobileController, CommissionPayoutWorkerController, AdminCommissionWithdrawalsController, CommissionWalletWithdrawalController, AdminApiCredentialsController, AdminServiceLinksController, ProductionHardeningController, RuntimeMigrationController, RuntimeMigrationAgentController, RuntimeSafetyController, CloudTestController, CloudAdminController, CloudCustomerController, CloudPaymentController, LocalPackageCustomerController, LocalPackageAdminController, RootController, CatalogController, AuthController, AccountSecurityController, TrialCouponController, BotController, DashboardLiveController, MobileMirrorController, FleetMonitorController, PartnerController, ReferralController, ManualMt5Controller, TradingSymbolController, EaTradingSymbolController, AdminController, EaController, AgentActionController, InstallerController, BacktestController, PerformanceController, PerformanceAnalyticsController, PerformanceActionsController, SharedPerformanceController, HealthController, WorkerController],
+  controllers: [AdminBrokerAutomationController, AdminBrokerFinanceController, BrokerRebateController, AdminBrokerController, BrokerController, ModeGuideVideoAdminController, ModeGuideVideoController, AdminPaymentQrSettingsController, InAppCampaignAssetController, InAppCampaignAdminController, InAppCampaignController, RuntimeEventWorkerController, RuntimeEventStreamController, ServerSoftwareUpdateAdminController, ServerSoftwareUpdateWorkerController, CloudUpdateAdminController, CloudUpdateWorkerController, CloudServerAdminController, ServerEnrollmentController, OwnerManagementController, OwnerMobileController, CommissionPayoutWorkerController, AdminCommissionWithdrawalsController, CommissionWalletWithdrawalController, AdminApiCredentialsController, AdminServiceLinksController, ProductionHardeningController, RuntimeMigrationController, RuntimeMigrationAgentController, RuntimeSafetyController, CloudTestController, CloudAdminController, CloudCustomerController, CloudPaymentController, LocalPackageCustomerController, LocalPackageAdminController, RootController, CatalogController, AuthController, AccountSecurityController, TrialCouponController, BotController, DashboardLiveController, MobileMirrorController, FleetMonitorController, PartnerController, ReferralController, ManualMt5Controller, TradingSymbolController, EaTradingSymbolController, AdminController, EaController, AgentActionController, InstallerController, BacktestController, PerformanceController, PerformanceAnalyticsController, PerformanceActionsController, SharedPerformanceController, HealthController, WorkerController],
   providers: [
+    BrokerAutomationService,
+    ExnessPartnershipApiService,
     BrokerFinanceService,
     BrokerBenefitService,
     BrokerService,
