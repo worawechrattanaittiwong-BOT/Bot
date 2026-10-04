@@ -3344,6 +3344,7 @@ export default function DashboardPage() {
           const acknowledged = await confirmPopup({
             title:"แจ้งเตือนก่อนเทรด BTC",
             tone:"warning",
+            size:"large",
             message:
               "SCENOVA รองรับ BTC/XBT ในโหมดนี้ แต่ระบบกลยุทธ์และค่าการทำงานของบอทปัจจุบันพัฒนาและปรับจูนโดยอิงพฤติกรรมของ XAUUSD เป็นหลัก และยังไม่ได้ปรับจูนเฉพาะสำหรับตลาด BTC\n\n" +
               "BTC มีความผันผวนสูง ราคาและ Spread อาจเปลี่ยนแปลงรวดเร็ว รวมถึงเกิดไส้เทียนยาวได้ในช่วงเวลาสั้น ๆ ผลการทำงานจึงอาจแตกต่างจากการใช้งานกับทอง\n\n" +
