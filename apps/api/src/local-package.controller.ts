@@ -19,6 +19,7 @@ import { ReferralService } from "./referral.service";
 import { PromotionService } from "./promotion.service";
 import { EasySlipPaymentService } from "./easyslip-payment.service";
 import { discountedUsdCents, getUsdThbQuote, usdCentsToThbSatang } from "./commerce-currency";
+import { BrokerBenefitService } from "./brokers/broker-benefit.service";
 
 function omiseMode() {
   const key = String(process.env.OMISE_SECRET_KEY || "").trim();
@@ -55,7 +56,8 @@ export class LocalPackageService implements OnApplicationBootstrap, OnModuleDest
     private readonly db: DbService,
     private readonly referrals: ReferralService,
     private readonly promotions: PromotionService,
-    private readonly easyslip: EasySlipPaymentService
+    private readonly easyslip: EasySlipPaymentService,
+    private readonly brokerBenefits: BrokerBenefitService
   ) {}
 
   onApplicationBootstrap() {
@@ -392,6 +394,7 @@ export class LocalPackageService implements OnApplicationBootstrap, OnModuleDest
 
       const listPriceUsdCents = Math.max(0, Math.trunc(Number(pack.price_usd_cents || 0)));
       const originalAmountSatang = usdCentsToThbSatang(listPriceUsdCents, quote.usdThb);
+      const benefit = await this.brokerBenefits.safeCheckoutBenefit(tx, userId);
       const promo = await this.promotions.reserve(tx, {
         code: promoCode,
         userId,
@@ -399,20 +402,57 @@ export class LocalPackageService implements OnApplicationBootstrap, OnModuleDest
         months: pack.months,
         originalAmountSatang
       });
-      const finalPriceUsdCents = discountedUsdCents(listPriceUsdCents, promo.discountPercent);
+
+      const promoBps = Math.max(0, Math.min(10000, Math.round(Number(promo.discountPercent || 0) * 100)));
+      const benefitBps = Math.max(0, Math.min(5000, Number(benefit?.discountBps || 0)));
+      const benefitWins = Boolean(benefit && benefitBps > 0 && benefitBps >= promoBps);
+
+      if (benefitWins && promo.redemptionId) {
+        await this.promotions.releaseReservation(tx, promo.redemptionId);
+      }
+
+      const effectiveBps = benefitWins ? benefitBps : promoBps;
+      const effectiveDiscountPercent = effectiveBps / 100;
+      const discountAmountSatang = Math.floor(originalAmountSatang * effectiveBps / 10000);
+      const finalAmountSatang = Math.max(0, originalAmountSatang - discountAmountSatang);
+      const finalPriceUsdCents = discountedUsdCents(listPriceUsdCents, effectiveDiscountPercent);
+      const discountSource = benefitWins
+        ? "BROKER_PARTNER"
+        : promoBps > 0
+          ? "PROMOTION"
+          : "NONE";
+      const appliedPromoCode = benefitWins ? null : promo.code;
+      const appliedPromoRedemptionId = benefitWins ? null : promo.redemptionId;
+
       const order = (
         await tx.query(
           `INSERT INTO local_orders(
              user_id,months,amount,original_amount,discount_amount,promotion_code,promotion_redemption_id,
-             list_price_usd_cents,final_price_usd_cents,fx_rate_usd_thb,fx_source,fx_quoted_at
-           ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+             list_price_usd_cents,final_price_usd_cents,fx_rate_usd_thb,fx_source,fx_quoted_at,
+             discount_source,broker_partner_client_id,broker_benefit_level,broker_benefit_discount_bps
+           ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
            RETURNING *`,
-          [userId, pack.months, promo.finalAmountSatang, originalAmountSatang,
-           promo.discountAmountSatang, promo.code, promo.redemptionId,
-           listPriceUsdCents, finalPriceUsdCents, quote.usdThb, quote.source, quote.quotedAt]
+          [
+            userId,
+            pack.months,
+            finalAmountSatang,
+            originalAmountSatang,
+            discountAmountSatang,
+            appliedPromoCode,
+            appliedPromoRedemptionId,
+            listPriceUsdCents,
+            finalPriceUsdCents,
+            quote.usdThb,
+            quote.source,
+            quote.quotedAt,
+            discountSource,
+            benefitWins ? benefit!.partnerClientId : null,
+            benefitWins ? benefit!.levelCode : null,
+            benefitWins ? benefitBps : 0
+          ]
         )
       ).rows[0];
-      await this.promotions.attachOrder(tx, promo.redemptionId, order.id);
+      await this.promotions.attachOrder(tx, appliedPromoRedemptionId, order.id);
       return order;
     });
 
@@ -555,7 +595,8 @@ export class LocalPackageCustomerController {
     return (
       await this.db.query(
         `SELECT
-           o.id,o.months,o.amount,o.original_amount,o.discount_amount,o.promotion_code,o.status,o.qr_url,o.expires_at,o.created_at,o.paid_at,
+           o.id,o.months,o.amount,o.original_amount,o.discount_amount,o.promotion_code,o.discount_source,
+           o.broker_benefit_level,o.broker_benefit_discount_bps,o.status,o.qr_url,o.expires_at,o.created_at,o.paid_at,
            o.list_price_usd_cents,o.final_price_usd_cents,o.fx_rate_usd_thb,o.fx_source,o.fx_quoted_at,
            o.slot_id,o.subscription_id,s.expires_at subscription_expires_at
          FROM local_orders o
