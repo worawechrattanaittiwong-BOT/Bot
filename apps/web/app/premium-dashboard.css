@@ -4847,6 +4847,7 @@
 /* Vertical 9:16 tutorial video controls. Admin/Owner can attach videos
    directly inside the same Trading Mode Guide customers read. */
 .cc-mode-guide-dialog button{pointer-events:auto!important}
+.cc-bot-v2-embedded.is-locked .cc-mode-guide-dialog button{pointer-events:auto!important}
 .cc-mode-guide-video-zone{
   display:flex;
   align-items:center;
