@@ -1235,10 +1235,18 @@ export default function DashboardPage() {
   // authoritative Local <-> VPS handoff state.
   const operationTerminal = migrationOperation || serverOperation || cloudUpdateOperation;
   const operationTerminalRunning = operationTerminal?.status === "RUNNING";
+  const minimizedOperationInStatus =
+    serverOperationMinimized && operationTerminalRunning ? operationTerminal : null;
   const operationTerminalVisible =
     Boolean(operationTerminal) &&
     !(serverOperationMinimized && operationTerminalRunning);
-  const statusNoticeCount = Number(marketSessionClosed || !isMt5ConnectionOnline || isHeartbeatDelayed) + Number(softwareUpdateRequired) + Number(cloudUpdateVisible);
+  const minimizedOperationNoticeCount =
+    minimizedOperationInStatus && minimizedOperationInStatus.kind !== "CLOUD_UPDATE" ? 1 : 0;
+  const statusNoticeCount =
+    Number(marketSessionClosed || !isMt5ConnectionOnline || isHeartbeatDelayed) +
+    Number(softwareUpdateRequired) +
+    Number(cloudUpdateVisible) +
+    minimizedOperationNoticeCount;
 
   const maintenance = data?.maintenance || { status:"OFF", blockStarts:false, summary:{ openPositions:0, runningInstances:0 } };
   const maintenanceBlocksStart = Boolean(maintenance.blockStarts);
@@ -4024,19 +4032,6 @@ export default function DashboardPage() {
         )}
 
 
-        {serverOperationMinimized && operationTerminal && operationTerminalRunning && (
-          <button
-            type="button"
-            className="cc-server-operation-minimized"
-            onClick={()=>setServerOperationMinimized(false)}
-            aria-label={"เปิดสถานะ " + String(operationTerminal.title || "การดำเนินการ")}
-          >
-            <span><i/>กำลังทำงานเบื้องหลัง</span>
-            <b>{operationTerminal.title}</b>
-            <em>เปิดสถานะ ↑</em>
-          </button>
-        )}
-
         {operationTerminalVisible && operationTerminal && (
           <div
             className="cc-server-operation-backdrop"
@@ -4354,12 +4349,12 @@ export default function DashboardPage() {
 
                 <button
                   type="button"
-                  className={"cc-v47-live-state cc-status-trigger "+(safeStopInProgress || statusNoticeCount > 0 ? "waiting" : state === "RUNNING" ? "running" : "idle")}
+                  className={"cc-v47-live-state cc-status-trigger "+(minimizedOperationInStatus || safeStopInProgress || statusNoticeCount > 0 ? "waiting" : state === "RUNNING" ? "running" : "idle")}
                   aria-haspopup="dialog"
-                  aria-controls={(safeStopInProgress && safeStopOperationRunning) || (migrationOperation?.status === "RUNNING") ? "cc-server-operation-dialog" : "cc-system-status"}
-                  aria-label={migrationOperation?.status === "RUNNING" ? "เปิดสถานะการย้ายระบบ MT5" : safeStopInProgress ? "เปิดสถานะ Safe Stop" : "เปิดสถานะระบบ"+(statusNoticeCount ? " · "+statusNoticeCount+" รายการแจ้งเตือน" : "")}
+                  aria-controls={minimizedOperationInStatus || (safeStopInProgress && safeStopOperationRunning) || (migrationOperation?.status === "RUNNING") ? "cc-server-operation-dialog" : "cc-system-status"}
+                  aria-label={minimizedOperationInStatus ? "เปิดสถานะ " + String(minimizedOperationInStatus.title || "การดำเนินการ") : migrationOperation?.status === "RUNNING" ? "เปิดสถานะการย้ายระบบ MT5" : safeStopInProgress ? "เปิดสถานะ Safe Stop" : "เปิดสถานะระบบ"+(statusNoticeCount ? " · "+statusNoticeCount+" รายการแจ้งเตือน" : "")}
                   onClick={()=>{
-                    if ((safeStopInProgress && safeStopOperationRunning) || migrationOperation?.status === "RUNNING") {
+                    if (minimizedOperationInStatus || (safeStopInProgress && safeStopOperationRunning) || migrationOperation?.status === "RUNNING") {
                       setServerOperationMinimized(false);
                     } else {
                       statusDialogRef.current?.showModal();
@@ -4368,8 +4363,8 @@ export default function DashboardPage() {
                 >
                   <i/>
                   <span className="cc-status-trigger-copy">
-                    <b>{safeStopInProgress ? "กำลังหยุดบอท" : !isMt5ConnectionOnline ? "Waiting for MT5" : marketSessionClosed ? "Waiting Session" : isHeartbeatDelayed ? "MT5 Connected" : state === "RUNNING" ? "Live Execution" : "Ready"}</b>
-                    <small>{safeStopInProgress ? safeStopStatusDetail : isHeartbeatDelayed ? "EA Heartbeat ขาดช่วง · MT5 ยังออนไลน์" : "สถานะและอัปเดต"}</small>
+                    <b>{minimizedOperationInStatus ? String(minimizedOperationInStatus.title || "กำลังดำเนินการ") : safeStopInProgress ? "กำลังหยุดบอท" : !isMt5ConnectionOnline ? "Waiting for MT5" : marketSessionClosed ? "Waiting Session" : isHeartbeatDelayed ? "MT5 Connected" : state === "RUNNING" ? "Live Execution" : "Ready"}</b>
+                    <small>{minimizedOperationInStatus ? String(minimizedOperationInStatus.message || "กำลังทำงานเบื้องหลัง") : safeStopInProgress ? safeStopStatusDetail : isHeartbeatDelayed ? "EA Heartbeat ขาดช่วง · MT5 ยังออนไลน์" : "สถานะและอัปเดต"}</small>
                   </span>
                   <span className="cc-status-trigger-bell"><ScenovaIcon name="bell" size={16}/>{statusNoticeCount > 0 && <em>{statusNoticeCount}</em>}</span>
                 </button>
