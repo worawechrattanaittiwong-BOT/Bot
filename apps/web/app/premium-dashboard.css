@@ -511,12 +511,12 @@
 }
 .cc-bot-v2-embedded .cc-btc-risk-note b{
   color:#f3d789!important;
-  font-size:10.5px!important;
+  font-size:var(--ui-type-meta)!important;
 }
 .cc-bot-v2-embedded .cc-btc-risk-note small{
   display:block!important;
   color:#a99d82!important;
-  font-size:9.5px!important;
+  font-size:var(--ui-type-caption)!important;
   line-height:1.38!important;
 }
 
