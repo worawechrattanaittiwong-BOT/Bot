@@ -133,6 +133,22 @@ fi
 sed -i -E "s#^PUBLIC_WEB_URL=.*#PUBLIC_WEB_URL=$PUBLIC_URL#" .env.hostinger
 sed -i -E "s#^WEB_ORIGIN=.*#WEB_ORIGIN=$PUBLIC_URL#" .env.hostinger
 
+# Keep the live reverse proxy aligned with the 300 MB Trading Mode Guide
+# upload contract. Older production hosts may still have a historical 20 MB
+# limit even though configure-domain.sh now writes 320 MB.
+if [ -n "$APP_DOMAIN" ] && command -v nginx >/dev/null 2>&1; then
+  NGINX_SITE="/etc/nginx/sites-available/$APP_DOMAIN"
+  if [ -f "$NGINX_SITE" ]; then
+    if grep -Eq '^[[:space:]]*client_max_body_size[[:space:]]+[^;]+;' "$NGINX_SITE"; then
+      sed -i -E 's#^([[:space:]]*)client_max_body_size[[:space:]]+[^;]+;#\1client_max_body_size 320m;#g' "$NGINX_SITE"
+    else
+      sed -i '0,/server[[:space:]]*{/s//server {\n    client_max_body_size 320m;/' "$NGINX_SITE"
+    fi
+    nginx -t
+    systemctl reload nginx
+  fi
+fi
+
 set -a
 . ./.env.hostinger
 set +a
