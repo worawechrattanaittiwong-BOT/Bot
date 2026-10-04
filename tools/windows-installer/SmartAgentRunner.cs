@@ -59,6 +59,8 @@ internal static class SmartAgentRunner
             "AGENT_START",
             "Smart Agent v" + AgentBuildInfo.Version);
 
+        _ = Task.Run(LocalRealtimeRelay.RunAsync);
+
         while (true)
         {
             var profiles = ScenovaRuntime.ReadProfiles();
