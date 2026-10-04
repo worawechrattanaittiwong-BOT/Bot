@@ -15630,10 +15630,30 @@ int AutoV20PrecisionDirection(double momentum)
       selected=direction>0 ? g_autoV20Buy : g_autoV20Sell;
    }
 
-   // Positions 1-4 keep the relaxed score policy so AUTO does not become
-   // excessively quiet. Confidence/rank still guide selection, while add
-   // safety is enforced separately below: position 2+ may never average down.
-   if(!relaxedFirstFour)
+   // AUTO V22 makes the first order deliberately selective. Positions 2-4
+   // still rely mainly on winner-only progress + swing confirmation, while
+   // position 5+ keeps the stricter legacy score floor.
+   if(count<=0)
+   {
+      double firstMinimumConfidence=60.0;
+      double firstMinimumRank=62.0;
+      if(g_marketRegime=="HIGH_VOLATILITY")
+      {
+         firstMinimumConfidence+=4.0;
+         firstMinimumRank+=4.0;
+      }
+      else if(g_marketRegime=="RANGE")
+         firstMinimumRank+=3.0;
+
+      if(selected.confidence<firstMinimumConfidence ||
+         selected.rankScore<firstMinimumRank)
+      {
+         g_autoV20RejectReason="AUTO_V22_FIRST_QUALITY_NOT_READY";
+         g_adaptiveBlockReason=g_autoV20RejectReason;
+         return 0;
+      }
+   }
+   else if(!relaxedFirstFour)
    {
       double minimumConfidence=62.0;
       double minimumRank=66.0;
