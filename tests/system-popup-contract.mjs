@@ -28,6 +28,8 @@ assert.deepEqual(
 const provider = fs.readFileSync("apps/web/components/SystemPopupProvider.tsx", "utf8");
 const css = fs.readFileSync("apps/web/app/globals.css", "utf8");
 const performance = fs.readFileSync("apps/web/app/performance/page.tsx", "utf8");
+const mascot = fs.readFileSync("apps/web/components/mascot/ScenovaMascotLauncher.tsx", "utf8");
+const mascotCss = fs.readFileSync("apps/web/components/mascot/ScenovaMascot.module.css", "utf8");
 
 for (const required of [
   "promptPopup",
@@ -43,5 +45,10 @@ assert.match(css, /\.sc-system-popup-layer\.is-prompt/);
 assert.match(css, /\.sc-system-popup-required/);
 assert.match(performance, /requiredText:"RESET"/);
 assert.match(performance, /copyLabel:"คัดลอก RESET"/);
+
+assert.doesNotMatch(mascot, /YOUR LITTLE COMPANION/, "Mascot popup must not show the old English companion eyebrow");
+assert.doesNotMatch(mascot, /styles\.label/, "Mascot launcher must not render the SCENOVA badge under the robot");
+assert.match(mascotCss, /@media \(max-width: 760px\)/, "Mascot mobile breakpoint missing");
+assert.match(mascotCss, /position: fixed;[\s\S]*bottom: calc\(194px \+ env\(safe-area-inset-bottom\)\)/, "Mascot popup must use a safe mobile fixed layout");
 
 console.log("system-popup-contract: ok");

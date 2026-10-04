@@ -15,7 +15,7 @@
   flex-direction: column;
   align-items: center;
   width: 132px;
-  height: 174px;
+  height: 151px;
   padding: 0;
   border: 0;
   border-radius: 36px;
@@ -40,22 +40,6 @@
 .robot { position: relative; display: block; width: 132px; height: 151px; pointer-events: none; }
 .canvas, .fallback { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .canvas { transition: opacity 180ms; }
-.label {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 4px 10px;
-  margin-top: -4px;
-  border: 1px solid #9a8fff50;
-  border-radius: 20px;
-  background: linear-gradient(115deg, #18273ff2, #211c3ff2);
-  box-shadow: 0 4px 18px #0005;
-  font-size: 11px;
-  font-weight: 750;
-  letter-spacing: 1.5px;
-}
-.label > span { color: #73e6ff; font-size: 12px; }
 .hint {
   position: absolute;
   right: 123px;
@@ -92,7 +76,6 @@
 .cardGlow { position: absolute; height: 1px; top: 0; left: 25%; right: 25%; background: linear-gradient(90deg, transparent, #8bceff, transparent); }
 .header { display: flex; align-items: center; gap: 10px; }
 .sparkle { display: grid; place-items: center; width: 38px; height: 38px; flex: 0 0 auto; border-radius: 12px; background: linear-gradient(140deg, #70dfff20, #a083ff22); border: 1px solid #89c9ff35; color: #8de5ff; font-size: 24px; }
-.eyebrow { margin: 0 0 3px; color: #a8a9c7; font-size: 11px; letter-spacing: .7px; line-height: 1.5; }
 .header h2 { margin: 0; color: #f2f5ff; font-size: 16px; line-height: 1.25; letter-spacing: 1.5px; }
 .close { align-self: flex-start; margin-left: auto; width: 30px; height: 30px; flex: 0 0 auto; border: 1px solid #ffffff12; border-radius: 9px; color: #b7bfd8; background: #ffffff05; font-size: 21px; cursor: pointer; }
 .close:hover { background: #ffffff10; }
@@ -110,13 +93,62 @@
 .footer > span { width: 5px; height: 5px; border-radius: 50%; background: #80e3cb; box-shadow: 0 0 8px #80e3cb55; }
 .error { margin: 12px 0 0; padding: 9px; border-radius: 9px; color: #f5d298; background: #e7a84e0d; font-size: 11px; line-height: 1.6; overflow-wrap: anywhere; }
 @keyframes appear { from { opacity: 0; transform: translateY(7px) scale(.98); } to { opacity: 1; transform: none; } }
-@media (max-width: 720px) {
-  .launcher { right: 8px; bottom: calc(94px + env(safe-area-inset-bottom)); width: 96px; z-index: 2590; }
-  .trigger { width: 96px; height: 133px; }
-  .robot { width: 96px; height: 116px; }
-  .label { font-size: 11px; padding: 2px 6px; letter-spacing: .3px; }
-  .card { right: 4px; padding: 16px; max-height: calc(100dvh - 252px - env(safe-area-inset-bottom)); }
+@media (max-width: 760px) {
+  .launcher {
+    right: max(10px, env(safe-area-inset-right));
+    bottom: calc(82px + env(safe-area-inset-bottom));
+    width: 84px;
+    z-index: 2590;
+  }
+  .trigger {
+    width: 84px;
+    height: 101px;
+    border-radius: 28px;
+  }
+  .robot {
+    width: 84px;
+    height: 101px;
+  }
+  .halo {
+    inset: 24px 3px 5px;
+  }
+  .card {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    bottom: calc(194px + env(safe-area-inset-bottom));
+    width: auto;
+    max-height: min(420px, calc(100dvh - 214px - env(safe-area-inset-bottom)));
+    padding: 16px;
+    border-radius: 20px;
+    overscroll-behavior: contain;
+  }
+  .header { gap: 9px; }
+  .sparkle { width: 40px; height: 40px; }
+  .header h2 { font-size: 18px; }
+  .greeting { margin: 14px 0; font-size: 13px; }
+  .action { min-height: 66px; padding: 12px; }
+  .actionText strong { font-size: 13px; }
+  .actionText small { font-size: 11px; }
+  .close { width: 36px; height: 36px; }
   .hint { display: none; }
+}
+
+@media (max-width: 390px) {
+  .launcher {
+    right: 8px;
+    bottom: calc(76px + env(safe-area-inset-bottom));
+    width: 76px;
+  }
+  .trigger { width: 76px; height: 92px; }
+  .robot { width: 76px; height: 92px; }
+  .card {
+    left: 8px;
+    right: 8px;
+    bottom: calc(178px + env(safe-area-inset-bottom));
+    max-height: calc(100dvh - 194px - env(safe-area-inset-bottom));
+    padding: 14px;
+  }
 }
 @media (max-height: 480px) and (min-width: 721px) {
   .card { right: 140px; bottom: 0; max-height: calc(100dvh - 100px); }

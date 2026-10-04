@@ -44,6 +44,9 @@ Assert-Contains $component 'ดูวิดีโอ' 'Customer watch-video acti
 Assert-Contains $component 'playsInline' 'Mobile inline playback contract missing'
 
 Assert-Contains $css 'aspect-ratio:9/16' 'Vertical 9:16 video player CSS missing'
+Assert-Contains $css '@media(max-width:760px)' 'Trading Mode Guide mobile breakpoint missing'
+Assert-Contains $css 'height:100dvh;' 'Trading Mode Guide must use the mobile dynamic viewport'
+Assert-Contains $css 'scroll-snap-type:x proximity;' 'Trading Mode Guide tabs must remain swipeable on mobile'
 Assert-Contains $css '.cc-mode-guide-video-admin' 'Inline admin video manager styling missing'
 Assert-Contains $api 'init.body instanceof FormData' 'Authenticated FormData support missing'
 Assert-Contains $api 'API_UPLOAD_TIMEOUT_MS' 'Long video upload timeout missing'
