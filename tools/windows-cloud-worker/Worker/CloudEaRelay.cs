@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 namespace Scenova.CloudWorker;
 
 internal sealed class CloudEaRelay
@@ -16,7 +17,7 @@ internal sealed class CloudEaRelay
         new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, DateTime> _journalRetryAfterUtc =
         new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, long> _liveExecutionLastWriteTicks =
+    private readonly ConcurrentDictionary<string, long> _liveExecutionLastWriteTicks =
         new(StringComparer.OrdinalIgnoreCase);
 
     public CloudEaRelay(WorkerConfig config, WorkerClient client)
