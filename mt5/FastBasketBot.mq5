@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.1.20"
-#define SCENOVA_EA_VERSION "1.1.20"
-#define SCENOVA_PRODUCT_VERSION "1.1.20"
+#property version   "1.1.21"
+#define SCENOVA_EA_VERSION "1.1.21"
+#define SCENOVA_PRODUCT_VERSION "1.1.21"
 #define SCENOVA_BUILD_ID "SOURCE"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_CONFIGURED_LOSS_ONLY_V1"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
@@ -178,6 +178,7 @@ input double          InpCounterPerPositionProfitMoney = 0.50;
 #define ZERO_GRID_JOURNAL_FORCE_INTERVAL_MS 3000
 #define ZERO_GRID_JOURNAL_HTTP_TIMEOUT_MS 500
 #define LOCAL_DYNAMIC_PROTECTION_INTERVAL_MS 150
+#define LIVE_EXECUTION_SNAPSHOT_INTERVAL_MS 200
 #define DEFERRED_DEAL_JOURNAL_MAX 256
 #define AUTO_V21_POLICY "AUTO_V21_BALANCED_EXIT_V1"
 #define AUTO_V21_EXIT_CYCLE_GRACE_SECONDS 30
@@ -5505,6 +5506,10 @@ void OnTick()
    g_lastMarketTickMs=GetTickCount64();
    SampleSpread();
 
+   // Live Execution is a separate local-file telemetry lane capped at 200 ms.
+   // It never performs network I/O from MT5 and cannot delay broker execution.
+   PublishLiveExecutionSnapshot(false);
+
    // Profit target owns the tick before any non-close analysis.
    if(FastProfitClosePriority())
       return;
@@ -6490,6 +6495,7 @@ void OnTradeTransaction(
          RealtimeEventTypeForDealEntry(rescueEntry),
          trans.deal
       );
+      PublishLiveExecutionSnapshot(true);
       return;
    }
 
@@ -6520,6 +6526,7 @@ void OnTradeTransaction(
          RealtimeEventTypeForDealEntry(dealEntry),
          trans.deal
       );
+      PublishLiveExecutionSnapshot(true);
       return;
    }
 
@@ -6594,6 +6601,68 @@ string OpenPositionsTelemetryJson()
 
    json += "]";
    return json;
+}
+
+void PublishLiveExecutionSnapshot(bool force=false)
+{
+   // Dashboard-only telemetry plane. This is local file I/O only: no WebRequest,
+   // no trade request, and no dependency in any entry/exit/risk decision.
+   // The Cloud Worker / Local Agent relays the newest replaceable snapshot.
+   if(MQLInfoInteger(MQL_TESTER) || StringLen(InpInstanceId) < 8)
+      return;
+
+   static ulong lastPublishedMs=0;
+   static int lastPositionCount=0;
+
+   ulong nowMs=GetTickCount64();
+   int positions=ScenovaAccountPositionCount();
+   bool exposureChanged=(positions!=lastPositionCount);
+
+   if(!force && !exposureChanged)
+   {
+      if(positions<=0)
+         return;
+      if(lastPublishedMs>0 && nowMs>=lastPublishedMs &&
+         nowMs-lastPublishedMs < LIVE_EXECUTION_SNAPSHOT_INTERVAL_MS)
+         return;
+   }
+
+   MqlTick tick;
+   long occurredAtMs=(long)TimeCurrent()*1000;
+   if(SymbolInfoTick(_Symbol,tick) && tick.time_msc>0)
+      occurredAtMs=(long)tick.time_msc;
+
+   string eventId=
+      "live-" + IntegerToString((long)ChartID()) + "-" +
+      IntegerToString(occurredAtMs) + "-" +
+      IntegerToString((long)nowMs);
+   string payload=StringFormat(
+      "{\"eventId\":\"%s\",\"eventType\":\"LIVE_EXECUTION\",\"instanceId\":\"%s\",\"occurredAt\":%I64d,\"occurredAtMs\":%I64d,\"state\":\"%s\",\"executionStatus\":\"%s\",\"symbol\":\"%s\",\"positions\":%d,\"openPositions\":%s}",
+      RealtimeJsonEscape(eventId),
+      RealtimeJsonEscape(InpInstanceId),
+      (long)TimeCurrent(),
+      occurredAtMs,
+      RealtimeJsonEscape(StateText()),
+      RealtimeJsonEscape(g_executionStatus),
+      RealtimeJsonEscape(_Symbol),
+      positions,
+      OpenPositionsTelemetryJson()
+   );
+
+   string fileName=
+      "scenova-live-" + IntegerToString((long)ChartID()) + ".snapshot.txt";
+
+   ResetLastError();
+   int out=FileOpen(fileName,FILE_WRITE|FILE_TXT|FILE_ANSI,0,CP_UTF8);
+   if(out==INVALID_HANDLE)
+      return;
+
+   FileWriteString(out,payload);
+   FileFlush(out);
+   FileClose(out);
+
+   lastPublishedMs=nowMs;
+   lastPositionCount=positions;
 }
 
 string ChartBarsTelemetryJson(ENUM_TIMEFRAMES timeframe, int maxBars)
