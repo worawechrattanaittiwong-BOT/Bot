@@ -35,7 +35,7 @@ assert.match(controller, /@Controller\("admin\/brokers\/exness\/finance"\)/);
 assert.match(controller, /rebate-policies\/:levelCode/);
 assert.match(controller, /commissions\/:id\/reverse/);
 
-assert.match(page, /PHASE 3 ACTIVE/);
+assert.match(page, /<b>3<\/b><span>Commission \+ Rebate<\/span><small>พร้อมแล้ว<\/small>/);
 assert.match(page, /<RebatePanel\/>/);
 assert.match(page, /<AdminBrokerFinancePanel\/>/);
 assert.match(rebatePanel, /แยกจาก Invite & Earn Wallet/);
