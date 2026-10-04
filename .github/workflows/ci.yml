@@ -93,6 +93,9 @@ jobs:
         run: node ./tests/system-typography-contract.mjs
       - name: System popup contract
         run: node ./tests/system-popup-contract.mjs
+      - name: Trading Mode Guide vertical video contract
+        shell: pwsh
+        run: ./tests/mode-guide-video-contract.ps1
       - name: Cent account currency isolation contract
         run: node ./tests/cent-account-currency-isolation-contract.mjs
       - name: AUTO V20 same-dataset policy regression

@@ -1,5 +1,6 @@
 export const API_URL = process.env.NEXT_PUBLIC_API_URL || "/backend";
 const API_TIMEOUT_MS = 15_000;
+const API_UPLOAD_TIMEOUT_MS = 5 * 60_000;
 
 function getDeviceId() {
   if (typeof window === "undefined") return "";
@@ -22,7 +23,10 @@ export function getToken() {
 
 async function requestJson(path: string, init: RequestInit, emergencyAdminKey = "") {
   const headers = new Headers(init.headers);
-  headers.set("Content-Type", "application/json");
+  const isFormData =
+    typeof FormData !== "undefined" &&
+    init.body instanceof FormData;
+  if (!isFormData) headers.set("Content-Type", "application/json");
   const token = getToken();
   if (token) headers.set("Authorization", "Bearer " + token);
   const deviceId = getDeviceId();
@@ -35,7 +39,10 @@ async function requestJson(path: string, init: RequestInit, emergencyAdminKey = 
   if (upstreamSignal?.aborted) controller.abort();
   else upstreamSignal?.addEventListener("abort", abortFromUpstream, { once: true });
 
-  const timeoutId = window.setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+  const timeoutId = window.setTimeout(
+    () => controller.abort(),
+    isFormData ? API_UPLOAD_TIMEOUT_MS : API_TIMEOUT_MS
+  );
   try {
     const response = await fetch(API_URL + "/api" + path, {
       ...init,
