@@ -178,6 +178,7 @@ input double          InpCounterPerPositionProfitMoney = 0.50;
 #define ZERO_GRID_JOURNAL_FORCE_INTERVAL_MS 3000
 #define ZERO_GRID_JOURNAL_HTTP_TIMEOUT_MS 500
 #define LOCAL_DYNAMIC_PROTECTION_INTERVAL_MS 150
+// UI telemetry only; trading decisions remain tick-local and never read this lane.
 #define LIVE_EXECUTION_SNAPSHOT_INTERVAL_MS 200
 #define DEFERRED_DEAL_JOURNAL_MAX 256
 #define AUTO_V21_POLICY "AUTO_V21_BALANCED_EXIT_V1"
