@@ -112,7 +112,10 @@ export class BrokerService {
          status
        FROM mt5_accounts
        WHERE user_id=$1
-         AND upper(trim(broker)) LIKE 'EXNESS%'
+         AND (
+           upper(trim(COALESCE(broker,''))) LIKE 'EXNESS%'
+           OR upper(trim(COALESCE(broker_server,''))) LIKE 'EXNESS%'
+         )
        ORDER BY created_at DESC
        LIMIT 10`,
       [userId]
