@@ -4847,8 +4847,16 @@
 /* Vertical 9:16 tutorial video experience.
    The public view stays editorial and clean; Owner/Admin tools are tucked
    behind one explicit management action instead of dominating the guide. */
-.cc-mode-guide-dialog button{pointer-events:auto!important}
-.cc-bot-v2-embedded.is-locked .cc-bot-v2-body .cc-mode-guide-dialog button{pointer-events:auto!important}
+.cc-mode-guide-dialog button,
+.cc-mode-guide-dialog input,
+.cc-mode-guide-dialog select,
+.cc-mode-guide-dialog textarea,
+.cc-mode-guide-dialog label{pointer-events:auto!important}
+.cc-bot-v2-embedded.is-locked .cc-bot-v2-body .cc-mode-guide-dialog button,
+.cc-bot-v2-embedded.is-locked .cc-bot-v2-body .cc-mode-guide-dialog input,
+.cc-bot-v2-embedded.is-locked .cc-bot-v2-body .cc-mode-guide-dialog select,
+.cc-bot-v2-embedded.is-locked .cc-bot-v2-body .cc-mode-guide-dialog textarea,
+.cc-bot-v2-embedded.is-locked .cc-bot-v2-body .cc-mode-guide-dialog label{pointer-events:auto!important}
 
 .cc-mode-guide-video-zone{
   position:relative;
@@ -5069,6 +5077,12 @@
   font-size:11px;
   line-height:1.45;
 }
+.cc-mode-guide-video-admin-head-actions{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex:0 0 auto;
+}
 .cc-mode-guide-admin-badge{
   flex:0 0 auto;
   padding:5px 8px;
@@ -5078,6 +5092,19 @@
   color:#b8a7f8;
   font-size:var(--ui-type-caption);
   font-weight:900;
+}
+.cc-mode-guide-video-admin-close{
+  display:none;
+  width:40px;
+  height:40px;
+  padding:0;
+  border:1px solid #39445a;
+  border-radius:11px;
+  background:#151c28;
+  color:#dce5f2;
+  font-size:24px;
+  line-height:1;
+  cursor:pointer;
 }
 .cc-mode-guide-video-admin-grid{
   display:grid;
@@ -5729,20 +5756,119 @@
   }
   .cc-mode-guide-video-actions>*{width:100%}
   .cc-mode-guide-video-actions>.cc-mode-guide-video-empty{grid-column:1/-1}
-  .cc-mode-guide-video-admin{padding:11px;border-radius:14px}
+  .cc-mode-guide-video-admin{
+    position:fixed;
+    inset:0;
+    z-index:12280;
+    width:100vw;
+    height:100dvh;
+    max-height:100dvh;
+    overflow:auto;
+    overscroll-behavior:contain;
+    padding:max(14px,env(safe-area-inset-top)) 12px max(16px,env(safe-area-inset-bottom));
+    border:0;
+    border-radius:0;
+    background:
+      radial-gradient(circle at 20% 0,rgba(167,141,255,.14),transparent 34%),
+      linear-gradient(180deg,#101623,#080d15 72%);
+    -webkit-overflow-scrolling:touch;
+  }
   .cc-mode-guide-video-admin>header{
-    align-items:flex-start;
+    position:sticky;
+    top:calc(-1 * max(14px,env(safe-area-inset-top)));
+    z-index:3;
+    align-items:center;
+    gap:10px;
+    margin:0 -12px 12px;
+    padding:max(14px,env(safe-area-inset-top)) 12px 11px;
+    border-bottom:1px solid rgba(120,136,165,.18);
+    background:rgba(10,15,24,.94);
+    backdrop-filter:blur(14px);
+  }
+  .cc-mode-guide-video-admin>header p{
+    max-width:260px;
+    font-size:var(--ui-type-caption);
+  }
+  .cc-mode-guide-video-admin-head-actions{gap:6px}
+  .cc-mode-guide-video-admin-close{
+    display:grid;
+    place-items:center;
+    flex:0 0 40px;
+  }
+  .cc-mode-guide-video-admin-grid{
+    grid-template-columns:1fr;
+    gap:12px;
+  }
+  .cc-mode-guide-video-upload-panel,
+  .cc-mode-guide-video-library{
+    padding:12px;
+    border-radius:14px;
+  }
+  .cc-mode-guide-video-upload{
+    gap:12px;
+  }
+  .cc-mode-guide-video-upload label{
+    gap:7px;
+  }
+  .cc-mode-guide-video-upload label>span{
+    font-size:12px;
+  }
+  .cc-mode-guide-video-upload input[type="text"],
+  .cc-mode-guide-video-upload input[type="file"]{
+    min-height:48px;
+    font-size:16px;
+    border-radius:12px;
+  }
+  .cc-mode-guide-video-upload input[type="text"]{
+    padding:11px 12px;
+  }
+  .cc-mode-guide-video-upload input[type="file"]{
+    padding:9px 10px;
+  }
+  .cc-mode-guide-video-upload input[type="file"]::file-selector-button{
+    min-height:36px;
+    margin-right:10px;
+    padding:8px 12px;
+    border-radius:9px;
+    font-size:13px;
+  }
+  .cc-mode-guide-video-file small{
+    white-space:normal;
+    overflow-wrap:anywhere;
+    line-height:1.45;
+  }
+  .cc-mode-guide-video-upload-button{
+    width:100%;
+    min-height:50px;
+    margin-top:0;
+    border-radius:12px;
+    font-size:13px;
+    touch-action:manipulation;
+  }
+  .cc-mode-guide-video-admin-list{
+    max-height:none;
+    overflow:visible;
     gap:8px;
   }
-  .cc-mode-guide-video-admin>header p{font-size:var(--ui-type-caption)}
-  .cc-mode-guide-video-admin-grid{grid-template-columns:1fr}
-  .cc-mode-guide-video-upload-panel,
-  .cc-mode-guide-video-library{padding:10px}
-  .cc-mode-guide-video-upload-button{width:100%}
   .cc-mode-guide-video-admin-row{
-    grid-template-columns:31px minmax(0,1fr) auto;
+    grid-template-columns:42px minmax(0,1fr) auto;
+    gap:9px;
+    padding:9px;
   }
-  .cc-mode-guide-video-admin-row .remove{grid-column:3}
+  .cc-mode-guide-video-admin-row .preview{
+    width:40px;
+    height:40px;
+  }
+  .cc-mode-guide-video-admin-row .toggle,
+  .cc-mode-guide-video-admin-row .remove{
+    min-height:36px;
+    padding:7px 10px;
+  }
+  .cc-mode-guide-video-admin-row .toggle{grid-column:3}
+  .cc-mode-guide-video-admin-row .remove{
+    grid-column:3;
+    width:100%;
+  }
   .cc-mode-guide-video-player{
     width:100%;
     max-width:410px;
@@ -5798,8 +5924,14 @@
   .cc-mode-guide-video-poster-screen{min-height:74px}
   .cc-mode-guide-video-actions{grid-template-columns:1fr}
   .cc-mode-guide-video-actions>.cc-mode-guide-video-empty{grid-column:1}
-  .cc-mode-guide-video-admin>header{flex-direction:column}
-  .cc-mode-guide-admin-badge{align-self:flex-start}
+  .cc-mode-guide-video-admin>header{
+    flex-direction:row;
+    align-items:center;
+  }
+  .cc-mode-guide-video-admin>header>div:first-child{min-width:0}
+  .cc-mode-guide-video-admin>header p{max-width:210px}
+  .cc-mode-guide-admin-badge{display:none}
+  .cc-mode-guide-video-admin-head-actions{margin-left:auto}
 }
 
 /* RACE recommended mode marker */
