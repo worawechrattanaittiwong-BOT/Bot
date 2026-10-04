@@ -168,6 +168,20 @@ function usdMoney(cents: number) {
   });
 }
 
+function packageDisplayName(months: number) {
+  const names:Record<number,string> = {
+    1:"START",
+    3:"ACTIVE",
+    6:"PRO",
+    12:"PRIME"
+  };
+  return names[Number(months)] || ("SCENOVA " + Number(months) + "M");
+}
+
+function packageDisplayLabel(months: number) {
+  return packageDisplayName(months) + " · " + Number(months) + " เดือน";
+}
+
 function maskedBankNumber(value?: string | null) {
   const digits=String(value||"").replace(/\D/g,"");
   if(!digits) return "";
@@ -1043,7 +1057,7 @@ export default function PackagesPage() {
                 <aside className={styles.checkoutPlan}>
                   <ScenovaIcon name={isLocalSystem ? "account" : "cloud"} size={32}/>
                   <span className={styles.eyebrow}>{isLocalSystem ? "LOCAL MT5" : "VPS / CLOUD MT5"}</span>
-                  <h3>{checkoutPack.months} เดือน</h3>
+                  <h3>{packageDisplayLabel(checkoutPack.months)}</h3>
                   <strong className={styles.checkoutPrice}>${usdMoney(checkoutUsdCents)} USD</strong>
                   <p>เฉลี่ย ${usdMoney(Math.round(checkoutUsdCents / checkoutPack.months))} USD / เดือน</p>
                   <ul>
@@ -1057,7 +1071,7 @@ export default function PackagesPage() {
                 <div className={styles.checkoutSummary}>
                   <h3>สรุปการชำระเงิน</h3>
                   <div className={styles.summaryRow}>
-                    <span>แพ็กเกจ {checkoutPack.months} เดือน</span>
+                    <span>แพ็กเกจ {packageDisplayLabel(checkoutPack.months)}</span>
                     <b>${usdMoney(checkoutPack.price_usd_cents)} USD</b>
                   </div>
 
@@ -1285,7 +1299,7 @@ function PackageCard({
     <article className={`${legacy.package} ${styles.planCard} ${featured ? styles.planFeatured : ""}`}>
       {featured && <span className={styles.recommended}>แนะนำ</span>}
       <span className={styles.planType}><ScenovaIcon name={system === "LOCAL" ? "account" : "cloud"} size={19}/>{system === "LOCAL" ? "LOCAL MT5" : "CLOUD MT5"}</span>
-      <h3>{pack.months} เดือน</h3>
+      <h3>{packageDisplayLabel(pack.months)}</h3>
       <div className={`${legacy.price} ${styles.planPrice}`}>
         {pack.price_usd_cents > 0 ? `$${usdMoney(pack.price_usd_cents)} USD` : "รอประกาศราคา"}
         <small>
@@ -1437,7 +1451,7 @@ function PaymentCard({
 
       <div className={styles.paymentInfo}>
         <span className={styles.eyebrow}>{type} / {order.id.slice(0,8)}</span>
-        <h3>{order.months} เดือน · {Number(order.final_price_usd_cents || 0) > 0 ? `$${usdMoney(Number(order.final_price_usd_cents || 0))} USD` : `฿${thbMoney(order.amount)} THB`}</h3>
+        <h3>{packageDisplayLabel(order.months)} · {Number(order.final_price_usd_cents || 0) > 0 ? `${usdMoney(Number(order.final_price_usd_cents || 0))} USD` : `฿${thbMoney(order.amount)} THB`}</h3>
         {Number(order.discount_amount || 0) > 0 && (
           <div className={styles.promoApplied}>
             <span>{order.promotion_code}</span>
@@ -1527,7 +1541,7 @@ function OrderHistory({title,orders}:{title:string;orders:Order[]}) {
             return (
               <div className={styles.orderRow} key={order.id}>
                 <div>
-                  <b>{itemName} · {order.months} เดือน</b>
+                  <b>{itemName} · {packageDisplayLabel(order.months)}</b>
                   <span>{date(order.created_at)}</span>
                 </div>
                 <strong>{Number(order.final_price_usd_cents || 0) > 0 ? `${usdMoney(Number(order.final_price_usd_cents || 0))}` : `฿${thbMoney(order.amount)}`}</strong>
