@@ -106,6 +106,7 @@ export function TradingModeGuideVideos({
   const [title,setTitle]=useState("");
   const [file,setFile]=useState<File|null>(null);
   const [playingId,setPlayingId]=useState("");
+  const [managerOpen,setManagerOpen]=useState(false);
 
   async function load(silent=false) {
     if(!silent) setLoading(true);
@@ -126,6 +127,7 @@ export function TradingModeGuideVideos({
 
   useEffect(()=>{
     setPlayingId("");
+    setManagerOpen(false);
     setError("");
     setNotice("");
     setTitle("");
@@ -140,10 +142,12 @@ export function TradingModeGuideVideos({
     [videos,modeKey]
   );
   const playableVideos=modeVideos.filter(video=>video.isActive);
+  const playerPool=isAdmin?modeVideos:playableVideos;
   const playingVideo=
-    playableVideos.find(video=>video.id===playingId) ||
-    playableVideos[0] ||
+    playerPool.find(video=>video.id===playingId) ||
+    playerPool[0] ||
     null;
+  const featuredVideo=playableVideos[0]||null;
 
   async function upload() {
     if(!isAdmin || busy) return;
@@ -230,93 +234,139 @@ export function TradingModeGuideVideos({
   }
 
   return <>
-    <section className="cc-mode-guide-video-zone" aria-label="วิดีโอแนะนำโหมด">
-      <div className="cc-mode-guide-video-zone-copy">
-        <span className="cc-mode-guide-video-icon"><ScenovaIcon name="play" size={18}/></span>
-        <div>
-          <small>VIDEO GUIDE · 9:16</small>
-          <b>ดูตัวอย่างการใช้งาน {modeKey.replace("_"," ")}</b>
-          <span>วิดีโอแนวตั้งสำหรับดูบนมือถือ</span>
+    <section className={"cc-mode-guide-video-zone "+(featuredVideo?"has-video":"is-empty")} aria-label="วิดีโอแนะนำโหมด">
+      <div className="cc-mode-guide-video-poster" aria-hidden="true">
+        <div className="cc-mode-guide-video-poster-screen">
+          <span className="cc-mode-guide-video-poster-kicker">9:16</span>
+          <span className="cc-mode-guide-video-poster-play"><ScenovaIcon name="play" size={18}/></span>
+          <small>{modeKey.replace("_"," ")}</small>
         </div>
       </div>
-      {loading
-        ? <button type="button" disabled>กำลังโหลด...</button>
-        : playableVideos.length
-          ? <button
-              type="button"
-              className="cc-mode-guide-watch"
-              onClick={()=>setPlayingId(playableVideos[0].id)}
-            ><ScenovaIcon name="play" size={16}/>ดูวิดีโอ{playableVideos.length>1?" ("+playableVideos.length+")":""}</button>
-          : <span className="cc-mode-guide-video-empty">ยังไม่มีวิดีโอ</span>}
+
+      <div className="cc-mode-guide-video-zone-copy">
+        <span className="cc-mode-guide-video-eyebrow">VIDEO GUIDE · MOBILE FIRST</span>
+        <h3>{featuredVideo?featuredVideo.title:"คู่มือวิดีโอ "+modeKey.replace("_"," ")}</h3>
+        <p>
+          {featuredVideo
+            ? "ดูขั้นตอนและตัวอย่างการใช้งานจริงในวิดีโอแนวตั้งสำหรับมือถือ"
+            : "ยังไม่มีวิดีโอเผยแพร่สำหรับโหมดนี้"}
+        </p>
+        <div className="cc-mode-guide-video-meta">
+          <span>9:16 แนวตั้ง</span>
+          {featuredVideo&&<span>{fileSizeLabel(featuredVideo.sizeBytes)}</span>}
+          {featuredVideo&&durationLabel(featuredVideo.durationSeconds)&&<span>{durationLabel(featuredVideo.durationSeconds)}</span>}
+          {playableVideos.length>1&&<span>{playableVideos.length} วิดีโอ</span>}
+        </div>
+      </div>
+
+      <div className="cc-mode-guide-video-actions">
+        {loading
+          ? <button type="button" className="cc-mode-guide-watch" disabled>กำลังโหลด...</button>
+          : featuredVideo
+            ? <button
+                type="button"
+                className="cc-mode-guide-watch"
+                onClick={()=>setPlayingId(featuredVideo.id)}
+              ><ScenovaIcon name="play" size={16}/>ดูวิดีโอ</button>
+            : !isAdmin&&<span className="cc-mode-guide-video-empty">COMING SOON</span>}
+        {isAdmin&&<button
+          type="button"
+          className="cc-mode-guide-manage"
+          onClick={()=>setManagerOpen(open=>!open)}
+          aria-expanded={managerOpen}
+        ><ScenovaIcon name={managerOpen?"close":"settings"} size={15}/>{managerOpen?"ปิดตัวจัดการ":modeVideos.length?"จัดการวิดีโอ":"เพิ่มวิดีโอ"}</button>}
+      </div>
     </section>
 
-    {isAdmin&&<section className="cc-mode-guide-video-admin" aria-label="จัดการวิดีโอคู่มือโหมด">
+    {isAdmin&&managerOpen&&<section className="cc-mode-guide-video-admin" aria-label="จัดการวิดีโอคู่มือโหมด">
       <header>
         <div>
           <small>ADMIN · VIDEO MANAGER</small>
-          <b>แนบวิดีโอจากหน้านี้</b>
+          <b>จัดการวิดีโอ {modeKey.replace("_"," ")}</b>
+          <p>แนบคลิปจากมือถือได้โดยตรง ระบบตรวจวิดีโอแนวตั้งก่อนอัปโหลด</p>
         </div>
-        <span>แนวตั้ง · แนะนำ 9:16 · สูงสุด 300 MB</span>
+        <span className="cc-mode-guide-admin-badge">{modeVideos.length} ไฟล์</span>
       </header>
 
-      <div className="cc-mode-guide-video-upload">
-        <label>
-          <span>ชื่อวิดีโอ</span>
-          <input
-            type="text"
-            maxLength={180}
-            placeholder={"เช่น วิธีใช้ "+modeKey.replace("_"," ")}
-            value={title}
-            onChange={event=>setTitle(event.target.value)}
-            disabled={busy}
-          />
-        </label>
-        <label className="cc-mode-guide-video-file">
-          <span>ไฟล์จากมือถือ</span>
-          <input
-            ref={fileRef}
-            type="file"
-            accept="video/mp4,video/quicktime,video/webm,video/*"
-            disabled={busy}
-            onChange={event=>{
-              const next=event.target.files?.[0]||null;
-              setFile(next);
-              setError("");
-              setNotice("");
-            }}
-          />
-          <small>{file?file.name+" · "+fileSizeLabel(file.size):"เลือก MP4 / MOV / WEBM แนวตั้ง"}</small>
-        </label>
-        <button
-          type="button"
-          className="cc-mode-guide-video-upload-button"
-          disabled={busy||!file}
-          onClick={upload}
-        >{busy?"กำลังอัปโหลด...":"อัปโหลดวิดีโอ"}</button>
-      </div>
-
-      {error&&<div className="cc-mode-guide-video-message error" role="alert">{error}</div>}
-      {notice&&<div className="cc-mode-guide-video-message success" role="status">{notice}</div>}
-
-      {modeVideos.length>0&&<div className="cc-mode-guide-video-admin-list">
-        {modeVideos.map(video=><div key={video.id} className={"cc-mode-guide-video-admin-row "+(video.isActive?"active":"inactive")}>
-          <button
-            type="button"
-            className="preview"
-            onClick={()=>setPlayingId(video.id)}
-            disabled={!video.isActive}
-            aria-label={"ดู "+video.title}
-          ><ScenovaIcon name="play" size={15}/></button>
-          <div>
-            <b>{video.title}</b>
-            <small>{video.width}×{video.height} · {fileSizeLabel(video.sizeBytes)}{durationLabel(video.durationSeconds)?" · "+durationLabel(video.durationSeconds):""}</small>
+      <div className="cc-mode-guide-video-admin-grid">
+        <div className="cc-mode-guide-video-upload-panel">
+          <div className="cc-mode-guide-video-upload-title">
+            <span className="cc-mode-guide-video-upload-icon"><ScenovaIcon name="plus" size={16}/></span>
+            <div><b>เพิ่มวิดีโอใหม่</b><small>แนะนำ 1080×1920 · สูงสุด 300 MB</small></div>
           </div>
-          <button type="button" className="toggle" onClick={()=>toggle(video)} disabled={busy}>
-            {video.isActive?"แสดงอยู่":"ซ่อนอยู่"}
-          </button>
-          <button type="button" className="remove" onClick={()=>remove(video)} disabled={busy}>ลบ</button>
-        </div>)}
-      </div>}
+
+          <div className="cc-mode-guide-video-upload">
+            <label>
+              <span>ชื่อวิดีโอ</span>
+              <input
+                type="text"
+                maxLength={180}
+                placeholder={"เช่น วิธีใช้ "+modeKey.replace("_"," ")}
+                value={title}
+                onChange={event=>setTitle(event.target.value)}
+                disabled={busy}
+              />
+            </label>
+            <label className={"cc-mode-guide-video-file "+(file?"has-file":"")}>
+              <span>วิดีโอจากมือถือ</span>
+              <input
+                ref={fileRef}
+                type="file"
+                accept="video/mp4,video/quicktime,video/webm,video/*"
+                disabled={busy}
+                onChange={event=>{
+                  const next=event.target.files?.[0]||null;
+                  setFile(next);
+                  setError("");
+                  setNotice("");
+                }}
+              />
+              <small>{file?file.name+" · "+fileSizeLabel(file.size):"MP4 / MOV / WEBM · แนวตั้งเท่านั้น"}</small>
+            </label>
+            <button
+              type="button"
+              className="cc-mode-guide-video-upload-button"
+              disabled={busy||!file}
+              onClick={upload}
+            >{busy?"กำลังอัปโหลด...":"อัปโหลดวิดีโอ"}</button>
+          </div>
+
+          {error&&<div className="cc-mode-guide-video-message error" role="alert">{error}</div>}
+          {notice&&<div className="cc-mode-guide-video-message success" role="status">{notice}</div>}
+        </div>
+
+        <div className="cc-mode-guide-video-library">
+          <div className="cc-mode-guide-video-library-head">
+            <div><b>คลังวิดีโอ</b><small>เฉพาะโหมด {modeKey.replace("_"," ")}</small></div>
+            <span>{playableVideos.length} กำลังแสดง</span>
+          </div>
+
+          {modeVideos.length>0
+            ? <div className="cc-mode-guide-video-admin-list">
+                {modeVideos.map((video,index)=><div key={video.id} className={"cc-mode-guide-video-admin-row "+(video.isActive?"active":"inactive")}>
+                  <button
+                    type="button"
+                    className="preview"
+                    onClick={()=>setPlayingId(video.id)}
+                    aria-label={"ดู "+video.title}
+                  ><ScenovaIcon name="play" size={15}/></button>
+                  <div>
+                    <b>{video.title}</b>
+                    <small>#{index+1} · {video.width}×{video.height} · {fileSizeLabel(video.sizeBytes)}{durationLabel(video.durationSeconds)?" · "+durationLabel(video.durationSeconds):""}</small>
+                  </div>
+                  <button type="button" className="toggle" onClick={()=>toggle(video)} disabled={busy}>
+                    {video.isActive?"เผยแพร่":"ซ่อน"}
+                  </button>
+                  <button type="button" className="remove" onClick={()=>remove(video)} disabled={busy}>ลบ</button>
+                </div>)}
+              </div>
+            : <div className="cc-mode-guide-video-library-empty">
+                <span><ScenovaIcon name="play" size={20}/></span>
+                <b>ยังไม่มีวิดีโอในโหมดนี้</b>
+                <small>เลือกไฟล์จากมือถือทางด้านซ้ายแล้วอัปโหลดได้ทันที</small>
+              </div>}
+        </div>
+      </div>
     </section>}
 
     {playingId&&playingVideo&&<div
@@ -344,15 +394,15 @@ export function TradingModeGuideVideos({
             preload="metadata"
           />
         </div>
-        {playableVideos.length>1&&<nav className="cc-mode-guide-video-playlist" aria-label="เลือกวิดีโอ">
-          {playableVideos.map((video,index)=><button
+        {playerPool.length>1&&<nav className="cc-mode-guide-video-playlist" aria-label="เลือกวิดีโอ">
+          {playerPool.map((video,index)=><button
             type="button"
             key={video.id}
             className={video.id===playingVideo.id?"active":""}
             onClick={()=>setPlayingId(video.id)}
-          >{index+1}. {video.title}</button>)}
+          >{index+1}. {video.title}{!video.isActive?" · ซ่อน":""}</button>)}
         </nav>}
       </section>
     </div>}
   </>;
-}
+}}
