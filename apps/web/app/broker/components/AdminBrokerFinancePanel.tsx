@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { adminApi } from "../../../lib/api";
+import { useSystemPopup } from "../../../components/SystemPopupProvider";
 import styles from "../page.module.css";
 
 type Policy = {
@@ -78,6 +79,7 @@ function localDateTimeInput(date = new Date()) {
 }
 
 export function AdminBrokerFinancePanel() {
+  const { promptPopup } = useSystemPopup();
   const [data, setData] = useState<FinanceData | null>(null);
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState("");
@@ -253,8 +255,15 @@ export function AdminBrokerFinancePanel() {
   }
 
   async function reverseCommission(id: string) {
-    const reason = window.prompt("เหตุผลที่ Reverse Commission");
-    if (!reason) return;
+    const reason = await promptPopup({
+      title: "Reverse Commission",
+      tone: "warning",
+      message: "กรุณาระบุเหตุผลที่ต้อง Reverse Commission รายการนี้",
+      placeholder: "เหตุผลในการ Reverse",
+      confirmLabel: "ยืนยัน Reverse",
+      cancelLabel: "ยกเลิก"
+    });
+    if (!reason?.trim()) return;
 
     setBusy("commission-" + id);
     setError("");
