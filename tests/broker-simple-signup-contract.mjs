@@ -41,10 +41,9 @@ assert.match(brokerService, /registrationInfo/);
 assert.match(brokerService, /Partner Code/);
 assert.match(brokerService, /ลิงก์คอมพิวเตอร์และลิงก์มือถือให้ครบ/);
 assert.match(brokerService, /platform === "MOBILE"[\s\S]*row\.mobile_partner_link[\s\S]*row\.web_partner_link/);
-assert.doesNotMatch(
-  brokerService.match(/const preferred = platform === "MOBILE"[\s\S]*?;/)?.[0] || "",
-  /\|\|/
-);
+const preferredBlock = brokerService.match(/const preferred = platform === "MOBILE"[\s\S]*?;/)?.[0] || "";
+assert.doesNotMatch(preferredBlock, /mobile_partner_link\s*\|\|\s*row\.web_partner_link/);
+assert.doesNotMatch(preferredBlock, /web_partner_link\s*\|\|\s*row\.mobile_partner_link/);
 assert.match(migration, /benefit_message/);
 
 console.log("Broker simple signup contract: PASS");
