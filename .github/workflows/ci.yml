@@ -175,6 +175,8 @@ jobs:
         run: ./tests/market-closed-heartbeat-contract.ps1
       - name: Cloud durable journal relay contract
         run: node ./tests/cloud-journal-relay-contract.mjs
+      - name: Cloud Live Execution 200ms isolation contract
+        run: node ./tests/cloud-live-execution-200ms-contract.mjs
       - name: Live price chart 15-minute contract
         shell: pwsh
         run: ./tests/live-price-chart-15m-contract.ps1
