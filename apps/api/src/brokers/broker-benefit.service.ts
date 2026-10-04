@@ -392,10 +392,10 @@ export class BrokerBenefitService {
     try {
       const available = (
         await tx.query(
-          "SELECT to_regclass('public.broker_partner_clients') AS clients, to_regclass('public.broker_benefit_levels') AS levels"
+          "SELECT to_regclass('public.broker_partner_clients') AS clients, to_regclass('public.broker_benefit_levels') AS levels, to_regclass('public.broker_benefit_order_applications') AS applications"
         )
       ).rows[0];
-      if (!available?.clients || !available?.levels) return null;
+      if (!available?.clients || !available?.levels || !available?.applications) return null;
 
       const row = (
         await tx.query(
