@@ -3603,7 +3603,7 @@ export class BotController {
     };
     if (activeProfileMode === "AUTO") {
       clean.lot = storedNumber("autoLot", "lot", 0.01);
-      clean.maxPositions = Math.max(1, Math.trunc(storedNumber("autoMaxPositions", "maxPositions", 1)));
+      clean.maxPositions = Math.max(1, Math.trunc(storedNumber("autoMaxPositions", "maxPositions", 3)));
       clean.maxBasketLossMoney = storedNumber("autoMaxBasketLossMoney", "standardMaxBasketLossMoney",
         Number(currentSettings.maxBasketLossMoney || 0));
       clean.dailyLossMoney = storedNumber("autoDailyLossMoney", "standardDailyLossMoney",
@@ -3612,7 +3612,7 @@ export class BotController {
         Number(currentSettings.dailyProfitTargetMoney || 0));
     } else if (activeProfileMode === "RACE") {
       clean.lot = storedNumber("raceLot", "lot", 0.01);
-      clean.maxPositions = Math.max(1, Math.trunc(storedNumber("raceMaxPositions", "maxPositions", 1)));
+      clean.maxPositions = Math.max(1, Math.trunc(storedNumber("raceMaxPositions", "maxPositions", 5)));
       clean.maxBasketLossMoney = storedNumber("raceMaxBasketLossMoney", "standardMaxBasketLossMoney",
         Number(currentSettings.maxBasketLossMoney || 0));
       clean.dailyLossMoney = storedNumber("raceDailyLossMoney", "standardDailyLossMoney",
@@ -3692,10 +3692,16 @@ export class BotController {
         currentSettings.raceProfitTargetMode ??
         ""
       ).toUpperCase();
+      const legacyRaceCloseAll =
+        body.raceCloseAllProfitEnabled ??
+        currentSettings.raceCloseAllProfitEnabled;
       let raceMode = ["BASKET", "POSITION", "OFF"].includes(storedRaceMode)
         ? storedRaceMode
-        : ((body.raceCloseAllProfitEnabled ?? currentSettings.raceCloseAllProfitEnabled) === false
-            ? "OFF" : "BASKET");
+        : (legacyRaceCloseAll === true
+            ? "BASKET"
+            : legacyRaceCloseAll === false
+              ? "OFF"
+              : "POSITION");
       if (body.raceProfitTargetMode !== undefined) {
         raceMode = String(body.raceProfitTargetMode).toUpperCase();
       } else if (body.raceCloseAllProfitEnabled !== undefined) {
@@ -3717,7 +3723,7 @@ export class BotController {
     if (counterSelected &&
         body.counterPerPositionProfitMoney === undefined &&
         currentSettings.counterPerPositionProfitMoney === undefined) {
-      clean.counterPerPositionProfitMoney = 0.5;
+      clean.counterPerPositionProfitMoney = 1;
     }
 
     const autoSelected = effectiveProfitProfileMode === "AUTO";
