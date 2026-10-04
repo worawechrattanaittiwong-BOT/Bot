@@ -196,7 +196,7 @@ export class CloudUpdateService {
       }
 
       const active = (await tx.query(
-        `SELECT sj.id,sj.action,er.version target_version,er.sha256 target_sha256
+        `SELECT sj.id,sj.action,er.version target_version,er.sha256 target_sha256,er.build_id target_build_id
          FROM server_update_jobs sj
          LEFT JOIN ea_releases er ON er.id=sj.release_id
          WHERE sj.runner_id=$1 AND sj.state='RUNNING'
@@ -206,14 +206,26 @@ export class CloudUpdateService {
       )).rows[0];
 
       if (active) {
+        const activeVersion =
+          String(active.target_version || "").trim().replace(/^v/i, "");
+        const productionVersion =
+          String(release.version || "").trim().replace(/^v/i, "");
+        const activeSha =
+          String(active.target_sha256 || "").trim().toLowerCase();
+        const productionSha =
+          String(release.sha256 || "").trim().toLowerCase();
+        const activeBuildId =
+          String(active.target_build_id || "").trim();
+        const productionBuildId =
+          String(release.buildId || "").trim();
+
         const sameRelease =
-          String(active.target_version || "").replace(/^v/i, "") ===
-            String(release.version || "").replace(/^v/i, "") &&
-          String(active.target_sha256 || "").toLowerCase() ===
-            String(release.sha256 || "").toLowerCase();
+          activeVersion === productionVersion &&
+          activeSha === productionSha &&
+          (!activeBuildId || !productionBuildId || activeBuildId === productionBuildId);
 
         if (sameRelease) {
-          throw new ConflictException("EA เวอร์ชันนี้กำลังอยู่ในคิวอัปเดตแล้ว");
+          throw new ConflictException("Production EA Build นี้กำลังอยู่ในคิวอัปเดตแล้ว");
         }
 
         if (active.action !== "UPDATE") {
@@ -234,9 +246,9 @@ export class CloudUpdateService {
           Number(activeCounts?.delivered || 0) +
           Number(activeCounts?.verifying || 0);
 
-        const activeVersion = String(active.target_version || "").trim();
+        const queuedVersion = String(active.target_version || "").trim();
         const productionIsNotOlder =
-          !activeVersion || this.versionAtLeast(release.version, activeVersion);
+          !queuedVersion || this.versionAtLeast(release.version, queuedVersion);
 
         if (inFlight > 0 || !productionIsNotOlder) {
           throw new ConflictException(
