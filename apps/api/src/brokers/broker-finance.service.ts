@@ -7,7 +7,6 @@ import { PoolClient } from "pg";
 import { DbService } from "../db.service";
 import { BrokerBenefitService } from "./broker-benefit.service";
 
-type RebateStatus = "PENDING" | "AVAILABLE" | "PAID" | "REVERSED";
 
 @Injectable()
 export class BrokerFinanceService {
@@ -657,6 +656,16 @@ export class BrokerFinanceService {
         ]
       );
 
+      await tx.query(
+        `INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail)
+         VALUES($1,'BROKER_REBATE_RELEASED','broker_rebate_entry',$2,$3::jsonb)`,
+        [
+          actor.slice(0,160),
+          rebate.id,
+          JSON.stringify({ amountMinor: amount, currency: rebate.currency })
+        ]
+      );
+
       return { ok: true, status: "AVAILABLE" };
     });
   }
@@ -701,6 +710,20 @@ export class BrokerFinanceService {
           rebate.currency,
           actor.slice(0,160),
           JSON.stringify({ payoutReference })
+        ]
+      );
+
+      await tx.query(
+        `INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail)
+         VALUES($1,'BROKER_REBATE_PAID','broker_rebate_entry',$2,$3::jsonb)`,
+        [
+          actor.slice(0,160),
+          rebate.id,
+          JSON.stringify({
+            amountMinor: amount,
+            currency: rebate.currency,
+            payoutReference
+          })
         ]
       );
 
