@@ -75,6 +75,8 @@ jobs:
         run: ./tests/mobile-mirror-isolation-contract.ps1
       - name: Broker Phase 2 isolation contract
         run: node ./tests/broker-phase2-contract.mjs
+      - name: Broker Phase 3 finance isolation contract
+        run: node ./tests/broker-phase3-contract.mjs
       - name: Referral program contract
         run: node ./tests/referral-program-contract.mjs
       - name: Commission withdrawal Phase 2 contract
