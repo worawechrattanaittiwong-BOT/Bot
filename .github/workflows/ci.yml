@@ -79,6 +79,8 @@ jobs:
         run: node ./tests/broker-phase3-contract.mjs
       - name: Broker Phase 4 API automation contract
         run: node ./tests/broker-phase4-contract.mjs
+      - name: Broker simple signup contract
+        run: node ./tests/broker-simple-signup-contract.mjs
       - name: Referral program contract
         run: node ./tests/referral-program-contract.mjs
       - name: Commission withdrawal Phase 2 contract

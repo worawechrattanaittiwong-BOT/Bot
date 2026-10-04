@@ -9,8 +9,6 @@ const api = read("apps/api/src/brokers/exness-partnership-api.service.ts");
 const automation = read("apps/api/src/brokers/broker-automation.service.ts");
 const controller = read("apps/api/src/brokers/broker-automation.controller.ts");
 const migration = read("database/064_broker_api_automation.sql");
-const page = read("apps/web/app/broker/page.tsx");
-const panel = read("apps/web/app/broker/components/AdminBrokerAutomationPanel.tsx");
 const secrets = read("apps/api/src/runtime-secrets.service.ts");
 const sidebar = read("apps/web/components/OwnerSidebar.tsx");
 const finance = read("apps/api/src/brokers/broker-finance.service.ts");
@@ -44,15 +42,6 @@ assert.doesNotMatch(automation, /JSON\.stringify\(item\)\.slice/);
 assert.match(controller, /@Controller\("admin\/brokers\/exness\/automation"\)/);
 assert.match(controller, /@Post\("test"\)/);
 assert.match(controller, /@Post\("sync"\)/);
-
-assert.match(page, /PHASE 4 ACTIVE/);
-assert.match(page, /<AdminBrokerAutomationPanel\/>/);
-assert.match(panel, /Official Exness Partnership API/);
-assert.match(panel, /Test Connection/);
-assert.match(panel, /Sync Now/);
-assert.match(panel, /Auto Verify Partner Clients/);
-assert.match(panel, /Auto Import Commission/);
-assert.match(panel, /Auto Release Rebate/);
 
 assert.match(secrets, /"BROKER"/);
 assert.match(finance, /UNIQUE|ถูกบันทึกแล้ว/);

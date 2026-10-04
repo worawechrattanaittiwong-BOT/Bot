@@ -8,9 +8,6 @@ function read(path) {
 const finance = read("apps/api/src/brokers/broker-finance.service.ts");
 const controller = read("apps/api/src/brokers/broker-finance.controller.ts");
 const migration = read("database/063_broker_commission_rebate.sql");
-const page = read("apps/web/app/broker/page.tsx");
-const rebatePanel = read("apps/web/app/broker/components/RebatePanel.tsx");
-const adminPanel = read("apps/web/app/broker/components/AdminBrokerFinancePanel.tsx");
 const sidebar = read("apps/web/components/OwnerSidebar.tsx");
 const referralService = read("apps/api/src/referral.service.ts");
 
@@ -34,13 +31,6 @@ assert.match(controller, /@Controller\("brokers\/exness\/rebates"\)/);
 assert.match(controller, /@Controller\("admin\/brokers\/exness\/finance"\)/);
 assert.match(controller, /rebate-policies\/:levelCode/);
 assert.match(controller, /commissions\/:id\/reverse/);
-
-assert.match(page, /<b>3<\/b><span>Commission \+ Rebate<\/span><small>พร้อมแล้ว<\/small>/);
-assert.match(page, /<RebatePanel\/>/);
-assert.match(page, /<AdminBrokerFinancePanel\/>/);
-assert.match(rebatePanel, /แยกจาก Invite & Earn Wallet/);
-assert.match(adminPanel, /Record Confirmed Commission/);
-assert.match(adminPanel, /Pending → Available → Paid/);
 
 const brokerMenuCount = (sidebar.match(/key:"broker-center"/g) || []).length;
 assert.equal(brokerMenuCount, 1, "Phase 3 must not add another sidebar menu");

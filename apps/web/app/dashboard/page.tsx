@@ -10,6 +10,7 @@ import { EaDecisionCenter } from "../../components/EaDecisionCenter";
 import { BotPerformanceSummary } from "../../components/BotPerformanceSummary";
 import { useSystemPopup } from "../../components/SystemPopupProvider";
 import { TradingModeGuideVideos } from "../../components/TradingModeGuideVideos";
+import { ExnessSignupCard } from "../../components/ExnessSignupCard";
 
 type Dashboard = {
   user: any;
@@ -4728,6 +4729,8 @@ export default function DashboardPage() {
 
         {activeView === "account" && (
           <div className="account-workspace account-workspace-compact">
+            {!isOwner && !data.account && <ExnessSignupCard/>}
+
             <section className="panel account-card connection-mode-card">
               <div className="panel-head">
                 <div>

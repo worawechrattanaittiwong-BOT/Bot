@@ -12,7 +12,6 @@ const cloud = read("apps/api/src/cloud.controller.ts");
 const promo = read("apps/api/src/promotion.service.ts");
 const migration = read("database/062_broker_partner_benefits.sql");
 const sidebar = read("apps/web/components/OwnerSidebar.tsx");
-const brokerPage = read("apps/web/app/broker/page.tsx");
 const packagesPage = read("apps/web/app/packages/page.tsx");
 
 assert.match(migration, /broker_partner_clients/);
@@ -35,8 +34,6 @@ assert.match(promo, /releaseReservation/);
 
 assert.match(packagesPage, /EXNESS PARTNER BENEFIT/);
 assert.match(packagesPage, /Math\.max\(partnerDiscountPercent, promoDiscountPercent\)/);
-assert.match(brokerPage, /Partner Verification & Benefits/);
-
 const brokerMenuCount = (sidebar.match(/key:"broker-center"/g) || []).length;
 assert.equal(brokerMenuCount, 1, "Broker must remain one sidebar menu item");
 

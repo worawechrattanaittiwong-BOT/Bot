@@ -6,6 +6,7 @@ type BrokerPartnerSettingsInput = {
   partnerCode?: string;
   webPartnerLink?: string;
   mobilePartnerLink?: string;
+  benefitMessage?: string;
 };
 
 @Injectable()
@@ -28,10 +29,14 @@ export class BrokerService {
         partner_code varchar(120) NOT NULL DEFAULT '',
         web_partner_link text NOT NULL DEFAULT '',
         mobile_partner_link text NOT NULL DEFAULT '',
+        benefit_message text NOT NULL DEFAULT 'สมัครผ่านลิงก์ Partner ของ SCENOVA เพื่อรับราคาพิเศษและสิทธิประโยชน์เพิ่มเติมในระบบ SCENOVA',
         updated_by varchar(160),
         created_at timestamptz NOT NULL DEFAULT now(),
         updated_at timestamptz NOT NULL DEFAULT now()
       );
+
+      ALTER TABLE broker_partner_settings
+        ADD COLUMN IF NOT EXISTS benefit_message text NOT NULL DEFAULT 'สมัครผ่านลิงก์ Partner ของ SCENOVA เพื่อรับราคาพิเศษและสิทธิประโยชน์เพิ่มเติมในระบบ SCENOVA';
 
       CREATE TABLE IF NOT EXISTS broker_registration_clicks (
         id bigserial PRIMARY KEY,
@@ -72,6 +77,14 @@ export class BrokerService {
     return code;
   }
 
+  private cleanBenefitMessage(value: unknown) {
+    const message = String(value || "").trim();
+    if (message.length > 300) {
+      throw new BadRequestException("ข้อความสิทธิพิเศษยาวเกิน 300 ตัวอักษร");
+    }
+    return message || "สมัครผ่านลิงก์ Partner ของ SCENOVA เพื่อรับราคาพิเศษและสิทธิประโยชน์เพิ่มเติมในระบบ SCENOVA";
+  }
+
   private cleanPartnerUrl(value: unknown, label: string) {
     const raw = String(value || "").trim();
     if (!raw) return "";
@@ -88,6 +101,41 @@ export class BrokerService {
     }
   }
 
+  async registrationInfo() {
+    await this.ensureSchema();
+
+    const row = await this.db.one(
+      `SELECT
+         b.active AS broker_active,
+         COALESCE(s.active,false) AS partner_active,
+         COALESCE(s.partner_code,'') AS partner_code,
+         COALESCE(s.web_partner_link,'') AS web_partner_link,
+         COALESCE(s.mobile_partner_link,'') AS mobile_partner_link,
+         COALESCE(
+           NULLIF(s.benefit_message,''),
+           'สมัครผ่านลิงก์ Partner ของ SCENOVA เพื่อรับราคาพิเศษและสิทธิประโยชน์เพิ่มเติมในระบบ SCENOVA'
+         ) AS benefit_message
+       FROM brokers b
+       LEFT JOIN broker_partner_settings s ON s.broker_id=b.id
+       WHERE b.code='EXNESS'
+       LIMIT 1`
+    );
+
+    const active = Boolean(row?.broker_active && row?.partner_active);
+    const partnerCode = String(row?.partner_code || "").trim();
+    const webReady = Boolean(String(row?.web_partner_link || "").trim());
+    const mobileReady = Boolean(String(row?.mobile_partner_link || "").trim());
+
+    return {
+      active: active && Boolean(partnerCode) && webReady && mobileReady,
+      broker: "EXNESS",
+      partnerCode,
+      benefitMessage: String(row?.benefit_message || ""),
+      computerReady: webReady,
+      mobileReady
+    };
+  }
+
   async exnessSummary(userId: string) {
     await this.ensureSchema();
 
@@ -95,8 +143,13 @@ export class BrokerService {
       `SELECT
          b.id,b.code,b.name,b.active AS broker_active,
          COALESCE(s.active,false) AS partner_active,
+         COALESCE(s.partner_code,'') AS partner_code,
          COALESCE(s.web_partner_link,'') AS web_partner_link,
-         COALESCE(s.mobile_partner_link,'') AS mobile_partner_link
+         COALESCE(s.mobile_partner_link,'') AS mobile_partner_link,
+         COALESCE(
+           NULLIF(s.benefit_message,''),
+           'สมัครผ่านลิงก์ Partner ของ SCENOVA เพื่อรับราคาพิเศษและสิทธิประโยชน์เพิ่มเติมในระบบ SCENOVA'
+         ) AS benefit_message
        FROM brokers b
        LEFT JOIN broker_partner_settings s ON s.broker_id=b.id
        WHERE b.code='EXNESS'
@@ -122,7 +175,7 @@ export class BrokerService {
     );
 
     const active = Boolean(provider?.broker_active && provider?.partner_active);
-    const hasLink = Boolean(provider?.web_partner_link || provider?.mobile_partner_link);
+    const hasLink = Boolean(provider?.web_partner_link && provider?.mobile_partner_link && provider?.partner_code);
 
     return {
       provider: {
@@ -132,7 +185,9 @@ export class BrokerService {
         mt5Supported: true,
         cloudSupported: true,
         localSupported: true,
-        registrationAvailable: active && hasLink
+        registrationAvailable: active && hasLink,
+        partnerCode: String(provider?.partner_code || ""),
+        benefitMessage: String(provider?.benefit_message || "")
       },
       connectedAccounts: accounts.rows.map((row: any) => ({
         id: row.id,
@@ -159,6 +214,7 @@ export class BrokerService {
          b.id,
          b.active AS broker_active,
          COALESCE(s.active,false) AS partner_active,
+         COALESCE(s.partner_code,'') AS partner_code,
          COALESCE(s.web_partner_link,'') AS web_partner_link,
          COALESCE(s.mobile_partner_link,'') AS mobile_partner_link
        FROM brokers b
@@ -171,12 +227,21 @@ export class BrokerService {
       throw new ConflictException("Exness Partner Link ยังไม่เปิดใช้งาน");
     }
 
+    const partnerCode = String(row.partner_code || "").trim();
+    if (!partnerCode) {
+      throw new ConflictException("ยังไม่ได้ตั้งค่า Exness Partner Code");
+    }
+
     const preferred = platform === "MOBILE"
-      ? String(row.mobile_partner_link || row.web_partner_link || "")
-      : String(row.web_partner_link || row.mobile_partner_link || "");
+      ? String(row.mobile_partner_link || "")
+      : String(row.web_partner_link || "");
 
     if (!preferred) {
-      throw new ConflictException("ยังไม่ได้ตั้งค่า Exness Partner Link");
+      throw new ConflictException(
+        platform === "MOBILE"
+          ? "ยังไม่ได้ตั้งค่า Exness Partner Link สำหรับมือถือ"
+          : "ยังไม่ได้ตั้งค่า Exness Partner Link สำหรับคอมพิวเตอร์"
+      );
     }
 
     const url = this.cleanPartnerUrl(preferred, "Partner Link");
@@ -190,6 +255,7 @@ export class BrokerService {
     return {
       broker: "EXNESS",
       platform,
+      partnerCode,
       url
     };
   }
@@ -206,6 +272,10 @@ export class BrokerService {
          COALESCE(s.partner_code,'') AS partner_code,
          COALESCE(s.web_partner_link,'') AS web_partner_link,
          COALESCE(s.mobile_partner_link,'') AS mobile_partner_link,
+         COALESCE(
+           NULLIF(s.benefit_message,''),
+           'สมัครผ่านลิงก์ Partner ของ SCENOVA เพื่อรับราคาพิเศษและสิทธิประโยชน์เพิ่มเติมในระบบ SCENOVA'
+         ) AS benefit_message,
          s.updated_by,
          s.updated_at,
          (
@@ -237,6 +307,7 @@ export class BrokerService {
         partnerCode: String(row.partner_code || ""),
         webPartnerLink: String(row.web_partner_link || ""),
         mobilePartnerLink: String(row.mobile_partner_link || ""),
+        benefitMessage: String(row.benefit_message || ""),
         updatedBy: row.updated_by || null,
         updatedAt: row.updated_at || null
       },
@@ -257,9 +328,13 @@ export class BrokerService {
     const partnerCode = this.cleanPartnerCode(input.partnerCode);
     const webPartnerLink = this.cleanPartnerUrl(input.webPartnerLink, "Web Partner Link");
     const mobilePartnerLink = this.cleanPartnerUrl(input.mobilePartnerLink, "Mobile Partner Link");
+    const benefitMessage = this.cleanBenefitMessage(input.benefitMessage);
 
-    if (active && !webPartnerLink && !mobilePartnerLink) {
-      throw new BadRequestException("เปิดใช้งานไม่ได้จนกว่าจะใส่ Partner Link อย่างน้อย 1 ลิงก์");
+    if (active && !partnerCode) {
+      throw new BadRequestException("เปิดใช้งานไม่ได้จนกว่าจะใส่ Partner Code");
+    }
+    if (active && (!webPartnerLink || !mobilePartnerLink)) {
+      throw new BadRequestException("เปิดใช้งานไม่ได้จนกว่าจะใส่ลิงก์คอมพิวเตอร์และลิงก์มือถือให้ครบ");
     }
 
     const broker = await this.db.one(
@@ -269,14 +344,15 @@ export class BrokerService {
 
     await this.db.query(
       `INSERT INTO broker_partner_settings(
-         broker_id,active,partner_code,web_partner_link,mobile_partner_link,updated_by,updated_at
+         broker_id,active,partner_code,web_partner_link,mobile_partner_link,benefit_message,updated_by,updated_at
        )
-       VALUES($1,$2,$3,$4,$5,$6,now())
+       VALUES($1,$2,$3,$4,$5,$6,$7,now())
        ON CONFLICT(broker_id) DO UPDATE SET
          active=EXCLUDED.active,
          partner_code=EXCLUDED.partner_code,
          web_partner_link=EXCLUDED.web_partner_link,
          mobile_partner_link=EXCLUDED.mobile_partner_link,
+         benefit_message=EXCLUDED.benefit_message,
          updated_by=EXCLUDED.updated_by,
          updated_at=now()`,
       [
@@ -285,6 +361,7 @@ export class BrokerService {
         partnerCode,
         webPartnerLink,
         mobilePartnerLink,
+        benefitMessage,
         actor.slice(0, 160)
       ]
     );
@@ -299,6 +376,7 @@ export class BrokerService {
           partnerCodeConfigured: Boolean(partnerCode),
           webPartnerLinkConfigured: Boolean(webPartnerLink),
           mobilePartnerLinkConfigured: Boolean(mobilePartnerLink),
+          benefitMessageConfigured: Boolean(benefitMessage),
           phase: 1
         })
       ]

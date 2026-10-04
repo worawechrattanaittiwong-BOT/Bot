@@ -21,6 +21,11 @@ export class BrokerController {
     private readonly benefits: BrokerBenefitService
   ) {}
 
+  @Get("exness/signup")
+  async exnessSignup() {
+    return this.brokers.registrationInfo();
+  }
+
   @Get("exness")
   async exness(@Req() req: any) {
     const userId = String(req.user.sub || "");
@@ -98,6 +103,7 @@ export class AdminBrokerController {
       partnerCode?: string;
       webPartnerLink?: string;
       mobilePartnerLink?: string;
+      benefitMessage?: string;
     }
   ) {
     const actor = req.user?.sub
