@@ -665,7 +665,7 @@ export default function DashboardPage() {
         if (!stopped && document.visibilityState === "visible") {
           void load(selectedSlotIdRef.current, true);
         }
-      }, 250);
+      }, 200);
     };
 
     const connect = async () => {
@@ -730,7 +730,9 @@ export default function DashboardPage() {
                       }
                     };
                   });
-                  scheduleRealtimeReload();
+                  if (String(event.eventType || "").toUpperCase() !== "LIVE_EXECUTION") {
+                    scheduleRealtimeReload();
+                  }
                 }
               } catch {
                 // Ignore malformed/keepalive SSE frames. The 5s poll remains fallback.
@@ -1844,7 +1846,13 @@ export default function DashboardPage() {
     return sum + (Number.isFinite(profit) ? profit : 0);
   }, 0);
   const basketProfitMetric = Number(metrics.basketProfit);
-  const liveNetProfit = Number.isFinite(basketProfitMetric) ? basketProfitMetric : livePositionProfitSum;
+  const liveExecutionAtMs = Number(metrics.liveExecutionAtMs || 0);
+  const liveNetProfit =
+    liveExecutionAtMs > 0 && openPositions.length > 0
+      ? livePositionProfitSum
+      : Number.isFinite(basketProfitMetric)
+        ? basketProfitMetric
+        : livePositionProfitSum;
   const livePositionTelemetryMissing = currentPositions > 0 && openPositions.length === 0;
   const livePositionEaVersion = String(metrics.eaVersion || softwareUpdate.currentEaVersion || "—");
   const livePositionRequiredVersion = String(softwareUpdate.latestEaVersion || "1.0.43");
@@ -4457,7 +4465,7 @@ export default function DashboardPage() {
 
                 <section className="panel cc-v17-running-positions" aria-label="ออเดอร์ที่บอทกำลังรัน">
                   <div className="cc-v17-running-head">
-                    <div className="cc-v17-running-title"><span><ScenovaIcon name="orders" size={18}/></span><div><small>LIVE EXECUTION</small><b>ออเดอร์ที่กำลังรัน</b></div></div>
+                    <div className="cc-v17-running-title"><span><ScenovaIcon name="orders" size={18}/></span><div><small>LIVE EXECUTION · 200ms</small><b>ออเดอร์ที่กำลังรัน</b></div></div>
                     <div className="cc-v17-running-head-metrics">
                       <span className={"cc-v17-net-profit "+(liveNetProfit>0?"good":liveNetProfit<0?"bad":"neutral")}>
                         Net Profit <b>{formatAccountMoney(liveNetProfit,accountCurrency,true)}</b>
