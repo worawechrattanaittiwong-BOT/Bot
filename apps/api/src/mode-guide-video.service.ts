@@ -29,7 +29,7 @@ const MAX_VIDEO_BYTES = 300 * 1024 * 1024;
 export class ModeGuideVideoService implements OnModuleInit {
   private readonly mediaRoot =
     String(process.env.MODE_GUIDE_MEDIA_DIR || "").trim() ||
-    join(process.cwd(), ".runtime", "mode-guide-videos");
+    join(process.cwd(), "runtime", "mode-guide-videos");
 
   constructor(private readonly db: DbService) {}
 
