@@ -6,6 +6,8 @@ internal sealed class CloudEaRelay
     private static readonly TimeSpan HeartbeatResponseMaxAge = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan HeartbeatRelayTimeout = TimeSpan.FromSeconds(3);
     private static readonly TimeSpan JournalFileSettleAge = TimeSpan.FromMilliseconds(250);
+    private static readonly TimeSpan LiveExecutionRelayInterval = TimeSpan.FromMilliseconds(100);
+    private static readonly TimeSpan LiveExecutionRequestTimeout = TimeSpan.FromSeconds(2);
 
     private readonly WorkerConfig _config;
     private readonly WorkerClient _client;
@@ -13,6 +15,8 @@ internal sealed class CloudEaRelay
     private readonly Dictionary<string, DateTime> _eventRetryAfterUtc =
         new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, DateTime> _journalRetryAfterUtc =
+        new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, long> _liveExecutionLastWriteTicks =
         new(StringComparer.OrdinalIgnoreCase);
 
     public CloudEaRelay(WorkerConfig config, WorkerClient client)
@@ -26,8 +30,9 @@ internal sealed class CloudEaRelay
     {
         var heartbeatTask = RunHeartbeatRelayLoopAsync(cancellationToken);
         var eventTask = RunRuntimeEventRelayLoopAsync(cancellationToken);
+        var liveExecutionTask = RunLiveExecutionRelayLoopAsync(cancellationToken);
         var journalTask = RunJournalRelayLoopAsync(cancellationToken);
-        await Task.WhenAll(heartbeatTask, eventTask, journalTask);
+        await Task.WhenAll(heartbeatTask, eventTask, liveExecutionTask, journalTask);
     }
 
     private async Task RunHeartbeatRelayLoopAsync(CancellationToken cancellationToken)
@@ -97,6 +102,99 @@ internal sealed class CloudEaRelay
             {
                 break;
             }
+        }
+    }
+
+    private async Task RunLiveExecutionRelayLoopAsync(CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                if (Directory.Exists(_instancesPath))
+                {
+                    var instancePaths = Directory.EnumerateDirectories(_instancesPath).ToArray();
+                    await Task.WhenAll(
+                        instancePaths.Select(instancePath =>
+                            ProcessLiveExecutionSnapshotAsync(instancePath, cancellationToken)));
+                }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                break;
+            }
+            catch
+            {
+                // Replaceable snapshots are best-effort. The newest file remains
+                // available and is retried on the next pass.
+            }
+
+            try
+            {
+                await Task.Delay(LiveExecutionRelayInterval, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+        }
+    }
+
+    private async Task ProcessLiveExecutionSnapshotAsync(
+        string instancePath,
+        CancellationToken cancellationToken)
+    {
+        var filesPath = Path.Combine(instancePath, "MQL5", "Files");
+        if (!Directory.Exists(filesPath)) return;
+
+        string? snapshotPath;
+        try
+        {
+            snapshotPath = Directory.EnumerateFiles(
+                    filesPath,
+                    "scenova-live-*.snapshot.txt",
+                    SearchOption.TopDirectoryOnly)
+                .OrderByDescending(File.GetLastWriteTimeUtc)
+                .FirstOrDefault();
+        }
+        catch (IOException) { return; }
+        catch (UnauthorizedAccessException) { return; }
+
+        if (string.IsNullOrWhiteSpace(snapshotPath)) return;
+
+        long writeTicks;
+        try { writeTicks = File.GetLastWriteTimeUtc(snapshotPath).Ticks; }
+        catch (IOException) { return; }
+        catch (UnauthorizedAccessException) { return; }
+
+        if (_liveExecutionLastWriteTicks.TryGetValue(snapshotPath, out var previousTicks) &&
+            writeTicks <= previousTicks)
+            return;
+
+        string payload;
+        try { payload = (await File.ReadAllTextAsync(snapshotPath, cancellationToken)).Trim(); }
+        catch (IOException) { return; }
+        catch (UnauthorizedAccessException) { return; }
+
+        if (payload.Length < 32 || !payload.Contains(""LIVE_EXECUTION"", StringComparison.Ordinal))
+            return;
+
+        try
+        {
+            using var relayCts =
+                CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            relayCts.CancelAfter(LiveExecutionRequestTimeout);
+            var statusCode = await _client.RelayEaRuntimeEventAsync(payload, relayCts.Token);
+            if (statusCode >= 200 && statusCode < 300)
+                _liveExecutionLastWriteTicks[snapshotPath] = writeTicks;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch
+        {
+            // Do not advance the watermark. The latest snapshot will retry.
         }
     }
 
