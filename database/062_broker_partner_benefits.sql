@@ -57,16 +57,22 @@ SELECT id,'VIP','VIP',3000,30 FROM brokers WHERE code='EXNESS'
 ON CONFLICT(broker_id,code) DO UPDATE SET
   name=EXCLUDED.name,discount_bps=EXCLUDED.discount_bps,sort_order=EXCLUDED.sort_order;
 
-ALTER TABLE local_orders
-  ADD COLUMN IF NOT EXISTS discount_source varchar(24) NOT NULL DEFAULT 'NONE',
-  ADD COLUMN IF NOT EXISTS broker_partner_client_id uuid REFERENCES broker_partner_clients(id) ON DELETE SET NULL,
-  ADD COLUMN IF NOT EXISTS broker_benefit_level varchar(32),
-  ADD COLUMN IF NOT EXISTS broker_benefit_discount_bps integer NOT NULL DEFAULT 0;
+CREATE TABLE IF NOT EXISTS broker_benefit_order_applications (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  purchase_type varchar(16) NOT NULL
+    CHECK (purchase_type IN ('LOCAL','CLOUD')),
+  order_id uuid NOT NULL,
+  partner_client_id uuid NOT NULL REFERENCES broker_partner_clients(id) ON DELETE RESTRICT,
+  benefit_level varchar(32) NOT NULL,
+  discount_bps integer NOT NULL CHECK (discount_bps BETWEEN 1 AND 5000),
+  original_amount_satang integer NOT NULL CHECK (original_amount_satang>=0),
+  discount_amount_satang integer NOT NULL CHECK (discount_amount_satang>=0),
+  final_amount_satang integer NOT NULL CHECK (final_amount_satang>=0),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE(purchase_type,order_id)
+);
 
-ALTER TABLE cloud_orders
-  ADD COLUMN IF NOT EXISTS discount_source varchar(24) NOT NULL DEFAULT 'NONE',
-  ADD COLUMN IF NOT EXISTS broker_partner_client_id uuid REFERENCES broker_partner_clients(id) ON DELETE SET NULL,
-  ADD COLUMN IF NOT EXISTS broker_benefit_level varchar(32),
-  ADD COLUMN IF NOT EXISTS broker_benefit_discount_bps integer NOT NULL DEFAULT 0;
+CREATE INDEX IF NOT EXISTS idx_broker_benefit_order_client
+  ON broker_benefit_order_applications(partner_client_id,created_at DESC);
 
 COMMIT;
