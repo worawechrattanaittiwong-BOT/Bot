@@ -1821,6 +1821,7 @@ void OnDeinit(const int reason)
    FlipLockRemoveAllPending();
    EventKillTimer();
    DeleteTradingFibonacci();
+   AutoV22Release();
    ReleaseEmaIntelligence();
    ClearChartStatus();
 }
@@ -14717,6 +14718,7 @@ bool AutoV20OwnsOpenBasket()
 }
 
 #include "include\\AutoVectorEdgeLiveV1.mqh"
+#include "include\\AutoSwingFilterV22.mqh"
 #include "include\\FlipLockV1.mqh"
 
 // Per-mode risk/P&L ownership ------------------------------------------------
@@ -14918,6 +14920,7 @@ void AutoV20ResetCycle()
    g_autoV20PeakProfit=0.0;
    g_autoV20AggregateRiskMoney=0.0;
    g_autoV20AddReason="NONE";
+   AutoV22ResetRiskState();
    AutoV21ResetExitCandidate();
 }
 
@@ -15627,9 +15630,8 @@ int AutoV20PrecisionDirection(double momentum)
       selected=direction>0 ? g_autoV20Buy : g_autoV20Sell;
    }
 
-   // Positions 1-4 keep the relaxed score policy so AUTO does not become
-   // excessively quiet. Confidence/rank still guide selection, while add
-   // safety is enforced separately below: position 2+ may never average down.
+   // Positions 2-4 rely mainly on winner-only progress + swing
+   // confirmation. Position 5+ keeps the stricter legacy score floor.
    if(!relaxedFirstFour)
    {
       double minimumConfidence=62.0;
@@ -15662,6 +15664,49 @@ int AutoV20PrecisionDirection(double momentum)
       selected.rankScore=MathMax(selected.rankScore,MathMin(100.0,zoneQuality));
    }
 
+   // The first AUTO order is deliberately the most selective. Run this after
+   // Zone-First can contribute its real location quality.
+   if(count<=0)
+   {
+      double firstMinimumConfidence=60.0;
+      double firstMinimumRank=62.0;
+      if(g_marketRegime=="HIGH_VOLATILITY")
+      {
+         firstMinimumConfidence+=4.0;
+         firstMinimumRank+=4.0;
+      }
+      else if(g_marketRegime=="RANGE")
+         firstMinimumRank+=3.0;
+
+      if(selected.confidence<firstMinimumConfidence ||
+         selected.rankScore<firstMinimumRank)
+      {
+         g_autoV20RejectReason="AUTO_V22_FIRST_QUALITY_NOT_READY";
+         g_adaptiveBlockReason=g_autoV20RejectReason;
+         return 0;
+      }
+   }
+
+   // AUTO V22 first-entry contract:
+   // H4 anchors direction, H1 must not oppose it, price must be at a real
+   // pullback/value/retest location, and M5/M1 must confirm execution.
+   // Major USD news pauses new AUTO entries only; open positions keep their
+   // normal local risk/profit management.
+   if(count<=0)
+   {
+      AUTO_V20_PULLBACK firstPb;
+      AutoV20EvaluatePullback(direction,momentum,firstPb);
+      string swingReason="NONE";
+      if(!AutoV22SwingEntryAllowed(
+            direction,false,sharedZoneFirst,firstPb,
+            g_autoV20Levels,momentum,swingReason))
+      {
+         g_autoV20RejectReason=swingReason;
+         g_adaptiveBlockReason=swingReason;
+         return 0;
+      }
+   }
+
    if(count>0)
    {
       // Never increase AUTO exposure while a wrong-direction exit candidate is
@@ -15684,6 +15729,17 @@ int AutoV20PrecisionDirection(double momentum)
       AutoV20EvaluatePullback(direction,momentum,pb);
       double addProgressFactor=relaxedFirstFour ? 0.05 : 0.08;
       double required=MathMax(2.0,atrPoints*addProgressFactor);
+      required=MathMax(required,AutoV22AddRequiredProgressPoints(atrPoints));
+
+      string addSwingReason="NONE";
+      if(!AutoV22SwingEntryAllowed(
+            direction,true,false,pb,g_autoV20Levels,momentum,addSwingReason))
+      {
+         g_autoV20RejectReason=addSwingReason;
+         g_autoV20AddReason="WAIT_SWING_QUALITY";
+         g_adaptiveBlockReason=addSwingReason;
+         return 0;
+      }
 
       if(relaxedFirstFour && !AutoV20ZoneStructureIntact(direction))
       {
@@ -15733,6 +15789,16 @@ int AutoV20PrecisionDirection(double momentum)
 
    string vectorLiveReason="NONE";
    bool vectorLiveAllowed=AutoVectorEdgeLiveAllow(direction,vectorLiveReason);
+   if(!vectorLiveAllowed && count<=0)
+   {
+      // AUTO V22: the first order is the most selective order. Once Vector
+      // Edge has enough history to reject the side, do not bypass that veto.
+      g_autoV20RejectReason=vectorLiveReason;
+      g_adaptiveBlockReason="AUTO_VECTOR_EDGE_FIRST_WAIT";
+      g_cachedAdaptiveDirection=0;
+      g_cachedAdaptiveBlockReason=g_adaptiveBlockReason;
+      return 0;
+   }
    if(!vectorLiveAllowed && !relaxedFirstFour)
    {
       // Position 5+ keeps the existing strict Vector Edge guard.
@@ -15746,8 +15812,8 @@ int AutoV20PrecisionDirection(double momentum)
       (vectorLiveReason=="VECTOR_SELECTED_NEGATIVE_EV" ||
        vectorLiveReason=="VECTOR_DIRECTION_DISAGREE"))
    {
-      // Positions 2-4 stay activity-friendly: weak edge alone is not a veto.
-      // Only negative expectancy or a confirmed opposite direction blocks.
+      // Positions 2-4 remain less strict than late adds, but confirmed negative
+      // expectancy or an opposite Vector direction is still a hard AUTO veto.
       g_autoV20RejectReason=vectorLiveReason;
       g_adaptiveBlockReason="AUTO_VECTOR_EDGE_SAFETY_WAIT";
       g_cachedAdaptiveDirection=0;
@@ -16008,6 +16074,9 @@ void AutoV20OnOrderSent(int direction)
       g_autoV20BasketTargetPrice=g_basketProfitTarget>0.0 ? 0.0 : selected.tpPrice;
       g_autoV20LotCeiling=selected.plannedLot;
       g_autoV20PeakProfit=0.0;
+      // AUTO V22 freezes the first protected risk distance as 1R for the
+      // entire AUTO cycle. Later SL tightening must never redefine 1R.
+      AutoV22SetInitialRisk(selected.entryPrice,selected.slPrice);
    }
    else
    {
@@ -16078,6 +16147,7 @@ bool AutoV20ManageOpenBasket(double momentum)
       g_autoV20LastFillAt=g_autoV20BasketStartedAt;
    }
    AutoV21RecoverCanonicalProtection(direction);
+   AutoV22RecoverInitialRisk(direction);
    if(g_autoV20LastFillAt<=0) g_autoV20LastFillAt=TimeCurrent();
 
    double cycleProfit=BasketCycleProfit();
@@ -19917,43 +19987,80 @@ void ManageDynamicProtection()
          desiredSL=direction>0
             ? (currentSL<=0.0 ? g_autoV20BasketStopPrice : MathMax(currentSL,g_autoV20BasketStopPrice))
             : (currentSL<=0.0 ? g_autoV20BasketStopPrice : MathMin(currentSL,g_autoV20BasketStopPrice));
-      if(!strictAutoHardTarget && profitPoints >= atr * 0.55)
-      {
-         double breakEven = direction > 0
-            ? openPrice + atr * 0.04 * _Point
-            : openPrice - atr * 0.04 * _Point;
-         if(direction > 0)
-            desiredSL = currentSL <= 0.0 ? breakEven : MathMax(currentSL, breakEven);
-         else
-            desiredSL = currentSL <= 0.0 ? breakEven : MathMin(currentSL, breakEven);
-      }
 
-      if(!strictAutoHardTarget && profitPoints >= atr * 1.10)
+      if(autoPosition)
       {
-         double trail = direction > 0
-            ? marketPrice - atr * 0.55 * _Point
-            : marketPrice + atr * 0.55 * _Point;
-         if(direction > 0)
-            desiredSL = desiredSL <= 0.0 ? trail : MathMax(desiredSL, trail);
-         else
-            desiredSL = desiredSL <= 0.0 ? trail : MathMin(desiredSL, trail);
-      }
+         // AUTO V22 profit protection is based on the original 1R, not on a
+         // moving ATR threshold. +1R => BE+cost buffer; each additional 0.5R
+         // locks another 0.5R. From +2R onward EMA structure may tighten the
+         // stop further, but can never widen the step lock.
+         AutoV22RecoverInitialRisk(direction);
+         desiredSL=AutoV22StepProtectedStop(
+            direction,openPrice,marketPrice,desiredSL
+         );
 
-      // EMA Dynamic Trailing: once profit is established, EMA21/50 becomes a
-      // structural trailing reference. It only tightens SL; it never widens it.
-      if(!strictAutoHardTarget && profitPoints >= atr * 0.70)
-      {
-         double emaRef = EmaTrailReference(direction);
-         if(emaRef > 0.0)
+         double initialRisk=AutoV22InitialRisk();
+         double autoR=initialRisk>0.0
+            ? profitPoints/initialRisk
+            : 0.0;
+         if(autoR>=2.0)
          {
-            double emaTrail = direction > 0
-               ? emaRef - atr * 0.10 * _Point
-               : emaRef + atr * 0.10 * _Point;
+            double emaRef=EmaTrailReference(direction);
+            if(emaRef>0.0)
+            {
+               double emaBufferPoints=MathMax(atr*0.10,initialRisk*0.08);
+               double emaTrail=direction>0
+                  ? emaRef-emaBufferPoints*_Point
+                  : emaRef+emaBufferPoints*_Point;
 
-            if(direction > 0 && emaTrail > openPrice && emaTrail < marketPrice)
-               desiredSL = desiredSL <= 0.0 ? emaTrail : MathMax(desiredSL,emaTrail);
-            else if(direction < 0 && emaTrail < openPrice && emaTrail > marketPrice)
-               desiredSL = desiredSL <= 0.0 ? emaTrail : MathMin(desiredSL,emaTrail);
+               if(direction>0 && emaTrail>openPrice && emaTrail<marketPrice)
+                  desiredSL=desiredSL<=0.0 ? emaTrail : MathMax(desiredSL,emaTrail);
+               else if(direction<0 && emaTrail<openPrice && emaTrail>marketPrice)
+                  desiredSL=desiredSL<=0.0 ? emaTrail : MathMin(desiredSL,emaTrail);
+            }
+         }
+      }
+      else
+      {
+         // Non-AUTO behavior remains exactly as before.
+         if(!strictAutoHardTarget && profitPoints >= atr * 0.55)
+         {
+            double breakEven = direction > 0
+               ? openPrice + atr * 0.04 * _Point
+               : openPrice - atr * 0.04 * _Point;
+            if(direction > 0)
+               desiredSL = currentSL <= 0.0 ? breakEven : MathMax(currentSL, breakEven);
+            else
+               desiredSL = currentSL <= 0.0 ? breakEven : MathMin(currentSL, breakEven);
+         }
+
+         if(!strictAutoHardTarget && profitPoints >= atr * 1.10)
+         {
+            double trail = direction > 0
+               ? marketPrice - atr * 0.55 * _Point
+               : marketPrice + atr * 0.55 * _Point;
+            if(direction > 0)
+               desiredSL = desiredSL <= 0.0 ? trail : MathMax(desiredSL, trail);
+            else
+               desiredSL = desiredSL <= 0.0 ? trail : MathMin(desiredSL, trail);
+         }
+
+         // EMA Dynamic Trailing: once profit is established, EMA21/50 becomes
+         // a structural trailing reference. It only tightens SL.
+         if(!strictAutoHardTarget && profitPoints >= atr * 0.70)
+         {
+            double emaRef = EmaTrailReference(direction);
+            if(emaRef > 0.0)
+            {
+               double emaTrail = direction > 0
+                  ? emaRef - atr * 0.10 * _Point
+                  : emaRef + atr * 0.10 * _Point;
+
+               if(direction > 0 && emaTrail > openPrice && emaTrail < marketPrice)
+                  desiredSL = desiredSL <= 0.0 ? emaTrail : MathMax(desiredSL,emaTrail);
+               else if(direction < 0 && emaTrail < openPrice && emaTrail > marketPrice)
+                  desiredSL = desiredSL <= 0.0 ? emaTrail : MathMin(desiredSL,emaTrail);
+            }
          }
       }
 
