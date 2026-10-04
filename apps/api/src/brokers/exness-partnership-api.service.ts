@@ -187,6 +187,21 @@ export class ExnessPartnershipApiService {
       Math.min(1000000, Math.trunc(Number(input.commissionAmountScale || 100)))
     );
     const enabled = input.enabled === true;
+    const clientReportPath = this.normalizePath(input.clientReportPath);
+    const commissionReportPath = this.normalizePath(input.commissionReportPath);
+    const autoVerifyClients = input.autoVerifyClients === true;
+    const autoImportCommissions = input.autoImportCommissions === true;
+    const autoReleaseRebates = input.autoReleaseRebates === true;
+
+    if (autoVerifyClients && !clientReportPath) {
+      throw new BadRequestException("เปิด Auto Verify ไม่ได้จนกว่าจะใส่ Client Report Path");
+    }
+    if (autoImportCommissions && !commissionReportPath) {
+      throw new BadRequestException("เปิด Auto Import Commission ไม่ได้จนกว่าจะใส่ Commission Report Path");
+    }
+    if (autoReleaseRebates && !autoImportCommissions) {
+      throw new BadRequestException("Auto Release Rebate ต้องเปิด Auto Import Commission ด้วย");
+    }
 
     if (enabled) {
       const configured = Boolean(
@@ -220,15 +235,37 @@ export class ExnessPartnershipApiService {
        WHERE broker_code=$1`,
       [
         "EXNESS",
-        this.normalizePath(input.clientReportPath),
-        this.normalizePath(input.commissionReportPath),
+        clientReportPath,
+        commissionReportPath,
         enabled,
-        input.autoVerifyClients === true,
-        input.autoImportCommissions === true,
-        input.autoReleaseRebates === true,
+        autoVerifyClients,
+        autoImportCommissions,
+        autoReleaseRebates,
         commissionAmountScale,
         interval,
         actor.slice(0,160)
+      ]
+    );
+
+    await this.db.query(
+      `INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail)
+       VALUES($1,'UPDATE_EXNESS_API_AUTOMATION','broker_api_connection','EXNESS',$2::jsonb)`,
+      [
+        actor.slice(0,160),
+        JSON.stringify({
+          configured: Boolean(
+            String(process.env.EXNESS_PARTNER_EMAIL || "").trim() &&
+            String(process.env.EXNESS_PARTNER_PASSWORD || "").trim()
+          ),
+          enabled,
+          clientReportConfigured: Boolean(clientReportPath),
+          commissionReportConfigured: Boolean(commissionReportPath),
+          autoVerifyClients,
+          autoImportCommissions,
+          autoReleaseRebates,
+          commissionAmountScale,
+          syncIntervalMinutes: interval
+        })
       ]
     );
 
@@ -328,6 +365,7 @@ export class ExnessPartnershipApiService {
       await this.db.query(
         `UPDATE broker_api_connections SET
            last_test_status='FAIL',last_test_detail=$2,last_tested_at=now(),
+           enabled=false,next_sync_at=NULL,
            updated_by=$3,updated_at=now()
          WHERE broker_code=$1`,
         ["EXNESS", detail, actor.slice(0,160)]
