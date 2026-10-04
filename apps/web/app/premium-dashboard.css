@@ -4704,6 +4704,13 @@
   .cc-mode-guide-alert{animation:none}
 }
 
+/* Trading Mode Guide owns the mobile foreground. Hide persistent floating
+   launchers so they never cover guide actions, footer, or the video manager. */
+body.cc-mode-guide-active .bps-launcher,
+body.cc-mode-guide-active .cc-mobile-mirror-launch{
+  display:none!important;
+}
+
 .cc-mode-guide-backdrop{
   position:fixed;
   inset:0;
