@@ -285,7 +285,15 @@ export function TradingModeGuideVideos({
           <b>จัดการวิดีโอ {modeKey.replace("_"," ")}</b>
           <p>แนบคลิปจากมือถือได้โดยตรง ระบบตรวจวิดีโอแนวตั้งก่อนอัปโหลด</p>
         </div>
-        <span className="cc-mode-guide-admin-badge">{modeVideos.length} ไฟล์</span>
+        <div className="cc-mode-guide-video-admin-head-actions">
+          <span className="cc-mode-guide-admin-badge">{modeVideos.length} ไฟล์</span>
+          <button
+            type="button"
+            className="cc-mode-guide-video-admin-close"
+            onClick={()=>setManagerOpen(false)}
+            aria-label="ปิดการตั้งค่าวิดีโอ"
+          >×</button>
+        </div>
       </header>
 
       <div className="cc-mode-guide-video-admin-grid">
