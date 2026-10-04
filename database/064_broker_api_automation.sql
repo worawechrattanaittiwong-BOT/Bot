@@ -5,6 +5,8 @@ CREATE TABLE IF NOT EXISTS broker_api_connections (
   base_url text NOT NULL,
   auth_path text NOT NULL DEFAULT '/api/auth',
   summary_path text NOT NULL DEFAULT '/api/partner/summary/',
+  auth_identity_field varchar(16) NOT NULL DEFAULT 'email'
+    CHECK (auth_identity_field IN ('email','login')),
   client_report_path text NOT NULL DEFAULT '',
   commission_report_path text NOT NULL DEFAULT '',
   enabled boolean NOT NULL DEFAULT false,
