@@ -70,7 +70,6 @@ export function ScenovaMascotLauncher({ className = "", onConnectMobile, error }
           <header className={styles.header}>
             <div className={styles.sparkle} aria-hidden="true">✦</div>
             <div>
-              <p className={styles.eyebrow}>YOUR LITTLE COMPANION</p>
               <h2 id={`${id}-title`}>SCENOVA</h2>
             </div>
             <button type="button" className={styles.close} aria-label="ปิดเมนูมาสคอต"
@@ -103,7 +102,6 @@ export function ScenovaMascotLauncher({ className = "", onConnectMobile, error }
         onClick={() => setOpen(current => !current)}>
         <span className={styles.halo} aria-hidden="true" />
         <ScenovaRobotCanvas engaged={hovered || open} />
-        <span className={styles.label}><span aria-hidden="true">✦</span> SCENOVA</span>
         <span className={styles.hint} aria-hidden="true">แตะเพื่อเปิดเมนู</span>
       </button>
     </div>
