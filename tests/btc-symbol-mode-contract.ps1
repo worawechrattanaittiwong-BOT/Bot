@@ -22,6 +22,9 @@ $flip = Read-Text 'mt5/include/FlipLockV1.mqh'
 $api = Read-Text 'apps/api/src/bot.controller.ts'
 $symbolApi = Read-Text 'apps/api/src/trading-symbol.controller.ts'
 $web = Read-Text 'apps/web/app/dashboard/page.tsx'
+$popup = Read-Text 'apps/web/components/SystemPopupProvider.tsx'
+$globals = Read-Text 'apps/web/app/globals.css'
+$premium = Read-Text 'apps/web/app/premium-dashboard.css'
 $release = Read-Text 'apps/api/src/release-version.ts'
 
 $btc = Block $ea 'bool IsBitcoinSymbol()'
@@ -66,6 +69,17 @@ Need $web 'const isBitcoinSymbol = tradingSymbol.includes("BTC") || tradingSymbo
 Need $web 'zeroGridBlockedForSymbol' 'Dashboard BTC ZERO gate missing'
 Need $web 'ZERO GRID ถูกบล็อก' 'Dashboard must explain BTC-supported modes'
 Need $web 'disabled={zeroGridBlockedForSymbol}' 'ZERO GRID option must be disabled for BTC'
+Need $web 'แจ้งเตือนก่อนเทรด BTC' 'BTC Start must show the dedicated risk warning'
+Need $web 'ปรับจูนโดยอิงพฤติกรรมของ XAUUSD เป็นหลัก' 'BTC warning must disclose XAUUSD-first tuning'
+Need $web 'ยังไม่ได้ปรับจูนเฉพาะสำหรับตลาด BTC' 'BTC warning must disclose that BTC-specific tuning is not complete'
+Need $web 'scenova:btc-risk:v1:' 'BTC acknowledgement must be remembered per Slot and mode'
+Need $web 'COUNTER ไม่มี Broker SL ต่อออเดอร์และอาจสะสมหลาย Position' 'COUNTER BTC warning must disclose no per-order Broker SL and inventory risk'
+Need $web 'ความผันผวนและไส้เทียนของ BTC อาจทำให้ SL / Flip เกิดถี่ขึ้น' 'FLIP LOCK BTC persistent warning missing'
+Need $web 'BTC · High Volatility' 'BTC dashboard warning badge missing'
+Need $popup 'acknowledgeLabel?: string;' 'System Popup must support a required acknowledgement checkbox'
+Need $popup 'sc-system-popup-acknowledge' 'System Popup acknowledgement control missing'
+Need $globals '.sc-system-popup-acknowledge{' 'System Popup acknowledgement styling missing'
+Need $premium '.cc-bot-v2-embedded .cc-btc-risk-note{' 'Embedded BTC warning must stay visible'
 
 $eaVersionMatch = [regex]::Match($ea, '#property\s+version\s+"([^"]+)"')
 $releaseVersionMatch = [regex]::Match($release, 'DEFAULT_EA_VERSION\s*=\s*"([^"]+)"')

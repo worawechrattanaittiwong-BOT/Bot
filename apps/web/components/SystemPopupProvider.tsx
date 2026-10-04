@@ -17,6 +17,7 @@ type ConfirmOptions = {
   confirmLabel?: string;
   cancelLabel?: string;
   tone?: PopupTone;
+  acknowledgeLabel?: string;
 };
 
 type PromptOptions = {
@@ -40,6 +41,7 @@ type PopupState = {
   requiredText?: string;
   placeholder?: string;
   copyLabel?: string;
+  acknowledgeLabel?: string;
 };
 
 type SystemPopupContextValue = {
@@ -91,6 +93,7 @@ export function SystemPopupProvider({ children }: { children: React.ReactNode })
   const [popup, setPopup] = useState<PopupState | null>(null);
   const [promptValue, setPromptValue] = useState("");
   const [copied, setCopied] = useState(false);
+  const [acknowledged, setAcknowledged] = useState(false);
   const timerRef = useRef<number | null>(null);
   const confirmResolverRef = useRef<((value: boolean) => void) | null>(null);
   const promptResolverRef = useRef<((value: string | null) => void) | null>(null);
@@ -119,6 +122,7 @@ export function SystemPopupProvider({ children }: { children: React.ReactNode })
     setPopup(null);
     setPromptValue("");
     setCopied(false);
+    setAcknowledged(false);
   }, [clearTimer, resolveOpenPopup]);
 
   const showPopup = useCallback((options: PopupOptions) => {
@@ -127,6 +131,7 @@ export function SystemPopupProvider({ children }: { children: React.ReactNode })
     const tone = options.tone || "info";
     setPromptValue("");
     setCopied(false);
+    setAcknowledged(false);
     setPopup({
       kind: "notice",
       title: options.title || toneTitle(tone),
@@ -145,13 +150,15 @@ export function SystemPopupProvider({ children }: { children: React.ReactNode })
     const tone = options.tone || "warning";
     setPromptValue("");
     setCopied(false);
+    setAcknowledged(false);
     setPopup({
       kind: "confirm",
       title: options.title || toneTitle(tone),
       message: options.message,
       tone,
       confirmLabel: options.confirmLabel || "ยืนยัน",
-      cancelLabel: options.cancelLabel || "ยกเลิก"
+      cancelLabel: options.cancelLabel || "ยกเลิก",
+      acknowledgeLabel: options.acknowledgeLabel
     });
     return new Promise<boolean>((resolve) => {
       confirmResolverRef.current = resolve;
@@ -164,6 +171,7 @@ export function SystemPopupProvider({ children }: { children: React.ReactNode })
     const tone = options.tone || "warning";
     setPromptValue("");
     setCopied(false);
+    setAcknowledged(false);
     setPopup({
       kind: "prompt",
       title: options.title || toneTitle(tone),
@@ -185,6 +193,7 @@ export function SystemPopupProvider({ children }: { children: React.ReactNode })
     const resolver = confirmResolverRef.current;
     confirmResolverRef.current = null;
     setPopup(null);
+    setAcknowledged(false);
     resolver?.(value);
   }, [clearTimer]);
 
@@ -273,6 +282,17 @@ export function SystemPopupProvider({ children }: { children: React.ReactNode })
               <button type="button" className="sc-system-popup-close" onClick={closePopup} aria-label="ปิด">×</button>
             )}
 
+            {popup.kind === "confirm" && popup.acknowledgeLabel && (
+              <label className="sc-system-popup-acknowledge">
+                <input
+                  type="checkbox"
+                  checked={acknowledged}
+                  onChange={(event) => setAcknowledged(event.target.checked)}
+                />
+                <span>{popup.acknowledgeLabel}</span>
+              </label>
+            )}
+
             {popup.kind === "prompt" && (
               <div className="sc-system-popup-prompt-body">
                 {popup.requiredText && (
@@ -316,7 +336,10 @@ export function SystemPopupProvider({ children }: { children: React.ReactNode })
                 <button
                   type="button"
                   className="sc-system-popup-confirm"
-                  disabled={popup.kind === "prompt" && !promptMatches}
+                  disabled={
+                    (popup.kind === "prompt" && !promptMatches) ||
+                    (popup.kind === "confirm" && Boolean(popup.acknowledgeLabel) && !acknowledged)
+                  }
                   onClick={() => popup.kind === "prompt"
                     ? resolvePrompt(promptValue.trim())
                     : resolveConfirm(true)}

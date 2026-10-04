@@ -499,6 +499,27 @@
   display:none!important;
 }
 
+.cc-bot-v2-embedded .cc-btc-risk-note{
+  display:flex!important;
+  margin:7px 0 9px!important;
+  padding:8px 9px!important;
+  border:1px solid rgba(244,193,82,.30)!important;
+  border-radius:8px!important;
+  background:rgba(111,77,12,.10)!important;
+  color:#f0c96d!important;
+  align-items:flex-start!important;
+}
+.cc-bot-v2-embedded .cc-btc-risk-note b{
+  color:#f3d789!important;
+  font-size:var(--ui-type-meta)!important;
+}
+.cc-bot-v2-embedded .cc-btc-risk-note small{
+  display:block!important;
+  color:#a99d82!important;
+  font-size:var(--ui-type-caption)!important;
+  line-height:1.38!important;
+}
+
 .cc-bot-v2-embedded .cc-bot-v2-head{
   min-height:58px!important;
   padding:9px 12px!important;
