@@ -42,8 +42,13 @@ Assert-Contains $component 'inspectPortraitVideo' 'Client portrait validation mi
 Assert-Contains $component 'หน้านี้รองรับวิดีโอแนวตั้งเท่านั้น' 'Portrait-only admin feedback missing'
 Assert-Contains $component 'ดูวิดีโอ' 'Customer watch-video action missing'
 Assert-Contains $component 'playsInline' 'Mobile inline playback contract missing'
+Assert-Contains $component 'cc-mode-guide-video-admin-close' 'Mobile video manager close control missing'
+Assert-Contains $component 'ปิดการตั้งค่าวิดีโอ' 'Mobile video manager close accessibility label missing'
 
 Assert-Contains $css 'aspect-ratio:9/16' 'Vertical 9:16 video player CSS missing'
+Assert-Contains $css '.cc-bot-v2-embedded.is-locked .cc-bot-v2-body .cc-mode-guide-dialog input' 'Locked embedded settings must allow guide video inputs'
+Assert-Contains $css 'z-index:12280;' 'Mobile video manager must layer above Trading Mode Guide'
+Assert-Contains $css 'height:100dvh;' 'Mobile video manager must use the dynamic viewport'
 Assert-Contains $css '@media(max-width:760px)' 'Trading Mode Guide mobile breakpoint missing'
 Assert-Contains $css 'height:100dvh;' 'Trading Mode Guide must use the mobile dynamic viewport'
 Assert-Contains $css 'scroll-snap-type:x proximity;' 'Trading Mode Guide tabs must remain swipeable on mobile'
