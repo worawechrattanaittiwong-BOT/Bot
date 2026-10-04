@@ -564,3 +564,265 @@
     flex-direction: column;
   }
 }
+
+
+.partnerStatusPanel,
+.benefitPanel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 16px;
+  padding: 18px;
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 16px;
+  background: rgba(255,255,255,0.025);
+}
+
+.benefitPanel {
+  border-color: rgba(91,226,157,0.22);
+  background: rgba(68,205,133,0.055);
+}
+
+.partnerStatusPanel h3,
+.benefitPanel h3 {
+  margin: 5px 0 4px;
+  color: #f2eef8;
+  font-size: 18px;
+}
+
+.partnerStatusPanel p,
+.benefitPanel p {
+  margin: 0;
+  max-width: 680px;
+  color: #8d8698;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.benefitValue,
+.benefitValueMuted {
+  min-width: 150px;
+  padding: 12px 14px;
+  display: grid;
+  text-align: right;
+  border-left: 1px solid rgba(255,255,255,0.08);
+}
+
+.benefitValue small,
+.benefitValueMuted span {
+  color: #8c8498;
+  font-size: 10px;
+  letter-spacing: .08em;
+}
+
+.benefitValue b,
+.benefitValueMuted b {
+  color: #fff;
+  font-size: 26px;
+  line-height: 1.15;
+}
+
+.benefitValue span {
+  color: #8ee1b7;
+  font-size: 11px;
+}
+
+.phaseDone {
+  border-color: rgba(91,226,157,0.18) !important;
+}
+
+.phaseDone b {
+  background: rgba(73,211,142,0.16) !important;
+  color: #9ceac4 !important;
+}
+
+.clientSearch {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.clientSearch input {
+  flex: 1;
+  min-width: 0;
+  height: 44px;
+  padding: 0 13px;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 11px;
+  outline: none;
+  background: rgba(5,4,9,0.6);
+  color: #f3effa;
+  font: inherit;
+}
+
+.clientSearch input:focus {
+  border-color: rgba(143,108,255,0.65);
+  box-shadow: 0 0 0 3px rgba(126,87,255,0.11);
+}
+
+.clientSearch button,
+.saveClientButton {
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid rgba(135,101,255,0.5);
+  border-radius: 11px;
+  background: rgba(125,88,255,0.12);
+  color: #ddd5ff;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.clientSearch button:disabled,
+.saveClientButton:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+.levelLegend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.levelLegend span {
+  padding: 8px 10px;
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 999px;
+  background: rgba(255,255,255,0.025);
+  color: #90899c;
+  font-size: 11px;
+}
+
+.levelLegend b {
+  color: #cfc3ff;
+}
+
+.clientList {
+  display: grid;
+  gap: 12px;
+}
+
+.clientRow {
+  padding: 16px;
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 15px;
+  background: rgba(0,0,0,0.16);
+}
+
+.clientIdentity {
+  display: grid;
+  gap: 3px;
+  margin-bottom: 14px;
+}
+
+.clientIdentity b {
+  color: #f7f3ff;
+}
+
+.clientIdentity span {
+  color: #9a93a5;
+  font-size: 12px;
+}
+
+.clientIdentity small {
+  color: #766f80;
+  font-size: 11px;
+}
+
+.clientControls {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.35fr 1.65fr;
+  gap: 10px;
+}
+
+.clientControls label {
+  display: grid;
+  gap: 6px;
+}
+
+.clientControls label > span {
+  color: #8e8799;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.clientControls input,
+.clientControls select {
+  width: 100%;
+  height: 40px;
+  padding: 0 10px;
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 10px;
+  outline: none;
+  background: #0c0912;
+  color: #e9e3f2;
+  font: inherit;
+  font-size: 12px;
+}
+
+.clientFooter {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  margin-top: 12px;
+}
+
+.verifiedText {
+  color: #8ee1b7;
+  font-size: 11px;
+}
+
+.mutedText {
+  color: #7f7889;
+  font-size: 11px;
+}
+
+.emptyClients {
+  padding: 18px;
+  border: 1px dashed rgba(255,255,255,0.09);
+  border-radius: 13px;
+  color: #817a8a;
+  text-align: center;
+  font-size: 12px;
+}
+
+@media (max-width: 920px) {
+  .partnerStatusPanel,
+  .benefitPanel,
+  .clientFooter {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .benefitValue,
+  .benefitValueMuted {
+    min-width: 0;
+    border-left: 0;
+    border-top: 1px solid rgba(255,255,255,0.08);
+    text-align: left;
+  }
+
+  .clientControls {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .clientSearch,
+  .clientFooter {
+    flex-direction: column;
+  }
+
+  .clientControls {
+    grid-template-columns: 1fr;
+  }
+
+  .clientSearch button,
+  .saveClientButton {
+    width: 100%;
+  }
+}
