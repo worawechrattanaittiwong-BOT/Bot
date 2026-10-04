@@ -8,6 +8,7 @@ import { PromotionService } from "./promotion.service";
 import { EasySlipPaymentService } from "./easyslip-payment.service";
 import { CLOUD_SERVER_RELEASE, versionAtLeast, versionExact } from "./cloud-server-release";
 import { discountedUsdCents, getUsdThbQuote, usdCentsToThbSatang } from "./commerce-currency";
+import { BrokerBenefitService } from "./brokers/broker-benefit.service";
 
 function omiseMode() {
   const key = String(process.env.OMISE_SECRET_KEY || "").trim();
@@ -403,7 +404,8 @@ export class CloudCustomerController {
     private readonly db: DbService,
     private readonly cloud: CloudService,
     private readonly promotions: PromotionService,
-    private readonly easyslip: EasySlipPaymentService
+    private readonly easyslip: EasySlipPaymentService,
+    private readonly brokerBenefits: BrokerBenefitService
   ) {}
   @Get("catalog")
   async catalog(@Req() req: any) {
@@ -444,7 +446,7 @@ export class CloudCustomerController {
   }
 
   @Get("orders") async orders(@Req() req: any) {
-    return (await this.db.query(`SELECT o.id,o.months,o.amount,o.original_amount,o.discount_amount,o.promotion_code,o.status,o.qr_url,o.expires_at,o.created_at,o.paid_at,o.slot_id,o.purchase_type,
+    return (await this.db.query(`SELECT o.id,o.months,o.amount,o.original_amount,o.discount_amount,o.promotion_code,o.discount_source,o.broker_benefit_level,o.broker_benefit_discount_bps,o.status,o.qr_url,o.expires_at,o.created_at,o.paid_at,o.slot_id,o.purchase_type,
       o.list_price_usd_cents,o.final_price_usd_cents,o.fx_rate_usd_thb,o.fx_source,o.fx_quoted_at,
       s.expires_at subscription_expires_at,b.actual_state,b.last_seen_at,a.account_number,ls.slot_type
       FROM cloud_orders o
@@ -668,6 +670,10 @@ export class CloudCustomerController {
       if (!node) throw new ConflictException("Cloud เต็มหรือ VPS ยังไม่ผ่าน Health Guard กรุณาลองภายหลัง");
       const listPriceUsdCents = Math.max(0, Math.trunc(Number(pricingPack.price_usd_cents || 0)));
       const originalAmountSatang = usdCentsToThbSatang(listPriceUsdCents, quote.usdThb);
+      const benefit = await this.brokerBenefits.safeCheckoutBenefit(
+        tx,
+        String(req.user.sub)
+      );
       const promo = await this.promotions.reserve(tx, {
         code: body.promoCode,
         userId: String(req.user.sub),
@@ -675,18 +681,57 @@ export class CloudCustomerController {
         months: pricingPack.months,
         originalAmountSatang
       });
-      const finalPriceUsdCents = discountedUsdCents(listPriceUsdCents, promo.discountPercent);
+
+      const promoBps = Math.max(0, Math.min(10000, Math.round(Number(promo.discountPercent || 0) * 100)));
+      const benefitBps = Math.max(0, Math.min(5000, Number(benefit?.discountBps || 0)));
+      const benefitWins = Boolean(benefit && benefitBps > 0 && benefitBps >= promoBps);
+
+      if (benefitWins && promo.redemptionId) {
+        await this.promotions.releaseReservation(tx, promo.redemptionId);
+      }
+
+      const effectiveBps = benefitWins ? benefitBps : promoBps;
+      const effectiveDiscountPercent = effectiveBps / 100;
+      const discountAmountSatang = Math.floor(originalAmountSatang * effectiveBps / 10000);
+      const finalAmountSatang = Math.max(0, originalAmountSatang - discountAmountSatang);
+      const finalPriceUsdCents = discountedUsdCents(listPriceUsdCents, effectiveDiscountPercent);
+      const discountSource = benefitWins
+        ? "BROKER_PARTNER"
+        : promoBps > 0
+          ? "PROMOTION"
+          : "NONE";
+      const appliedPromoCode = benefitWins ? null : promo.code;
+      const appliedPromoRedemptionId = benefitWins ? null : promo.redemptionId;
+
       const order = (await tx.query(
         `INSERT INTO cloud_orders(
            user_id,months,amount,original_amount,discount_amount,promotion_code,promotion_redemption_id,runner_id,slot_id,purchase_type,
-           list_price_usd_cents,final_price_usd_cents,fx_rate_usd_thb,fx_source,fx_quoted_at
-         ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
-        [req.user.sub, pricingPack.months, promo.finalAmountSatang, originalAmountSatang,
-         promo.discountAmountSatang, promo.code, promo.redemptionId, node.runner_id, slot?.id || null,
-         addonFlow ? "ADDON" : "PACKAGE",
-         listPriceUsdCents, finalPriceUsdCents, quote.usdThb, quote.source, quote.quotedAt]
+           list_price_usd_cents,final_price_usd_cents,fx_rate_usd_thb,fx_source,fx_quoted_at,
+           discount_source,broker_partner_client_id,broker_benefit_level,broker_benefit_discount_bps
+         ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING *`,
+        [
+          req.user.sub,
+          pricingPack.months,
+          finalAmountSatang,
+          originalAmountSatang,
+          discountAmountSatang,
+          appliedPromoCode,
+          appliedPromoRedemptionId,
+          node.runner_id,
+          slot?.id || null,
+          addonFlow ? "ADDON" : "PACKAGE",
+          listPriceUsdCents,
+          finalPriceUsdCents,
+          quote.usdThb,
+          quote.source,
+          quote.quotedAt,
+          discountSource,
+          benefitWins ? benefit!.partnerClientId : null,
+          benefitWins ? benefit!.levelCode : null,
+          benefitWins ? benefitBps : 0
+        ]
       )).rows[0];
-      await this.promotions.attachOrder(tx, promo.redemptionId, order.id);
+      await this.promotions.attachOrder(tx, appliedPromoRedemptionId, order.id);
       return order;
     });
     if (Number(order.amount) === 0) return this.cloud.activateFreeOrder(order.id);
