@@ -9802,3 +9802,39 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
   }
 }
 
+
+
+/* ===== Desktop readable typography standard =====
+   Desktop only. Raise micro text to a normal reading size without changing
+   mobile geometry or trading behavior. */
+@media(min-width:761px){
+  :root{
+    --ui-type-caption:12px;
+    --ui-type-meta:13px;
+    --ui-type-label:14px;
+    --ui-type-body:15px;
+    --ui-type-control:14px;
+    --ui-type-subtitle:17px;
+    --ui-type-title:21px;
+  }
+
+  .sc-system-popup{
+    width:min(500px,calc(100vw - 36px));
+  }
+  .sc-system-popup-copy>b{
+    font-size:16px;
+    line-height:1.25;
+  }
+  .sc-system-popup-copy>p{
+    font-size:13px;
+    line-height:1.55;
+  }
+  .sc-system-popup-actions button{
+    min-height:42px;
+    font-size:13px;
+  }
+  .sc-system-popup-acknowledge{
+    font-size:12.5px;
+    line-height:1.5;
+  }
+}
