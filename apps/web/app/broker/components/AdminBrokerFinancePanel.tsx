@@ -510,7 +510,7 @@ export function AdminBrokerFinancePanel() {
                     {item.rebateEntryId && item.rebateStatus === "AVAILABLE" && (
                       <>
                         <input
-                          value={payoutReference[item.rebateEntryId] || ""}
+                          value={payoutReference[item.rebateEntryId!] || ""}
                           onChange={event => setPayoutReference(current => ({
                             ...current,
                             [item.rebateEntryId!]: event.target.value
