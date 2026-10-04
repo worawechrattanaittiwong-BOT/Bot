@@ -264,19 +264,9 @@ export function TradingModeGuideVideos({
           </div>}
 
       <div className="cc-mode-guide-video-zone-copy">
-        <span className="cc-mode-guide-video-eyebrow">VIDEO GUIDE · MOBILE FIRST</span>
-        <h3>{featuredVideo?featuredVideo.title:"คู่มือวิดีโอ "+modeKey.replace("_"," ")}</h3>
-        <p>
-          {featuredVideo
-            ? "แตะหน้าปกหรือปุ่มดูวิดีโอเพื่อเล่นคลิปนี้"
-            : "ยังไม่มีวิดีโอเผยแพร่สำหรับโหมดนี้"}
-        </p>
-        <div className="cc-mode-guide-video-meta">
-          <span>9:16 แนวตั้ง</span>
-          {featuredVideo&&<span>{fileSizeLabel(featuredVideo.sizeBytes)}</span>}
-          {featuredVideo&&durationLabel(featuredVideo.durationSeconds)&&<span>{durationLabel(featuredVideo.durationSeconds)}</span>}
-          {playableVideos.length>1&&<span>{playableVideos.length} วิดีโอ</span>}
-        </div>
+        <span className="cc-mode-guide-video-eyebrow">VIDEO GUIDE</span>
+        <h3>ดูวิธีใช้งานแบบสั้น</h3>
+        {!featuredVideo&&<p>ยังไม่มีวิดีโอสำหรับโหมดนี้</p>}
       </div>
 
       <div className="cc-mode-guide-video-actions">
