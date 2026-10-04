@@ -70,6 +70,25 @@ jobs:
             throw "Cloud Worker Fleet Update self-test failed"
           }
 
+      - name: Verify embedded EA artifact matches current source
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          $source = Get-Content "mt5/FastBasketBot.mq5" -Raw
+          if ($source -notmatch '#property\s+version\s+"([^"]+)"') {
+            throw "EA source version not found"
+          }
+          $sourceVersion = $Matches[1]
+          $manifest = Get-Content "mt5/release/manifest.json" -Raw | ConvertFrom-Json
+          if ([string]$manifest.eaVersion -ne $sourceVersion) {
+            throw "Cloud Setup refuses stale EA: source=$sourceVersion release=$($manifest.eaVersion)"
+          }
+          $releaseSha = (Get-FileHash "mt5/release/FastBasketBot.ex5" -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($releaseSha -ne ([string]$manifest.sha256).ToLowerInvariant()) {
+            throw "Cloud Setup refuses EX5 whose SHA256 does not match mt5/release/manifest.json"
+          }
+          Write-Host "Cloud Setup embedded EA verified: v$sourceVersion $releaseSha"
+
       - name: Publish Cloud Setup with embedded Worker and EA
         shell: powershell
         run: |
