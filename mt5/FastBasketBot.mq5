@@ -6606,8 +6606,8 @@ string OpenPositionsTelemetryJson()
 
 void PublishLiveExecutionSnapshot(bool force=false)
 {
-   // Dashboard-only telemetry plane. This is local file I/O only: no WebRequest,
-   // no trade request, and no dependency in any entry/exit/risk decision.
+   // Dashboard-only 200ms telemetry plane. This is local file I/O only:
+   // no network call, no trade request, and no dependency in any entry/exit/risk decision.
    // The Cloud Worker / Local Agent relays the newest replaceable snapshot.
    if(MQLInfoInteger(MQL_TESTER) || StringLen(InpInstanceId) < 8)
       return;
