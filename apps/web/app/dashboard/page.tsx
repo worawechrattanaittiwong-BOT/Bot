@@ -6491,120 +6491,127 @@ function BotSettingsModal(props:any) {
   const modeGuide:Record<string,{
     title:string;
     icon:string;
+    tagline:string;
     systemType:string;
     sizing:string;
     exitStyle:string;
+    martingale:boolean;
+    trailing:boolean;
     workflow:string;
     good:string;
     caution:string;
-    remember:string;
     capital:{
       minimum:string;
       balanced:string;
       comfortable:string;
-      note:string;
     };
   }> = {
     AUTO:{
       title:"AUTO",
       icon:"brain",
-      systemType:"Adaptive Directional · ไม่ใช่ Martingale",
-      sizing:"Fixed Lot ต่อไม้ · เพิ่ม Position ตามเงื่อนไข ไม่ทบ Lot",
-      exitStyle:"Basket / AUTO Exit Logic · ไม่ใช่ Trailing Stop แบบ FLIP",
-      workflow:"บอทดูภาพรวมก่อนว่าตอนนี้ฝั่ง BUY หรือ SELL ได้เปรียบกว่า ถ้ายังไม่ชัดก็รอ ไม่จำเป็นต้องมีออเดอร์ตลอดเวลา",
-      good:"เทรนด์เริ่มชัด มีแรงไปต่อ หรือมีจังหวะย่อแล้วกลับไปทางเดิม",
-      caution:"ตลาดมั่ว ๆ ขึ้นทีลงที เปลี่ยนหน้าบ่อย เพราะทิศทางตลาดอาจสลับเร็ว",
-      remember:"AUTO = ให้บอทเลือกเกมให้",
+      tagline:"วิเคราะห์ทิศทาง รอจังหวะที่ได้เปรียบ",
+      systemType:"Adaptive Direction",
+      sizing:"Fixed Lot",
+      exitStyle:"Basket TP / AUTO Exit",
+      martingale:false,
+      trailing:false,
+      workflow:"Bias ชัดค่อยเข้า · ไม่ชัดให้รอ",
+      good:"Trend ชัด · Pullback แล้วไปต่อ",
+      caution:"Sideway · สลับทิศถี่",
       capital:{
         minimum:"100 USD",
         balanced:"300 USD",
-        comfortable:"500+ USD",
-        note:"อ้างอิง Lot ต่ำประมาณ 0.01–0.02 และจำนวนไม้ไม่สูง หากเพิ่ม Lot หรือจำนวนไม้ ควรเพิ่มทุนสำรองตามสัดส่วน"
+        comfortable:"500+ USD"
       }
     },
     RACE:{
       title:"RACE",
       icon:"status",
-      systemType:"Momentum / Fast Entry · ไม่ใช่ Martingale",
-      sizing:"Fixed Lot ต่อไม้ · เร่งเติมจำนวนไม้ตาม Momentum",
-      exitStyle:"Basket / Per-position Target + RACE Stop Logic",
-      workflow:"RACE เน้นจับว่าตอนนี้ฝั่งไหนกำลังคุมตลาด ถ้าแรงซื้อชัดก็หาจังหวะ BUY ถ้าแรงขายชัดก็หาจังหวะ SELL เน้นตอบสนองไวกว่า AUTO",
-      good:"ช่วงที่ราคาวิ่ง มี Momentum ชัด และฝั่งหนึ่งคุมเกมต่อเนื่อง",
-      caution:"ตลาดสะบัดแรง สลับ BUY/SELL ไปมา หรือวิ่งแรงแต่กลับตัวบ่อย เพราะแรงที่เห็นอาจเปลี่ยนฝั่งเร็ว",
-      remember:"RACE = ตามฝั่งที่กำลังคุมเกม",
+      tagline:"ตามแรงตลาด เข้าไว ออกไว",
+      systemType:"Follow Momentum",
+      sizing:"Fixed Lot",
+      exitStyle:"TP รายไม้ / Basket TP",
+      martingale:false,
+      trailing:true,
+      workflow:"แรงซื้อชัด → BUY · แรงขายชัด → SELL",
+      good:"Trend ชัด · Momentum ต่อเนื่อง",
+      caution:"ตลาดแกว่ง · กลับทิศไว",
       capital:{
         minimum:"10 USD",
-        balanced:"50 USD",
-        comfortable:"100+ USD",
-        note:"ขั้นต่ำเหมาะกับ Lot ต่ำสุดและจำนวนไม้จำกัด ระดับ 100 USD ขึ้นไปมี buffer ให้การเปิดหลายไม้และความผันผวนมากกว่า"
+        balanced:"100 USD",
+        comfortable:"500 USD"
       }
     },
     COUNTER:{
       title:"COUNTER",
       icon:"trend",
-      systemType:"Inverse Live Price Flow · ไม่มีตัวกรองกลยุทธ์อื่น",
-      sizing:"Fixed Lot ต่อไม้ · จำนวนไม้รวมแบ่ง BUY 50% / SELL 50% · เติมทีละคำสั่งด้วย pacing ภายในระบบ",
-      exitStyle:"Per-position Profit เท่านั้น · ไม่มี Stop Loss / Basket Exit",
-      workflow:"ดูการเคลื่อนของราคา Bid แบบเดียวกับ live flow ของ RACE แต่กลับด้านตรง ๆ: กราฟขึ้นเปิด SELL และกราฟลงเปิด BUY · จำนวนไม้รวมถูกแบ่งครึ่งให้ BUY/SELL อัตโนมัติ ดังนั้น BUY เต็มจะไม่บล็อก SELL และ SELL เต็มจะไม่บล็อก BUY",
-      good:"โหมดนี้ทำตามกฎสวนราคาแบบตรง ๆ โดยไม่มี EMA, ATR, Structure, Volume หรือ Confidence มาช่วยเลือกทิศ",
-      caution:"ไม่มี Stop Loss และไม่มีตัวกรองความเสี่ยงของโหมดอื่น ขาดทุนของไม้ที่ยังไม่ถึงกำไรสามารถค้างและเพิ่มขึ้นได้",
-      remember:"COUNTER = ขึ้น SELL · ลง BUY · จำนวนไม้รวมแบ่งครึ่ง BUY/SELL · ปิดเมื่อกำไรต่อไม้ถึงเป้า",
+      tagline:"สวนแรงระยะสั้น ปิดกำไรทีละไม้",
+      systemType:"Inverse Price Flow",
+      sizing:"Fixed Lot · แบ่ง BUY/SELL",
+      exitStyle:"TP รายไม้",
+      martingale:false,
+      trailing:false,
+      workflow:"ราคาขึ้น → SELL · ราคาลง → BUY",
+      good:"ราคาแกว่ง · มีจังหวะกลับตัว",
+      caution:"Trend ยาวแรง · วิ่งทางเดียว",
       capital:{
-        minimum:"—",
-        balanced:"—",
-        comfortable:"—",
-        note:"ไม่ได้กำหนดทุนแนะนำอัตโนมัติ เพราะความเสี่ยงขึ้นกับ Lot, จำนวนไม้, Symbol และระยะที่ตลาดวิ่งสวน Position โดยไม่มี Stop Loss"
+        minimum:"50 USD",
+        balanced:"300 USD",
+        comfortable:"1,000 USD"
       }
     },
     FLIP_LOCK:{
       title:"FLIP LOCK",
       icon:"trend",
-      systemType:"Single Position + Safety SL + 100-Point Profit Trail · ไม่ใช่ Martingale",
-      sizing:"1 Position หลัก · Lot คงที่ตามค่าที่ตั้ง · ไม่มี Pending ฝั่งตรงข้าม",
-      exitStyle:"Safety SL ก่อน · หลังล็อกกำไร Trail ตามราคาปัจจุบันห่าง 100 จุด · SL ไม่ถอยกลับ",
-      workflow:"ใช้ M1 เลือกฝั่งเริ่มต้น เปิด 1 Position พร้อม Safety SL ก่อน เมื่อกำไรมากพอ ระบบยก SL มาฝั่งกำไรแล้ว Trail ตาม Bid/Ask ห่าง 100 จุดแบบไม่ถอยกลับ เมื่อ SL ถูกชนจะสลับฝั่งทันที: BUY ถูก SL → SELL, SELL ถูก SL → BUY",
-      good:"ตลาดที่เดินเป็นทาง วิ่งยาว มีระยะให้กำไรโต",
-      caution:"Sideway แคบ ๆ สะบัดกลับไปกลับมาบ่อย เพราะอาจปิดแล้วเข้าใหม่หลายรอบ กำไรต่อไม้สั้นและต้นทุนเกิดบ่อย",
-      remember:"FLIP LOCK = Safety SL → Trail 100 จุด → ชน SL แล้วกลับฝั่งทันที BUY↔SELL",
+      tagline:"ถือหนึ่งไม้ ล็อกกำไร แล้วกลับฝั่ง",
+      systemType:"Single Position",
+      sizing:"Fixed Lot · 1 Position",
+      exitStyle:"Safety SL + Trailing",
+      martingale:false,
+      trailing:true,
+      workflow:"เปิด 1 ไม้ · โดน SL → กลับฝั่ง",
+      good:"Trend ชัด · มีระยะวิ่ง",
+      caution:"Sideway แคบ · สลับฝั่งถี่",
       capital:{
         minimum:"50 USD",
         balanced:"150 USD",
-        comfortable:"300+ USD",
-        note:"เพราะถือครั้งละ 1 Position ความเสี่ยงจากจำนวนไม้ต่ำกว่าโหมดหลายไม้ แต่ทุนต้องยังรองรับ Lot, spread, stop distance และความผันผวนของ Symbol"
+        comfortable:"300+ USD"
       }
     },
     ZERO_GRID:{
       title:"ZERO GRID",
       icon:"layers",
-      systemType:"Dual-Sided Pending Grid · Progressive Sizing",
-      sizing:"Base Lot × Level · เพิ่ม Lot ตามระดับ",
-      exitStyle:"Net Basket Target · ปิดทั้งรอบเมื่อถึงเป้า",
-      workflow:"วาง BUY STOP และ SELL STOP เป็นระดับทั้งสองฝั่ง เมื่อราคาผ่านระดับ ระบบเปิดตามกริดและปิดทั้งรอบเมื่อกำไรสุทธิถึงเป้า",
-      good:"เหมาะกับตลาดที่มีทิศทางชัดและเคลื่อนต่อเนื่อง",
-      caution:"ระวัง Sideway ที่สลับขึ้นลงหลายระดับ เพราะ Exposure อาจเพิ่มเร็ว",
-      remember:"ZERO GRID = วางกริดสองฝั่ง แล้วปิดทั้งรอบที่เป้ากำไรสุทธิ",
+      tagline:"วาง Pending สองฝั่ง เก็บกำไรเป็นรอบ",
+      systemType:"Dual-Sided Grid",
+      sizing:"Lot เพิ่มตาม Level",
+      exitStyle:"Basket TP",
+      martingale:true,
+      trailing:false,
+      workflow:"วาง BUY STOP + SELL STOP ตาม Level",
+      good:"Trend ต่อเนื่อง · มีระยะวิ่ง",
+      caution:"Sideway สลับหลาย Level",
       capital:{
         minimum:"500 USD",
         balanced:"1,000 USD",
-        comfortable:"2,000+ USD",
-        note:"อ้างอิง Base Lot ต่ำและจำนวนระดับไม่สูง หากใช้หลายระดับต่อฝั่งหรือเพิ่ม Base Lot เงินทุนที่เหมาะสมต้องเพิ่มขึ้นตาม Exposure รวม"
+        comfortable:"2,000+ USD"
       }
     },
     MANUAL:{
       title:"MANUAL",
       icon:"settings",
-      systemType:"User-defined / Fixed Sizing · ไม่มี Martingale อัตโนมัติ",
-      sizing:"Lot และจำนวนไม้ตามค่าที่ผู้ใช้กำหนด",
-      exitStyle:"Basket / Per-position Target + Optional Broker Stop Loss",
-      workflow:"คุณเป็นคนกำหนดแผน เช่น ทิศทาง Lot จำนวนไม้ เป้ากำไร และจุดตัดขาดทุน แล้วบอททำงานตามค่าที่ตั้ง ถ้าเลือกทิศทางอัตโนมัติ บอทยังช่วยเลือกฝั่งจากตลาดได้",
-      good:"ตอนที่คุณมีมุมมองชัดอยู่แล้วว่าอยากเล่นฝั่งไหน หรืออยากคุมแผนและความเสี่ยงด้วยตัวเอง",
-      caution:"ตลาดเปลี่ยนหน้าไปจากตอนที่ตั้งค่าไว้ เช่น จากนิ่งกลายเป็นวิ่งแรง แต่ยังใช้ Lot จำนวนไม้ หรือจุดตัดขาดทุนแบบเดิม",
-      remember:"MANUAL = คุณกำหนดระบบเอง บอททำตามแผน",
+      tagline:"คุณกำหนดแผน บอททำตามค่า",
+      systemType:"User Defined",
+      sizing:"Lot / จำนวนไม้กำหนดเอง",
+      exitStyle:"TP + Optional SL",
+      martingale:false,
+      trailing:false,
+      workflow:"กำหนดฝั่ง · Lot · TP · SL เอง",
+      good:"มี Bias และแผนชัด",
+      caution:"ตลาดเปลี่ยนโครงสร้างเร็ว",
       capital:{
         minimum:"10 USD",
         balanced:"100 USD",
-        comfortable:"300+ USD",
-        note:"ตัวเลขนี้อิงแผนเบาและ Lot ต่ำสุดเท่านั้น เพราะ MANUAL เปิดให้คุณกำหนด Lot/จำนวนไม้เอง จึงไม่มีทุนขั้นต่ำเดียวที่เหมาะกับทุกแผน"
+        comfortable:"300+ USD"
       }
     }
   };
@@ -6949,6 +6956,7 @@ function BotSettingsModal(props:any) {
               <div>
                 <small>TRADING MODE GUIDE</small>
                 <h2 id="cc-mode-guide-title">{activeModeGuide.title}</h2>
+                <span className="cc-mode-guide-subtitle">{activeModeGuide.tagline}</span>
               </div>
             </div>
             <button
@@ -6975,43 +6983,84 @@ function BotSettingsModal(props:any) {
               modeKey={modeGuideMode}
               isAdmin={Boolean(props.canManageGuideVideos)}
             />
-            <section className="cc-mode-guide-system" aria-label="โครงสร้างกลยุทธ์">
-              <div><small>ระบบหลัก</small><b>{activeModeGuide.systemType}</b></div>
-              <div><small>Lot / การเพิ่มไม้</small><b>{activeModeGuide.sizing}</b></div>
-              <div><small>การออก / ป้องกันกำไร</small><b>{activeModeGuide.exitStyle}</b></div>
+            <section className="cc-mode-guide-summary" aria-label="สรุปโหมด">
+              <header className="cc-mode-guide-section-title">
+                <span><ScenovaIcon name="status" size={17}/></span>
+                <b>สรุปโหมดนี้</b>
+              </header>
+              <div className="cc-mode-guide-summary-rows">
+                <div className="cc-mode-guide-summary-row">
+                  <span><ScenovaIcon name="settings" size={16}/></span>
+                  <small>ระบบ</small>
+                  <b>{activeModeGuide.systemType}</b>
+                </div>
+                <div className="cc-mode-guide-summary-row">
+                  <span><ScenovaIcon name="layers" size={16}/></span>
+                  <small>Lot</small>
+                  <b>{activeModeGuide.sizing}</b>
+                </div>
+                <div className="cc-mode-guide-summary-row">
+                  <span><ScenovaIcon name="status" size={16}/></span>
+                  <small>ปิดกำไร</small>
+                  <b>{activeModeGuide.exitStyle}</b>
+                </div>
+                <div className="cc-mode-guide-summary-row">
+                  <span><ScenovaIcon name="close" size={16}/></span>
+                  <small>Martingale</small>
+                  <b className={"cc-mode-guide-status "+(activeModeGuide.martingale?"good":"bad")}>
+                    <ScenovaIcon name={activeModeGuide.martingale?"status":"close"} size={13}/>
+                    {activeModeGuide.martingale?"ใช้":"ไม่ใช้"}
+                  </b>
+                </div>
+                <div className="cc-mode-guide-summary-row">
+                  <span><ScenovaIcon name="trend" size={16}/></span>
+                  <small>Trailing</small>
+                  <b className={"cc-mode-guide-status "+(activeModeGuide.trailing?"good":"bad")}>
+                    <ScenovaIcon name={activeModeGuide.trailing?"status":"close"} size={13}/>
+                    {activeModeGuide.trailing?"ใช้":"ไม่ใช้"}
+                  </b>
+                </div>
+              </div>
             </section>
 
-            <article className="cc-mode-guide-block cc-mode-guide-workflow">
-              <div><small>แนวทางการทำงาน</small><p>{activeModeGuide.workflow}</p></div>
-            </article>
-            <article className="cc-mode-guide-block cc-mode-guide-good">
-              <div><small>ตลาดที่น่าเล่น</small><p>{activeModeGuide.good}</p></div>
-            </article>
-            <article className="cc-mode-guide-block cc-mode-guide-caution">
-              <div><small>ตลาดที่ต้องระวัง</small><p>{activeModeGuide.caution}</p></div>
-            </article>
+            <section className="cc-mode-guide-market" aria-label="สภาวะตลาด">
+              <header className="cc-mode-guide-section-title">
+                <span><ScenovaIcon name="trend" size={17}/></span>
+                <b>สภาวะตลาด</b>
+              </header>
+              <div className="cc-mode-guide-market-rows">
+                <div className="cc-mode-guide-market-row">
+                  <span><ScenovaIcon name="settings" size={16}/></span>
+                  <small>Entry Bias</small>
+                  <b>{activeModeGuide.workflow}</b>
+                </div>
+                <div className="cc-mode-guide-market-row good">
+                  <span><ScenovaIcon name="trend" size={16}/></span>
+                  <small>เหมาะกับ</small>
+                  <b>{activeModeGuide.good}</b>
+                </div>
+                <div className="cc-mode-guide-market-row bad">
+                  <span><ScenovaIcon name="close" size={16}/></span>
+                  <small>ควรเลี่ยง</small>
+                  <b>{activeModeGuide.caution}</b>
+                </div>
+              </div>
+            </section>
 
-            <section className="cc-mode-guide-capital" aria-label="เงินทุนอ้างอิง">
+            <section className="cc-mode-guide-capital" aria-label="ทุนแนะนำ">
               <header>
-                <div><small>CAPITAL GUIDE</small><b>เงินทุนอ้างอิงสำหรับโหมดนี้</b></div>
-                <span>USD · อิง Lot ต่ำ / ค่าเริ่มต้น</span>
+                <div><small>CAPITAL GUIDE</small><b>ทุนแนะนำ</b></div>
               </header>
               <div className="cc-mode-guide-capital-tiers">
-                <div className="minimum"><small>ขั้นต่ำ</small><strong>{activeModeGuide.capital.minimum}</strong><span>เริ่มใช้งานแบบจำกัดความเสี่ยง</span></div>
-                <div className="balanced"><small>กำลังดี</small><strong>{activeModeGuide.capital.balanced}</strong><span>มี buffer สำหรับการแกว่งของราคา</span></div>
-                <div className="comfortable"><small>เหมาะสม</small><strong>{activeModeGuide.capital.comfortable}</strong><span>เผื่อ Exposure และ Drawdown ได้มากกว่า</span></div>
+                <div className="minimum"><small>ขั้นต่ำ</small><strong>{activeModeGuide.capital.minimum}</strong></div>
+                <div className="balanced"><small>กำลังดี</small><strong>{activeModeGuide.capital.balanced}</strong></div>
+                <div className="comfortable"><small>สบาย</small><strong>{activeModeGuide.capital.comfortable}</strong></div>
               </div>
-              <p>{activeModeGuide.capital.note}</p>
+              <p>ทุนจริงขึ้นกับ Lot และจำนวนไม้</p>
             </section>
-
-            <div className="cc-mode-guide-remember">
-              <span>จำง่าย ๆ</span>
-              <b>{activeModeGuide.remember}</b>
-            </div>
           </div>
 
           <footer className="cc-mode-guide-footer">
-            <span>ตัวเลขทุนเป็นกรอบอ้างอิงเพื่อเปรียบเทียบโหมด ไม่ใช่เงิน Margin ขั้นต่ำหรือการรับประกันผลลัพธ์จริง · Lot, Leverage, Symbol, Spread และจำนวนไม้มีผลต่อเงินทุนที่ต้องใช้</span>
             <button type="button" onClick={()=>setModeGuideOpen(false)}>เข้าใจแล้ว</button>
           </footer>
         </section>
