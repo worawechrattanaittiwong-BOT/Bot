@@ -235,20 +235,40 @@ export function TradingModeGuideVideos({
 
   return <>
     <section className={"cc-mode-guide-video-zone "+(featuredVideo?"has-video":"is-empty")} aria-label="วิดีโอแนะนำโหมด">
-      <div className="cc-mode-guide-video-poster" aria-hidden="true">
-        <div className="cc-mode-guide-video-poster-screen">
-          <span className="cc-mode-guide-video-poster-kicker">9:16</span>
-          <span className="cc-mode-guide-video-poster-play"><ScenovaIcon name="play" size={18}/></span>
-          <small>{modeKey.replace("_"," ")}</small>
-        </div>
-      </div>
+      {featuredVideo
+        ? <button
+            type="button"
+            className="cc-mode-guide-video-poster has-preview"
+            onClick={()=>setPlayingId(featuredVideo.id)}
+            aria-label={"เล่นวิดีโอ "+featuredVideo.title}
+          >
+            <video
+              className="cc-mode-guide-video-poster-video"
+              src={videoUrl(featuredVideo.id)+"#t=0.1"}
+              muted
+              playsInline
+              preload="metadata"
+              tabIndex={-1}
+            />
+            <span className="cc-mode-guide-video-poster-shade" aria-hidden="true"/>
+            <span className="cc-mode-guide-video-poster-kicker">9:16</span>
+            <span className="cc-mode-guide-video-poster-play" aria-hidden="true"><ScenovaIcon name="play" size={18}/></span>
+            <small>{modeKey.replace("_"," ")}</small>
+          </button>
+        : <div className="cc-mode-guide-video-poster" aria-hidden="true">
+            <div className="cc-mode-guide-video-poster-screen">
+              <span className="cc-mode-guide-video-poster-kicker">9:16</span>
+              <span className="cc-mode-guide-video-poster-play"><ScenovaIcon name="play" size={18}/></span>
+              <small>{modeKey.replace("_"," ")}</small>
+            </div>
+          </div>}
 
       <div className="cc-mode-guide-video-zone-copy">
         <span className="cc-mode-guide-video-eyebrow">VIDEO GUIDE · MOBILE FIRST</span>
         <h3>{featuredVideo?featuredVideo.title:"คู่มือวิดีโอ "+modeKey.replace("_"," ")}</h3>
         <p>
           {featuredVideo
-            ? "ดูขั้นตอนและตัวอย่างการใช้งานจริงในวิดีโอแนวตั้งสำหรับมือถือ"
+            ? "แตะหน้าปกหรือปุ่มดูวิดีโอเพื่อเล่นคลิปนี้"
             : "ยังไม่มีวิดีโอเผยแพร่สำหรับโหมดนี้"}
         </p>
         <div className="cc-mode-guide-video-meta">
