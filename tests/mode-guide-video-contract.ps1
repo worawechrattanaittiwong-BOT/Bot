@@ -44,6 +44,9 @@ Assert-Contains $component 'inspectPortraitVideo' 'Client portrait validation mi
 Assert-Contains $component 'หน้านี้รองรับวิดีโอแนวตั้งเท่านั้น' 'Portrait-only admin feedback missing'
 Assert-Contains $component 'ดูวิดีโอ' 'Customer watch-video action missing'
 Assert-Contains $component 'playsInline' 'Mobile inline playback contract missing'
+Assert-Contains $component 'cc-mode-guide-video-poster-video' 'Uploaded guide must render a real video cover'
+Assert-Contains $component 'เล่นวิดีโอ ' 'Uploaded guide cover must be directly playable'
+Assert-Contains $component '#t=0.1' 'Video cover must request an initial preview frame'
 Assert-Contains $component 'cc-mode-guide-video-admin-close' 'Mobile video manager close control missing'
 Assert-Contains $component 'ปิดการตั้งค่าวิดีโอ' 'Mobile video manager close accessibility label missing'
 
@@ -57,6 +60,8 @@ Assert-Contains $css 'scroll-snap-type:x proximity;' 'Trading Mode Guide tabs mu
 Assert-Contains $css 'grid-template-areas:' 'Mobile video card must explicitly reserve an action row'
 Assert-Contains $css '"actions actions"' 'Mobile video controls must span the full card width'
 Assert-Contains $css 'grid-area:actions;' 'Mobile video action controls must participate in card layout'
+Assert-Contains $css '.cc-mode-guide-video-poster-video' 'Uploaded video cover styling missing'
+Assert-Contains $css 'object-fit:cover;' 'Uploaded video cover must fill its 9:16 frame'
 Assert-Contains $css '.cc-mode-guide-video-admin' 'Inline admin video manager styling missing'
 Assert-Contains $css 'body.cc-mode-guide-active .bps-launcher' 'Bot summary launcher must hide while the mode guide is open'
 Assert-Contains $css 'body.cc-mode-guide-active .cc-mobile-mirror-launch' 'SCENOVA mascot must hide while the mode guide is open'
