@@ -69,6 +69,7 @@ import { ModeGuideVideoAdminController, ModeGuideVideoController } from "./mode-
 import { ModeGuideVideoService } from "./mode-guide-video.service";
 import { AdminBrokerController, BrokerController } from "./brokers/broker.controller";
 import { BrokerService } from "./brokers/broker.service";
+import { BrokerBenefitService } from "./brokers/broker-benefit.service";
 
 @Module({
   imports: [
@@ -79,6 +80,7 @@ import { BrokerService } from "./brokers/broker.service";
   ],
   controllers: [AdminBrokerController, BrokerController, ModeGuideVideoAdminController, ModeGuideVideoController, AdminPaymentQrSettingsController, InAppCampaignAssetController, InAppCampaignAdminController, InAppCampaignController, RuntimeEventWorkerController, RuntimeEventStreamController, ServerSoftwareUpdateAdminController, ServerSoftwareUpdateWorkerController, CloudUpdateAdminController, CloudUpdateWorkerController, CloudServerAdminController, ServerEnrollmentController, OwnerManagementController, OwnerMobileController, CommissionPayoutWorkerController, AdminCommissionWithdrawalsController, CommissionWalletWithdrawalController, AdminApiCredentialsController, AdminServiceLinksController, ProductionHardeningController, RuntimeMigrationController, RuntimeMigrationAgentController, RuntimeSafetyController, CloudTestController, CloudAdminController, CloudCustomerController, CloudPaymentController, LocalPackageCustomerController, LocalPackageAdminController, RootController, CatalogController, AuthController, AccountSecurityController, TrialCouponController, BotController, DashboardLiveController, MobileMirrorController, FleetMonitorController, PartnerController, ReferralController, ManualMt5Controller, TradingSymbolController, EaTradingSymbolController, AdminController, EaController, AgentActionController, InstallerController, BacktestController, PerformanceController, PerformanceAnalyticsController, PerformanceActionsController, SharedPerformanceController, HealthController, WorkerController],
   providers: [
+    BrokerBenefitService,
     BrokerService,
     ModeGuideVideoService,
     InAppCampaignService,
