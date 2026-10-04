@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net.Http.Json;
 using System.Text.Json;
 
@@ -8,7 +9,7 @@ internal static class LocalRealtimeRelay
     private static readonly TimeSpan ScanInterval = TimeSpan.FromMilliseconds(100);
     private static readonly TimeSpan ProfileRefreshInterval = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(2);
-    private static readonly Dictionary<string, long> LastWriteTicks =
+    private static readonly ConcurrentDictionary<string, long> LastWriteTicks =
         new(StringComparer.OrdinalIgnoreCase);
 
     internal static async Task RunAsync()
