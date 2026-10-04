@@ -34,3 +34,18 @@ They are never returned to the browser after save.
 - Each run is audited in `broker_sync_runs`.
 - Imported commission events remain idempotent through Phase 3 unique event IDs.
 - Broker sync is outside the trading hot path.
+
+
+## Auth field compatibility
+
+The public help article documents partner email/password authentication but the
+interactive schema is authoritative for request field names. SCENOVA therefore
+allows Owner/Admin to choose `email` or `login` as the identity field before
+testing the connection.
+
+## External rebate payout
+
+Phase 4 automates SCENOVA attribution, commission import and internal rebate release.
+It does **not** guess or hard-code an undocumented Exness money-moving rebate endpoint.
+Provider-side automatic rebate payout must only be enabled after the exact endpoint
+and payload are confirmed in the authenticated official Exness schema.
