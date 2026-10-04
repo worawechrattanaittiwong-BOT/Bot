@@ -195,7 +195,7 @@ Need $page 'cc-mode-guide-status' 'Trading mode guide must render compact Martin
 Need $page '>สภาวะตลาด</b>' 'Trading mode guide must use the compact professional market-condition section'
 Need $page 'comfortable:"500 USD"' 'RACE capital guide must include the requested 500 USD comfortable reference'
 Need $page 'cc-mode-guide-capital-tiers' 'Trading mode guide capital tiers missing'
-Need $css '.cc-mode-guide-summary{' 'Trading mode compact summary styling missing'
+Need $css '.cc-mode-guide-summary,.cc-mode-guide-market{' 'Trading mode compact summary styling missing'
 Need $css '.cc-mode-guide-capital{' 'Trading mode capital guide styling missing'
 Need $css '.cc-mode-guide-capital-tiers{' 'Trading mode capital tiers styling missing'
 
