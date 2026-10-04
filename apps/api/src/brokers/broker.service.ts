@@ -109,13 +109,8 @@ export class BrokerService {
          b.active AS broker_active,
          COALESCE(s.active,false) AS partner_active,
          COALESCE(s.partner_code,'') AS partner_code,
-         COALESCE(s.partner_code,'') AS partner_code,
          COALESCE(s.web_partner_link,'') AS web_partner_link,
          COALESCE(s.mobile_partner_link,'') AS mobile_partner_link,
-         COALESCE(
-           NULLIF(s.benefit_message,''),
-           'สมัครผ่านลิงก์ Partner ของ SCENOVA เพื่อรับราคาพิเศษและสิทธิประโยชน์เพิ่มเติมในระบบ SCENOVA'
-         ) AS benefit_message,
          COALESCE(
            NULLIF(s.benefit_message,''),
            'สมัครผ่านลิงก์ Partner ของ SCENOVA เพื่อรับราคาพิเศษและสิทธิประโยชน์เพิ่มเติมในระบบ SCENOVA'
@@ -150,7 +145,11 @@ export class BrokerService {
          COALESCE(s.active,false) AS partner_active,
          COALESCE(s.partner_code,'') AS partner_code,
          COALESCE(s.web_partner_link,'') AS web_partner_link,
-         COALESCE(s.mobile_partner_link,'') AS mobile_partner_link
+         COALESCE(s.mobile_partner_link,'') AS mobile_partner_link,
+         COALESCE(
+           NULLIF(s.benefit_message,''),
+           'สมัครผ่านลิงก์ Partner ของ SCENOVA เพื่อรับราคาพิเศษและสิทธิประโยชน์เพิ่มเติมในระบบ SCENOVA'
+         ) AS benefit_message
        FROM brokers b
        LEFT JOIN broker_partner_settings s ON s.broker_id=b.id
        WHERE b.code='EXNESS'
@@ -176,7 +175,7 @@ export class BrokerService {
     );
 
     const active = Boolean(provider?.broker_active && provider?.partner_active);
-    const hasLink = Boolean(provider?.web_partner_link || provider?.mobile_partner_link);
+    const hasLink = Boolean(provider?.web_partner_link && provider?.mobile_partner_link && provider?.partner_code);
 
     return {
       provider: {
@@ -215,6 +214,7 @@ export class BrokerService {
          b.id,
          b.active AS broker_active,
          COALESCE(s.active,false) AS partner_active,
+         COALESCE(s.partner_code,'') AS partner_code,
          COALESCE(s.web_partner_link,'') AS web_partner_link,
          COALESCE(s.mobile_partner_link,'') AS mobile_partner_link
        FROM brokers b
