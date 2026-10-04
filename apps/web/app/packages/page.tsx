@@ -128,6 +128,20 @@ type PromotionPreview = {
   fx?:{ usdThb:number; source:string; quotedAt:string };
 };
 
+type BrokerBenefitSummary = {
+  partner?: {
+    status?: string;
+    verified?: boolean;
+    benefit?: {
+      levelCode?: string;
+      levelName?: string;
+      discountPercent?: number;
+      discountBps?: number;
+    } | null;
+  } | null;
+};
+
+
 function promoAlnum(value: string) {
   return String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 11);
 }
@@ -202,6 +216,7 @@ export default function PackagesPage() {
   const checkoutDialog = useRef<HTMLDialogElement>(null);
   const [promoCode, setPromoCode] = useState("");
   const [promoPreview, setPromoPreview] = useState<PromotionPreview | null>(null);
+  const [brokerBenefit, setBrokerBenefit] = useState<BrokerBenefitSummary | null>(null);
   const [promoState, setPromoState] = useState<"IDLE"|"CHECKING"|"ACTIVE"|"ERROR">("IDLE");
   const [promoNotice, setPromoNotice] = useState("");
   const [checkoutOrderId, setCheckoutOrderId] = useState("");
@@ -217,13 +232,14 @@ export default function PackagesPage() {
   } : null;
 
   async function load() {
-    const [a, t, lc, lo, cc, co] = await Promise.all([
+    const [a, t, lc, lo, cc, co, broker] = await Promise.all([
       api("/auth/account"),
       api("/trial-access/status").catch(() => null),
       api("/packages/local/catalog"),
       api("/packages/local/orders"),
       api("/cloud/catalog"),
-      api("/cloud/orders")
+      api("/cloud/orders"),
+      api("/brokers/exness").catch(() => null)
     ]);
     setAccount(a);
     setTrial(t);
@@ -236,6 +252,7 @@ export default function PackagesPage() {
     setLocalOrders(Array.isArray(lo) ? lo : []);
     setCloudCatalog(cc);
     setCloudOrders(Array.isArray(co) ? co : []);
+    setBrokerBenefit(broker);
     if (t?.otp?.resendAfterSeconds != null) {
       setCooldown(Number(t.otp.resendAfterSeconds || 0));
     }
@@ -587,12 +604,25 @@ export default function PackagesPage() {
   const checkoutOrder = checkoutOrderId
     ? activeOrders.find(order => order.id === checkoutOrderId) || null
     : null;
-  const checkoutUsdCents = promoPreview?.active
-    ? Number(promoPreview.finalUsdCents || 0)
-    : Number(checkoutPack?.price_usd_cents || 0);
-  const checkoutEstimatedThb = promoPreview?.active
-    ? Number(promoPreview.estimatedThbSatang || 0)
-    : Number(checkoutPack?.estimated_price_satang || 0);
+  const partnerDiscountPercent = brokerBenefit?.partner?.verified
+    ? Math.max(0, Math.min(50, Number(brokerBenefit.partner.benefit?.discountPercent || 0)))
+    : 0;
+  const promoDiscountPercent = promoPreview?.active
+    ? Math.max(0, Math.min(100, Number(promoPreview.discountPercent || 0)))
+    : 0;
+  const checkoutDiscountPercent = Math.max(partnerDiscountPercent, promoDiscountPercent);
+  const partnerBenefitWins = partnerDiscountPercent > 0 && partnerDiscountPercent >= promoDiscountPercent;
+  const checkoutBaseUsdCents = Number(checkoutPack?.price_usd_cents || 0);
+  const checkoutBaseThbSatang = Number(checkoutPack?.estimated_price_satang || 0);
+  const checkoutUsdCents = Math.max(
+    0,
+    checkoutBaseUsdCents - Math.round(checkoutBaseUsdCents * checkoutDiscountPercent / 100)
+  );
+  const checkoutEstimatedThb = Math.max(
+    0,
+    checkoutBaseThbSatang - Math.floor(checkoutBaseThbSatang * checkoutDiscountPercent / 100)
+  );
+  const checkoutDiscountUsdCents = Math.max(0, checkoutBaseUsdCents - checkoutUsdCents);
 
   async function setGlobalSalesPaused(paused: boolean) {
     if (!isOwner || busy) return;
@@ -1031,6 +1061,16 @@ export default function PackagesPage() {
                     <b>${usdMoney(checkoutPack.price_usd_cents)} USD</b>
                   </div>
 
+                  {partnerDiscountPercent > 0 && (
+                    <div className={styles.partnerBenefitLive}>
+                      <div>
+                        <span>EXNESS PARTNER BENEFIT</span>
+                        <b>{brokerBenefit?.partner?.benefit?.levelCode || "PARTNER"}</b>
+                      </div>
+                      <strong>ลด {partnerDiscountPercent}% อัตโนมัติ</strong>
+                    </div>
+                  )}
+
                   <label className={styles.promoField} htmlFor="package-promo">รหัสโปรโมชั่น</label>
                   <div className={styles.promoInput + " " + (promoState === "ACTIVE" ? styles.promoInputActive : promoState === "ERROR" ? styles.promoInputError : "")}>
                     <input
@@ -1079,10 +1119,16 @@ export default function PackagesPage() {
                     </div>
                   )}
 
-                  {promoPreview?.active && (
+                  {promoPreview?.active && partnerBenefitWins && (
+                    <div className={styles.partnerWinsNotice}>
+                      Partner Benefit {partnerDiscountPercent}% ดีกว่าหรือเท่ากับโปรโมชั่นนี้ · ระบบจะใช้สิทธิ์ Partner และไม่ใช้รหัสโปรโมชั่น
+                    </div>
+                  )}
+
+                  {checkoutDiscountPercent > 0 && (
                     <div className={styles.summaryRow}>
-                      <span>ส่วนลด</span>
-                      <b>-${usdMoney(Number(promoPreview.discountUsdCents || 0))}</b>
+                      <span>{partnerBenefitWins ? "ส่วนลด Exness Partner" : "ส่วนลดโปรโมชั่น"}</span>
+                      <b>-${usdMoney(checkoutDiscountUsdCents)}</b>
                     </div>
                   )}
 
