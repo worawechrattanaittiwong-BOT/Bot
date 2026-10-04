@@ -18,6 +18,7 @@ type ConfirmOptions = {
   cancelLabel?: string;
   tone?: PopupTone;
   acknowledgeLabel?: string;
+  size?: "default" | "large";
 };
 
 type PromptOptions = {
@@ -42,6 +43,7 @@ type PopupState = {
   placeholder?: string;
   copyLabel?: string;
   acknowledgeLabel?: string;
+  size?: "default" | "large";
 };
 
 type SystemPopupContextValue = {
@@ -158,7 +160,8 @@ export function SystemPopupProvider({ children }: { children: React.ReactNode })
       tone,
       confirmLabel: options.confirmLabel || "ยืนยัน",
       cancelLabel: options.cancelLabel || "ยกเลิก",
-      acknowledgeLabel: options.acknowledgeLabel
+      acknowledgeLabel: options.acknowledgeLabel,
+      size: options.size || "default"
     });
     return new Promise<boolean>((resolve) => {
       confirmResolverRef.current = resolve;
@@ -266,7 +269,8 @@ export function SystemPopupProvider({ children }: { children: React.ReactNode })
           <div
             className={
               "sc-system-popup sc-system-popup-" + popup.tone +
-              (popup.kind === "prompt" ? " sc-system-popup-prompt" : "")
+              (popup.kind === "prompt" ? " sc-system-popup-prompt" : "") +
+              (popup.kind === "confirm" && popup.size === "large" ? " sc-system-popup-large" : "")
             }
             role={popup.kind === "notice" ? "status" : "alertdialog"}
             aria-modal={popup.kind === "notice" ? undefined : true}
