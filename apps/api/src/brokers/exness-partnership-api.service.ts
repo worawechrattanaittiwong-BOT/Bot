@@ -52,6 +52,8 @@ export class ExnessPartnershipApiService {
         last_tested_at timestamptz,
         last_sync_at timestamptz,
         next_sync_at timestamptz,
+        sync_lock_token uuid,
+        sync_lock_until timestamptz,
         updated_by varchar(160),
         created_at timestamptz NOT NULL DEFAULT now(),
         updated_at timestamptz NOT NULL DEFAULT now()
@@ -59,6 +61,10 @@ export class ExnessPartnershipApiService {
 
       ALTER TABLE broker_api_connections
         ADD COLUMN IF NOT EXISTS commission_amount_scale integer NOT NULL DEFAULT 100;
+      ALTER TABLE broker_api_connections
+        ADD COLUMN IF NOT EXISTS sync_lock_token uuid;
+      ALTER TABLE broker_api_connections
+        ADD COLUMN IF NOT EXISTS sync_lock_until timestamptz;
 
       CREATE TABLE IF NOT EXISTS broker_sync_runs (
         id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
