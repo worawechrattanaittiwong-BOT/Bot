@@ -612,7 +612,7 @@
 .benefitValue small,
 .benefitValueMuted span {
   color: #8c8498;
-  font-size: 10px;
+  font-size: var(--ui-type-caption);
   letter-spacing: .08em;
 }
 
@@ -745,7 +745,7 @@
 
 .clientControls label > span {
   color: #8e8799;
-  font-size: 10px;
+  font-size: var(--ui-type-caption);
   font-weight: 750;
 }
 
@@ -1009,7 +1009,7 @@
 .rebateHistoryRow > div:first-child span,
 .rebateHistoryRow small {
   color: #766f80;
-  font-size: 10px;
+  font-size: var(--ui-type-caption);
 }
 
 .rebateHistoryRow > div:not(:first-child) {
@@ -1027,7 +1027,7 @@
   border-radius: 999px;
   background: rgba(126,87,255,.09);
   color: #c8baff;
-  font-size: 10px;
+  font-size: var(--ui-type-caption);
   font-weight: 800;
 }
 
@@ -1057,14 +1057,14 @@
 .financeTotals span {
   grid-column: 1 / -1;
   color: #bcaeff;
-  font-size: 10px;
+  font-size: var(--ui-type-caption);
   font-weight: 900;
   letter-spacing: .08em;
 }
 
 .financeTotals small {
   color: #797181;
-  font-size: 10px;
+  font-size: var(--ui-type-caption);
 }
 
 .financeTotals b,
@@ -1100,7 +1100,7 @@
 
 .financeSectionHead span {
   color: #7d7687;
-  font-size: 10px;
+  font-size: var(--ui-type-caption);
 }
 
 .policyGrid {
@@ -1130,7 +1130,7 @@
 .policyCard > div span,
 .policyCard label span {
   color: #817989;
-  font-size: 10px;
+  font-size: var(--ui-type-caption);
 }
 
 .policyCard label {
@@ -1188,7 +1188,7 @@
 
 .commissionForm label span {
   color: #847d8e;
-  font-size: 10px;
+  font-size: var(--ui-type-caption);
   font-weight: 750;
 }
 
@@ -1250,7 +1250,7 @@
 .financeEventMain span,
 .financeEventMain small {
   color: #777080;
-  font-size: 10px;
+  font-size: var(--ui-type-caption);
 }
 
 .financeEventState {
@@ -1260,7 +1260,7 @@
 
 .financeEventState span {
   color: #938aa0;
-  font-size: 10px;
+  font-size: var(--ui-type-caption);
 }
 
 .financeEventState b {
@@ -1354,7 +1354,7 @@
 .apiPass span,
 .apiIdle span {
   color: #77717f;
-  font-size: 10px;
+  font-size: var(--ui-type-caption);
 }
 
 .apiPass b {
@@ -1393,7 +1393,7 @@
 .apiOfficialNote span {
   grid-column: 1;
   color: #81798c;
-  font-size: 10px;
+  font-size: var(--ui-type-caption);
 }
 
 .apiOfficialNote a {
@@ -1427,13 +1427,13 @@
 .apiCredentials label > span,
 .apiPaths label > span {
   color: #8f8799;
-  font-size: 10px;
+  font-size: var(--ui-type-caption);
   font-weight: 750;
 }
 
 .apiPaths label > small {
   color: #6f6878;
-  font-size: 9px;
+  font-size: var(--ui-type-caption);
   line-height: 1.4;
 }
 
@@ -1493,7 +1493,7 @@
 .apiToggles small {
   margin-top: 2px;
   color: #756e7e;
-  font-size: 9px;
+  font-size: var(--ui-type-caption);
   line-height: 1.4;
 }
 
@@ -1545,7 +1545,7 @@
 
 .apiStatusGrid span {
   color: #777080;
-  font-size: 9px;
+  font-size: var(--ui-type-caption);
 }
 
 .apiStatusGrid b {
@@ -1581,7 +1581,7 @@
 .syncRunRow > div:first-child span,
 .syncRunRow small {
   color: #716a79;
-  font-size: 9px;
+  font-size: var(--ui-type-caption);
 }
 
 .syncRunRow > div:not(:first-child) b {
@@ -1591,7 +1591,7 @@
 
 .syncRunRow > span {
   color: #746d7c;
-  font-size: 9px;
+  font-size: var(--ui-type-caption);
   overflow-wrap: anywhere;
 }
 
