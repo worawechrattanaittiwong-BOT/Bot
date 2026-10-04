@@ -6496,6 +6496,28 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
   border-color:#8b74f2;
   box-shadow:0 0 0 3px rgba(114,88,237,.12);
 }
+.sc-system-popup-acknowledge{
+  grid-column:1/-1;
+  display:flex;
+  align-items:flex-start;
+  gap:9px;
+  padding:10px 11px;
+  border:1px solid rgba(244,193,82,.28);
+  border-radius:10px;
+  background:rgba(92,66,15,.12);
+  color:#d8deea;
+  font-size:11px;
+  line-height:1.45;
+  font-weight:700;
+  cursor:pointer;
+}
+.sc-system-popup-acknowledge input{
+  width:16px;
+  height:16px;
+  margin:1px 0 0;
+  flex:0 0 auto;
+  accent-color:#b79b4b;
+}
 .sc-system-popup-actions button:disabled{
   opacity:.38;
   cursor:not-allowed;
