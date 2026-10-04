@@ -45,7 +45,7 @@ if (-not $module.Contains('FleetMonitorController')) {
 }
 
 foreach ($required in @(
-  'api("/fleet-monitor")',
+  'api("/fleet-monitor" + fleetPeriodQuery(rangeMode, customFrom, customTo))',
   'Trading Fleet Monitor',
   'MY SLOTS ONLY',
   'ADMIN · ALL SLOTS',
