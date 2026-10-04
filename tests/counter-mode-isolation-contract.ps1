@@ -130,6 +130,8 @@ Need $web 'controlMode!=="ZERO_GRID"&&controlMode!=="COUNTER"&&(' 'COUNTER must 
 Need $web 'กราฟขึ้น → SELL · กราฟลง → BUY' 'COUNTER summary direction contract missing'
 Need $web 'จำนวนไม้รวมแบ่งครึ่งเป็น BUY/SELL' 'COUNTER UI must explain the 50/50 BUY/SELL split'
 Need $web '★★ COUNTER' 'COUNTER must render as a two-star mode'
+Need $web 'counterMaxPositions: 20' 'COUNTER requested default must be 20 total positions'
+Need $web 'counterPerPositionProfitMoney: 1' 'COUNTER requested default profit per position must be 1'
 Forbid $web 'counterBuyMaxPositions' 'COUNTER must keep one simple max-position setting, not add a BUY-specific user control'
 Forbid $web 'counterSellMaxPositions' 'COUNTER must keep one simple max-position setting, not add a SELL-specific user control'
 Forbid $web 'Profit Bank' 'COUNTER separate-slot change must not add cleanup accounting'
