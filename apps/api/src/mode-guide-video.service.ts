@@ -6,13 +6,14 @@ import {
 } from "@nestjs/common";
 import { randomUUID } from "crypto";
 import {
-  copyFileSync,
+  closeSync,
   existsSync,
   mkdirSync,
-  readFileSync,
-  statSync,
-  unlinkSync
+  openSync,
+  readSync,
+  statSync
 } from "fs";
+import { copyFile, unlink } from "fs/promises";
 import { basename, extname, join } from "path";
 import { DbService } from "./db.service";
 
@@ -113,15 +114,23 @@ export class ModeGuideVideoService implements OnModuleInit {
   }
 
   private validateFileSignature(path: string, contentType: string) {
-    const bytes = readFileSync(path).subarray(0, 16);
+    const bytes = Buffer.alloc(16);
+    const fd = openSync(path, "r");
+    let length = 0;
+    try {
+      length = readSync(fd, bytes, 0, bytes.length, 0);
+    } finally {
+      closeSync(fd);
+    }
+
     if (contentType === "video/webm") {
-      if (bytes.length < 4 || bytes.subarray(0,4).toString("hex") !== "1a45dfa3") {
+      if (length < 4 || bytes.subarray(0,4).toString("hex") !== "1a45dfa3") {
         throw new BadRequestException("invalid WEBM video file");
       }
       return;
     }
 
-    if (bytes.length < 12 || bytes.subarray(4,8).toString("ascii") !== "ftyp") {
+    if (length < 12 || bytes.subarray(4,8).toString("ascii") !== "ftyp") {
       throw new BadRequestException("invalid MP4/MOV video file");
     }
   }
@@ -170,7 +179,7 @@ export class ModeGuideVideoService implements OnModuleInit {
 
       const storageName = randomUUID() + extension;
       finalPath = join(this.mediaRoot, storageName);
-      copyFileSync(tempPath, finalPath);
+      await copyFile(tempPath, finalPath);
 
       const inserted = await this.db.one(
         `INSERT INTO mode_guide_videos(
@@ -196,12 +205,12 @@ export class ModeGuideVideoService implements OnModuleInit {
       return this.row(inserted);
     } catch (error) {
       if (finalPath && existsSync(finalPath)) {
-        try { unlinkSync(finalPath); } catch {}
+        try { await unlink(finalPath); } catch {}
       }
       throw error;
     } finally {
       if (existsSync(tempPath)) {
-        try { unlinkSync(tempPath); } catch {}
+        try { await unlink(tempPath); } catch {}
       }
     }
   }
@@ -244,7 +253,7 @@ export class ModeGuideVideoService implements OnModuleInit {
     const storageName = basename(String(row.storage_name || ""));
     const path = join(this.mediaRoot, storageName);
     if (existsSync(path)) {
-      try { unlinkSync(path); } catch {}
+      try { await unlink(path); } catch {}
     }
     return { ok: true, id };
   }
