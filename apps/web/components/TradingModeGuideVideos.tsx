@@ -405,4 +405,4 @@ export function TradingModeGuideVideos({
       </section>
     </div>}
   </>;
-}}
+}
