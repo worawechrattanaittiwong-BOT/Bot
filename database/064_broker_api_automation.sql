@@ -11,6 +11,8 @@ CREATE TABLE IF NOT EXISTS broker_api_connections (
   auto_verify_clients boolean NOT NULL DEFAULT false,
   auto_import_commissions boolean NOT NULL DEFAULT false,
   auto_release_rebates boolean NOT NULL DEFAULT false,
+  commission_amount_scale integer NOT NULL DEFAULT 100
+    CHECK (commission_amount_scale BETWEEN 1 AND 1000000),
   sync_interval_minutes integer NOT NULL DEFAULT 15
     CHECK (sync_interval_minutes BETWEEN 5 AND 1440),
   last_test_status varchar(24) NOT NULL DEFAULT 'NOT_TESTED',
