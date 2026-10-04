@@ -180,37 +180,37 @@ function legacyCounterPerSideToTotal(value: unknown) {
 const defaultSettings = {
   symbol: "XAUUSD",
   lot: 0.01,
-  maxPositions: 10,
+  maxPositions: 3,
   autoLot: 0.01,
-  autoMaxPositions: 10,
+  autoMaxPositions: 3,
   raceLot: 0.01,
-  raceMaxPositions: 10,
+  raceMaxPositions: 5,
   counterLot: 0.01,
-  counterMaxPositions: 10,
+  counterMaxPositions: 20,
   counterSizingVersion: 2,
   flipLockLot: 0.01,
   manualLot: 0.01,
   manualMaxPositions: 10,
   // Per-mode risk profiles. standard* remains only for backward compatibility.
-  standardMaxBasketLossMoney: 10,
-  standardDailyLossMoney: 25,
+  standardMaxBasketLossMoney: 0,
+  standardDailyLossMoney: 0,
   standardDailyProfitTargetMoney: 0,
-  autoMaxBasketLossMoney: 10,
-  autoDailyLossMoney: 25,
+  autoMaxBasketLossMoney: 0,
+  autoDailyLossMoney: 0,
   autoDailyProfitTargetMoney: 0,
-  raceMaxBasketLossMoney: 10,
-  raceDailyLossMoney: 25,
+  raceMaxBasketLossMoney: 0,
+  raceDailyLossMoney: 0,
   raceDailyProfitTargetMoney: 0,
-  flipLockMaxBasketLossMoney: 10,
-  flipLockDailyLossMoney: 25,
+  flipLockMaxBasketLossMoney: 0,
+  flipLockDailyLossMoney: 0,
   flipLockDailyProfitTargetMoney: 0,
   manualMaxBasketLossMoney: 0,
   manualDailyLossMoney: 0,
   manualDailyProfitTargetMoney: 0,
   basketTriggerMoney: 2,
   basketTrailMoney: 0.5,
-  maxBasketLossMoney: 10,
-  dailyLossMoney: 25,
+  maxBasketLossMoney: 0,
+  dailyLossMoney: 0,
   dailyProfitTargetMoney: 0,
   dailyProfitContinueAfterTarget: false,
   dailyProfitDrawdownPercent: 20,
@@ -240,11 +240,11 @@ const defaultSettings = {
   indicatorV6Mode: "SOFT_WEIGHT",
   controlMode: undefined,
   engineMode: "AUTO",
-  raceCloseAllProfitEnabled: true,
-  raceProfitTargetMode: "BASKET",
+  raceCloseAllProfitEnabled: false,
+  raceProfitTargetMode: "POSITION",
   raceCloseAllProfitMoney: 0.5,
   racePerPositionProfitMoney: 0.5,
-  counterPerPositionProfitMoney: 0.5,
+  counterPerPositionProfitMoney: 1,
   zeroGridStepPrice: 3,
   zeroGridLevelsPerSide: 10,
   zeroGridBaseLot: 0.03,
@@ -385,8 +385,14 @@ export default function DashboardPage() {
         };
         const loadedSizingProfile = sizingProfileByMode[loadedControlMode];
         if (loadedSizingProfile) {
-          if (storedSettings[loadedSizingProfile.lot] === undefined) nextSettings[loadedSizingProfile.lot] = legacyLot;
-          if (loadedSizingProfile.max && storedSettings[loadedSizingProfile.max] === undefined) nextSettings[loadedSizingProfile.max] = legacyMaxPositions;
+          if (storedSettings[loadedSizingProfile.lot] === undefined && storedSettings.lot !== undefined) {
+            nextSettings[loadedSizingProfile.lot] = legacyLot;
+          }
+          if (loadedSizingProfile.max &&
+              storedSettings[loadedSizingProfile.max] === undefined &&
+              storedSettings.maxPositions !== undefined) {
+            nextSettings[loadedSizingProfile.max] = legacyMaxPositions;
+          }
         }
         // COUNTER V2 exposes one total-position number to the customer while
         // the EA still consumes an independent per-side cap. Legacy saved
@@ -397,10 +403,10 @@ export default function DashboardPage() {
           nextSettings.counterMaxPositions = normalizeCounterTotalPositions(nextSettings.counterMaxPositions);
         } else if (storedSettings.counterMaxPositions !== undefined) {
           nextSettings.counterMaxPositions = legacyCounterPerSideToTotal(storedSettings.counterMaxPositions);
-        } else if (loadedControlMode === "COUNTER") {
+        } else if (loadedControlMode === "COUNTER" && storedSettings.maxPositions !== undefined) {
           nextSettings.counterMaxPositions = legacyCounterPerSideToTotal(legacyMaxPositions);
         } else {
-          nextSettings.counterMaxPositions = 10;
+          nextSettings.counterMaxPositions = 20;
         }
         nextSettings.counterSizingVersion = 2;
         const legacyMaxBasketLoss = Math.max(0, Number(nextSettings.maxBasketLossMoney || 0));
@@ -3672,8 +3678,8 @@ export default function DashboardPage() {
       // Build the legacy/runtime target mirror from the ACTIVE profile only.
       // Persisted profile fields remain untouched when another mode is selected.
       if (payload.controlMode === "RACE") {
-        const raceMode = String(payload.raceProfitTargetMode || "BASKET").toUpperCase();
-        payload.raceProfitTargetMode = ["BASKET","POSITION","OFF"].includes(raceMode) ? raceMode : "BASKET";
+        const raceMode = String(payload.raceProfitTargetMode || "POSITION").toUpperCase();
+        payload.raceProfitTargetMode = ["BASKET","POSITION","OFF"].includes(raceMode) ? raceMode : "POSITION";
         payload.raceCloseAllProfitEnabled = payload.raceProfitTargetMode === "BASKET";
       }
       if (payload.controlMode === "AUTO") {
@@ -6534,7 +6540,7 @@ function BotSettingsModal(props:any) {
       if (mode === "FLIP_LOCK") {
         props.onEdit?.("maxPositions",1);
       } else if (mode === "COUNTER" && targetSizing.max) {
-        const total = normalizeCounterTotalPositions(props.settings?.[targetSizing.max] ?? 10);
+        const total = normalizeCounterTotalPositions(props.settings?.[targetSizing.max] ?? 20);
         props.onEdit?.("counterMaxPositions",total);
         props.onEdit?.("counterSizingVersion",2);
         props.onEdit?.("maxPositions",total/2);
@@ -6564,15 +6570,15 @@ function BotSettingsModal(props:any) {
     if (mode === "COUNTER") {
       props.onEdit?.("engineMode","COUNTER");
       props.onEdit?.("profitTargetMode","OFF");
-      if (!Number.isFinite(Number(props.settings?.counterPerPositionProfitMoney)) || Number(props.settings?.counterPerPositionProfitMoney) <= 0) props.onEdit?.("counterPerPositionProfitMoney",0.5);
+      if (!Number.isFinite(Number(props.settings?.counterPerPositionProfitMoney)) || Number(props.settings?.counterPerPositionProfitMoney) <= 0) props.onEdit?.("counterPerPositionProfitMoney",1);
       return;
     }
     // Keep the currently selected direction when switching control modes.
     if (mode === "RACE") {
       props.onEdit?.("engineMode","RACE");
       props.onEdit?.("profitTargetMode","OFF");
-      const raceMode = String(props.settings?.raceProfitTargetMode || "BASKET").toUpperCase();
-      props.onEdit?.("raceProfitTargetMode",["BASKET","POSITION","OFF"].includes(raceMode) ? raceMode : "BASKET");
+      const raceMode = String(props.settings?.raceProfitTargetMode || "POSITION").toUpperCase();
+      props.onEdit?.("raceProfitTargetMode",["BASKET","POSITION","OFF"].includes(raceMode) ? raceMode : "POSITION");
       if (!Number.isFinite(Number(props.settings?.raceCloseAllProfitMoney)) || Number(props.settings?.raceCloseAllProfitMoney) <= 0) props.onEdit?.("raceCloseAllProfitMoney",0.5);
       if (!Number.isFinite(Number(props.settings?.racePerPositionProfitMoney)) || Number(props.settings?.racePerPositionProfitMoney) <= 0) props.onEdit?.("racePerPositionProfitMoney",0.5);
       return;
@@ -6607,11 +6613,11 @@ function BotSettingsModal(props:any) {
     : (entryMode === "AUTO_MOMENTUM"
         ? "M1 / M5 / M15 / M30 / H1 วิเคราะห์ทิศทางอัตโนมัติ"
         : "บังคับทิศตามที่เลือกจนกว่าจะเปลี่ยนค่า");
-  const raceProfitTargetMode = String(props.settings?.raceProfitTargetMode || "BASKET").toUpperCase();
+  const raceProfitTargetMode = String(props.settings?.raceProfitTargetMode || "POSITION").toUpperCase();
   const raceCloseAllProfitEnabled = raceProfitTargetMode === "BASKET";
   const raceCloseAllProfitMoney = Number(props.settings?.raceCloseAllProfitMoney || 0.5);
   const racePerPositionProfitMoney = Number(props.settings?.racePerPositionProfitMoney || 0.5);
-  const counterPerPositionProfitMoney = Number(props.settings?.counterPerPositionProfitMoney || 0.5);
+  const counterPerPositionProfitMoney = Number(props.settings?.counterPerPositionProfitMoney || 1);
   const manualStopEnabled = Number(props.settings?.manualStopLossPoints || 0) > 0;
   const updateOptionalValue = (key:string,value:any) => props.onEdit?.(key,value);
   const exitLabel = controlMode === "FLIP_LOCK"
