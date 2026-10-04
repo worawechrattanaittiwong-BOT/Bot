@@ -17,6 +17,7 @@ type ConnectionInput = {
   autoImportCommissions?: boolean;
   autoReleaseRebates?: boolean;
   commissionAmountScale?: number;
+  authIdentityField?: "email" | "login" | string;
 };
 
 @Injectable()
@@ -37,6 +38,8 @@ export class ExnessPartnershipApiService {
         base_url text NOT NULL,
         auth_path text NOT NULL DEFAULT '/api/auth',
         summary_path text NOT NULL DEFAULT '/api/partner/summary/',
+        auth_identity_field varchar(16) NOT NULL DEFAULT 'email'
+          CHECK (auth_identity_field IN ('email','login')),
         client_report_path text NOT NULL DEFAULT '',
         commission_report_path text NOT NULL DEFAULT '',
         enabled boolean NOT NULL DEFAULT false,
@@ -61,6 +64,8 @@ export class ExnessPartnershipApiService {
 
       ALTER TABLE broker_api_connections
         ADD COLUMN IF NOT EXISTS commission_amount_scale integer NOT NULL DEFAULT 100;
+      ALTER TABLE broker_api_connections
+        ADD COLUMN IF NOT EXISTS auth_identity_field varchar(16) NOT NULL DEFAULT 'email';
       ALTER TABLE broker_api_connections
         ADD COLUMN IF NOT EXISTS sync_lock_token uuid;
       ALTER TABLE broker_api_connections
@@ -136,6 +141,7 @@ export class ExnessPartnershipApiService {
       baseUrl: this.baseUrl,
       authPath: String(row?.auth_path || "/api/auth"),
       summaryPath: String(row?.summary_path || "/api/partner/summary/"),
+      authIdentityField: String(row?.auth_identity_field || "email"),
       clientReportPath: String(row?.client_report_path || ""),
       commissionReportPath: String(row?.commission_report_path || ""),
       autoVerifyClients: Boolean(row?.auto_verify_clients),
@@ -187,6 +193,10 @@ export class ExnessPartnershipApiService {
       Math.min(1000000, Math.trunc(Number(input.commissionAmountScale || 100)))
     );
     const enabled = input.enabled === true;
+    const authIdentityField = String(input.authIdentityField || "email").trim().toLowerCase();
+    if (!["email","login"].includes(authIdentityField)) {
+      throw new BadRequestException("Auth Identity Field ต้องเป็น email หรือ login");
+    }
     const clientReportPath = this.normalizePath(input.clientReportPath);
     const commissionReportPath = this.normalizePath(input.commissionReportPath);
     const autoVerifyClients = input.autoVerifyClients === true;
@@ -221,20 +231,22 @@ export class ExnessPartnershipApiService {
 
     await this.db.query(
       `UPDATE broker_api_connections SET
-         client_report_path=$2,
-         commission_report_path=$3,
-         enabled=$4,
-         auto_verify_clients=$5,
-         auto_import_commissions=$6,
-         auto_release_rebates=$7,
-         commission_amount_scale=$8,
-         sync_interval_minutes=$9,
-         next_sync_at=CASE WHEN $4 THEN now() ELSE NULL END,
-         updated_by=$10,
+         auth_identity_field=$2,
+         client_report_path=$3,
+         commission_report_path=$4,
+         enabled=$5,
+         auto_verify_clients=$6,
+         auto_import_commissions=$7,
+         auto_release_rebates=$8,
+         commission_amount_scale=$9,
+         sync_interval_minutes=$10,
+         next_sync_at=CASE WHEN $5 THEN now() ELSE NULL END,
+         updated_by=$11,
          updated_at=now()
        WHERE broker_code=$1`,
       [
         "EXNESS",
+        authIdentityField,
         clientReportPath,
         commissionReportPath,
         enabled,
@@ -258,6 +270,7 @@ export class ExnessPartnershipApiService {
             String(process.env.EXNESS_PARTNER_PASSWORD || "").trim()
           ),
           enabled,
+          authIdentityField,
           clientReportConfigured: Boolean(clientReportPath),
           commissionReportConfigured: Boolean(commissionReportPath),
           autoVerifyClients,
@@ -288,6 +301,12 @@ export class ExnessPartnershipApiService {
     await this.ensureSchema();
     const email = String(process.env.EXNESS_PARTNER_EMAIL || "").trim();
     const password = String(process.env.EXNESS_PARTNER_PASSWORD || "");
+    const config = await this.db.one(
+      "SELECT auth_identity_field FROM broker_api_connections WHERE broker_code='EXNESS'"
+    );
+    const identityField = String(config?.auth_identity_field || "email") === "login"
+      ? "login"
+      : "email";
     if (!email || !password) {
       throw new ConflictException("ยังไม่ได้ตั้งค่า Exness Partnership API credentials");
     }
@@ -298,7 +317,7 @@ export class ExnessPartnershipApiService {
         "content-type": "application/json",
         "accept": "application/json"
       },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ [identityField]: email, password }),
       signal: AbortSignal.timeout(12000)
     });
 
