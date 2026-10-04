@@ -83,7 +83,7 @@ export function ExnessSignupCard() {
         <div className={styles.icon}><ScenovaIcon name="account" size={21}/></div>
         <div className={styles.copy}>
           <b>ยังไม่มีบัญชี Exness?</b>
-          <span>สมัครผ่าน SCENOVA เพื่อรับสิทธิพิเศษ แล้วค่อยเชื่อม MT5 ได้ทันที</span>
+          <span>สมัครผ่าน SCENOVA เพื่อรับราคาพิเศษและสิทธิพิเศษ แล้วค่อยเชื่อม MT5 ได้ทันที</span>
         </div>
         <button type="button" onClick={() => setOpen(true)}>
           สมัคร Exness
@@ -127,7 +127,7 @@ export function ExnessSignupCard() {
             </div>
 
             <div className={styles.deviceRow}>
-              <span>อุปกรณ์ที่กำลังใช้</span>
+              <span>ลิงก์สมัครสำหรับ</span>
               <b>{deviceLabel}</b>
             </div>
 
