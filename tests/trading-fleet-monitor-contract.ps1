@@ -15,6 +15,11 @@ foreach ($required in @(
   '@Controller("fleet-monitor")',
   '@UseGuards(JwtGuard)',
   '@Get()',
+  '@Query("from")',
+  '@Query("to")',
+  'request_range AS',
+  "a.status='ACTIVE'",
+  'JOIN mt5_accounts a ON a.id=bi.mt5_account_id',
   'OWN_ASSIGNED_SLOTS',
   'ALL_SLOTS',
   'AND ls.assigned_user_id=$1',
@@ -40,15 +45,15 @@ if (-not $module.Contains('FleetMonitorController')) {
 }
 
 foreach ($required in @(
-  'api("/fleet-monitor")',
+  'api("/fleet-monitor" + fleetPeriodQuery(rangeMode, customFrom, customTo))',
   'Trading Fleet Monitor',
   'MY SLOTS ONLY',
   'ADMIN · ALL SLOTS',
   'Auto refresh 15s',
   'Balance',
   'Equity',
-  'Today P/L',
-  '30D P/L',
+  'Today P/L · Live',
+  'P/L ช่วง',
   'Net P/L',
   'Win Rate',
   'Profit Factor',
@@ -59,11 +64,24 @@ foreach ($required in @(
   'Total Lots',
   'Spread',
   'Ping',
-  'Deposit/Withdraw'
+  'Deposit/Withdraw',
+  'ช่วงเวลาผลงาน',
+  'กำหนดวัน/เวลาเอง',
+  'type="datetime-local"',
+  'Asia/Bangkok',
+  'บัญชีที่เชื่อมต่อ',
+  'Trade Journal ตามช่วงที่เลือก'
 )) {
   if (-not $web.Contains($required)) {
     throw "Fleet monitor web contract missing: $required"
   }
+}
+
+if ($web.Contains('<option value="EMPTY">')) {
+  throw 'Fleet Monitor must not offer EMPTY slots because only connected MT5 accounts belong on this page'
+}
+if ($api.Contains('LEFT JOIN mt5_accounts a ON a.id=bi.mt5_account_id')) {
+  throw 'Fleet Monitor must not LEFT JOIN MT5 accounts; disconnected slots must be excluded at the API'
 }
 
 foreach ($required in @(
@@ -72,7 +90,10 @@ foreach ($required in @(
   '.statGrid',
   '.tone_good',
   '.tone_warn',
-  '.tone_bad'
+  '.tone_bad',
+  '.periodBar{',
+  '.dateField{',
+  '.periodApplied{'
 )) {
   if (-not $css.Contains($required)) {
     throw "Fleet monitor compact card layout missing: $required"

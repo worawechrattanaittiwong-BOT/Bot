@@ -1,7 +1,9 @@
 import {
+  BadRequestException,
   Controller,
   Get,
   Header,
+  Query,
   Req,
   UseGuards
 } from "@nestjs/common";
@@ -27,17 +29,40 @@ export class FleetMonitorController {
     return Number.isFinite(parsed) ? parsed : fallback;
   }
 
+  private dateParam(value: unknown, label: string) {
+    const text = String(value || "").trim();
+    if (!text) return null;
+    const date = new Date(text);
+    if (!Number.isFinite(date.getTime())) {
+      throw new BadRequestException(label + " ไม่ใช่วันเวลาที่ถูกต้อง");
+    }
+    return date;
+  }
+
   @Get()
   @Header("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate")
-  async overview(@Req() req: any) {
+  async overview(
+    @Req() req: any,
+    @Query("from") fromRaw = "",
+    @Query("to") toRaw = ""
+  ) {
     const actor = req.user as FleetActor;
     const elevated = this.elevated(actor);
+    const fromAt = this.dateParam(fromRaw, "เวลาเริ่มต้น");
+    const toAt = this.dateParam(toRaw, "เวลาสิ้นสุด");
+    if (fromAt && toAt && fromAt.getTime() >= toAt.getTime()) {
+      throw new BadRequestException("เวลาสิ้นสุดต้องอยู่หลังเวลาเริ่มต้น");
+    }
     const self = await this.db.one(
       "SELECT id,user_code,email,role,status FROM users WHERE id=$1",
       [actor.sub]
     );
 
-    const params = elevated ? [] : [actor.sub];
+    const params = [
+      actor.sub,
+      fromAt ? fromAt.toISOString() : null,
+      toAt ? toAt.toISOString() : null
+    ];
     const customerSlotScope = elevated ? "" : "AND ls.assigned_user_id=$1";
     const instanceOwnershipGuard = elevated
       ? ""
@@ -53,7 +78,13 @@ export class FleetMonitorController {
     const accountOwnershipGuard = elevated ? "" : "AND a.user_id=$1";
 
     const result = await this.db.query(
-      `WITH basket_stats AS (
+      `WITH request_range AS (
+         SELECT
+           $1::uuid AS actor_id,
+           $2::timestamptz AS from_at,
+           $3::timestamptz AS to_at
+       ),
+       basket_stats AS (
          SELECT
            tj.mt5_account_id,
            COUNT(*)::int AS closed_baskets,
@@ -96,6 +127,8 @@ export class FleetMonitorController {
          FROM trade_journal tj
          WHERE tj.event_type='BASKET'
            AND tj.mt5_account_id IS NOT NULL
+           AND ((SELECT from_at FROM request_range) IS NULL OR tj.created_at >= (SELECT from_at FROM request_range))
+           AND ((SELECT to_at FROM request_range) IS NULL OR tj.created_at <= (SELECT to_at FROM request_range))
          GROUP BY tj.mt5_account_id
        ),
        entry_stats AS (
@@ -113,6 +146,8 @@ export class FleetMonitorController {
          FROM trade_journal tj
          WHERE tj.event_type='ENTRY'
            AND tj.mt5_account_id IS NOT NULL
+           AND ((SELECT from_at FROM request_range) IS NULL OR tj.created_at >= (SELECT from_at FROM request_range))
+           AND ((SELECT to_at FROM request_range) IS NULL OR tj.created_at <= (SELECT to_at FROM request_range))
          GROUP BY tj.mt5_account_id
        ),
        curve AS (
@@ -128,6 +163,8 @@ export class FleetMonitorController {
          FROM trade_journal tj
          WHERE tj.event_type='BASKET'
            AND tj.mt5_account_id IS NOT NULL
+           AND ((SELECT from_at FROM request_range) IS NULL OR tj.created_at >= (SELECT from_at FROM request_range))
+           AND ((SELECT to_at FROM request_range) IS NULL OR tj.created_at <= (SELECT to_at FROM request_range))
        ),
        curve_peak AS (
          SELECT
@@ -227,7 +264,7 @@ export class FleetMonitorController {
          LIMIT 1
        ) bi ON true
        LEFT JOIN worker_nodes wn ON wn.runner_id=bi.runner_id
-       LEFT JOIN mt5_accounts a ON a.id=bi.mt5_account_id ${accountOwnershipGuard}
+       JOIN mt5_accounts a ON a.id=bi.mt5_account_id AND a.status='ACTIVE' ${accountOwnershipGuard}
        LEFT JOIN users account_user ON account_user.id=a.user_id
        LEFT JOIN basket_stats bs ON bs.mt5_account_id=a.id
        LEFT JOIN entry_stats es ON es.mt5_account_id=a.id
@@ -448,6 +485,11 @@ export class FleetMonitorController {
       elevated,
       scope: elevated ? "ALL_SLOTS" : "OWN_ASSIGNED_SLOTS",
       generatedAt: new Date().toISOString(),
+      period: {
+        from: fromAt ? fromAt.toISOString() : null,
+        to: toAt ? toAt.toISOString() : null,
+        timezone: "Asia/Bangkok"
+      },
       source: {
         live: "bot_instances.metrics / EA heartbeat",
         performance: "trade_journal",
