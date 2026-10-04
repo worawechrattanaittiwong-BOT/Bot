@@ -56,6 +56,7 @@ services:
       THAIBULKSMS_SENDER: ${THAIBULKSMS_SENDER:-}
       TRIAL_IDENTITY_SECRET: ${TRIAL_IDENTITY_SECRET:-}
       TRIAL_SMS_DAYS: ${TRIAL_SMS_DAYS:-1}
+      MODE_GUIDE_MEDIA_DIR: /data/scenova-mode-guide
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/api/health',{signal:AbortSignal.timeout(4000)}).then(async r=>{const b=await r.json();if(!r.ok||b.ok!==true||b.service!=='bot-api')process.exit(1)}).catch(()=>process.exit(1))"]
       interval: 5s
@@ -67,6 +68,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
+    volumes:
+      - mode_guide_media:/data/scenova-mode-guide
     networks: [internal]
 
   web:
@@ -98,3 +101,4 @@ networks:
 
 volumes:
   pgdata:
+  mode_guide_media:
