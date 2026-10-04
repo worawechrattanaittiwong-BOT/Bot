@@ -446,7 +446,7 @@ export class CloudCustomerController {
   }
 
   @Get("orders") async orders(@Req() req: any) {
-    return (await this.db.query(`SELECT o.id,o.months,o.amount,o.original_amount,o.discount_amount,o.promotion_code,o.discount_source,o.broker_benefit_level,o.broker_benefit_discount_bps,o.status,o.qr_url,o.expires_at,o.created_at,o.paid_at,o.slot_id,o.purchase_type,
+    return (await this.db.query(`SELECT o.id,o.months,o.amount,o.original_amount,o.discount_amount,o.promotion_code,o.status,o.qr_url,o.expires_at,o.created_at,o.paid_at,o.slot_id,o.purchase_type,
       o.list_price_usd_cents,o.final_price_usd_cents,o.fx_rate_usd_thb,o.fx_source,o.fx_quoted_at,
       s.expires_at subscription_expires_at,b.actual_state,b.last_seen_at,a.account_number,ls.slot_type
       FROM cloud_orders o
@@ -695,20 +695,14 @@ export class CloudCustomerController {
       const discountAmountSatang = Math.floor(originalAmountSatang * effectiveBps / 10000);
       const finalAmountSatang = Math.max(0, originalAmountSatang - discountAmountSatang);
       const finalPriceUsdCents = discountedUsdCents(listPriceUsdCents, effectiveDiscountPercent);
-      const discountSource = benefitWins
-        ? "BROKER_PARTNER"
-        : promoBps > 0
-          ? "PROMOTION"
-          : "NONE";
       const appliedPromoCode = benefitWins ? null : promo.code;
       const appliedPromoRedemptionId = benefitWins ? null : promo.redemptionId;
 
       const order = (await tx.query(
         `INSERT INTO cloud_orders(
            user_id,months,amount,original_amount,discount_amount,promotion_code,promotion_redemption_id,runner_id,slot_id,purchase_type,
-           list_price_usd_cents,final_price_usd_cents,fx_rate_usd_thb,fx_source,fx_quoted_at,
-           discount_source,broker_partner_client_id,broker_benefit_level,broker_benefit_discount_bps
-         ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING *`,
+           list_price_usd_cents,final_price_usd_cents,fx_rate_usd_thb,fx_source,fx_quoted_at
+         ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
         [
           req.user.sub,
           pricingPack.months,
@@ -724,14 +718,20 @@ export class CloudCustomerController {
           finalPriceUsdCents,
           quote.usdThb,
           quote.source,
-          quote.quotedAt,
-          discountSource,
-          benefitWins ? benefit!.partnerClientId : null,
-          benefitWins ? benefit!.levelCode : null,
-          benefitWins ? benefitBps : 0
+          quote.quotedAt
         ]
       )).rows[0];
       await this.promotions.attachOrder(tx, appliedPromoRedemptionId, order.id);
+      if (benefitWins && benefit) {
+        await this.brokerBenefits.recordCheckoutBenefit(tx, {
+          purchaseType: "CLOUD",
+          orderId: order.id,
+          benefit,
+          originalAmountSatang,
+          discountAmountSatang,
+          finalAmountSatang
+        });
+      }
       return order;
     });
     if (Number(order.amount) === 0) return this.cloud.activateFreeOrder(order.id);
