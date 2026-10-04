@@ -67,6 +67,8 @@ import { InAppCampaignAssetController } from "./in-app-campaign-asset.controller
 import { InAppCampaignService } from "./in-app-campaign.service";
 import { ModeGuideVideoAdminController, ModeGuideVideoController } from "./mode-guide-video.controller";
 import { ModeGuideVideoService } from "./mode-guide-video.service";
+import { AdminBrokerController, BrokerController } from "./brokers/broker.controller";
+import { BrokerService } from "./brokers/broker.service";
 
 @Module({
   imports: [
@@ -75,8 +77,9 @@ import { ModeGuideVideoService } from "./mode-guide-video.service";
       signOptions: { expiresIn: "7d" }
     })
   ],
-  controllers: [ModeGuideVideoAdminController, ModeGuideVideoController, AdminPaymentQrSettingsController, InAppCampaignAssetController, InAppCampaignAdminController, InAppCampaignController, RuntimeEventWorkerController, RuntimeEventStreamController, ServerSoftwareUpdateAdminController, ServerSoftwareUpdateWorkerController, CloudUpdateAdminController, CloudUpdateWorkerController, CloudServerAdminController, ServerEnrollmentController, OwnerManagementController, OwnerMobileController, CommissionPayoutWorkerController, AdminCommissionWithdrawalsController, CommissionWalletWithdrawalController, AdminApiCredentialsController, AdminServiceLinksController, ProductionHardeningController, RuntimeMigrationController, RuntimeMigrationAgentController, RuntimeSafetyController, CloudTestController, CloudAdminController, CloudCustomerController, CloudPaymentController, LocalPackageCustomerController, LocalPackageAdminController, RootController, CatalogController, AuthController, AccountSecurityController, TrialCouponController, BotController, DashboardLiveController, MobileMirrorController, FleetMonitorController, PartnerController, ReferralController, ManualMt5Controller, TradingSymbolController, EaTradingSymbolController, AdminController, EaController, AgentActionController, InstallerController, BacktestController, PerformanceController, PerformanceAnalyticsController, PerformanceActionsController, SharedPerformanceController, HealthController, WorkerController],
+  controllers: [AdminBrokerController, BrokerController, ModeGuideVideoAdminController, ModeGuideVideoController, AdminPaymentQrSettingsController, InAppCampaignAssetController, InAppCampaignAdminController, InAppCampaignController, RuntimeEventWorkerController, RuntimeEventStreamController, ServerSoftwareUpdateAdminController, ServerSoftwareUpdateWorkerController, CloudUpdateAdminController, CloudUpdateWorkerController, CloudServerAdminController, ServerEnrollmentController, OwnerManagementController, OwnerMobileController, CommissionPayoutWorkerController, AdminCommissionWithdrawalsController, CommissionWalletWithdrawalController, AdminApiCredentialsController, AdminServiceLinksController, ProductionHardeningController, RuntimeMigrationController, RuntimeMigrationAgentController, RuntimeSafetyController, CloudTestController, CloudAdminController, CloudCustomerController, CloudPaymentController, LocalPackageCustomerController, LocalPackageAdminController, RootController, CatalogController, AuthController, AccountSecurityController, TrialCouponController, BotController, DashboardLiveController, MobileMirrorController, FleetMonitorController, PartnerController, ReferralController, ManualMt5Controller, TradingSymbolController, EaTradingSymbolController, AdminController, EaController, AgentActionController, InstallerController, BacktestController, PerformanceController, PerformanceAnalyticsController, PerformanceActionsController, SharedPerformanceController, HealthController, WorkerController],
   providers: [
+    BrokerService,
     ModeGuideVideoService,
     InAppCampaignService,
     RuntimeEventService,
