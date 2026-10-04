@@ -214,10 +214,22 @@ export default function BrokerPage() {
     }
   }
 
-  if (loading || !account || !summary) {
+  if (loading) {
     return (
       <main className={styles.loadingPage}>
         <div className={styles.loadingCard}>กำลังเปิด Broker Center...</div>
+      </main>
+    );
+  }
+
+  if (!account || !summary) {
+    return (
+      <main className={styles.loadingPage}>
+        <div className={styles.loadingCard}>
+          <b>เปิด Broker Center ไม่สำเร็จ</b>
+          <span>{error || "ไม่สามารถโหลดข้อมูล Broker ได้"}</span>
+          <button type="button" onClick={() => window.location.reload()}>ลองใหม่</button>
+        </div>
       </main>
     );
   }
