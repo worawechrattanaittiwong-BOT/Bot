@@ -58,17 +58,23 @@ export class BrokerBenefitService {
       CREATE INDEX IF NOT EXISTS idx_broker_partner_clients_user
         ON broker_partner_clients(user_id,updated_at DESC);
 
-      ALTER TABLE local_orders
-        ADD COLUMN IF NOT EXISTS discount_source varchar(24) NOT NULL DEFAULT 'NONE',
-        ADD COLUMN IF NOT EXISTS broker_partner_client_id uuid REFERENCES broker_partner_clients(id) ON DELETE SET NULL,
-        ADD COLUMN IF NOT EXISTS broker_benefit_level varchar(32),
-        ADD COLUMN IF NOT EXISTS broker_benefit_discount_bps integer NOT NULL DEFAULT 0;
+      CREATE TABLE IF NOT EXISTS broker_benefit_order_applications (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        purchase_type varchar(16) NOT NULL
+          CHECK (purchase_type IN ('LOCAL','CLOUD')),
+        order_id uuid NOT NULL,
+        partner_client_id uuid NOT NULL REFERENCES broker_partner_clients(id) ON DELETE RESTRICT,
+        benefit_level varchar(32) NOT NULL,
+        discount_bps integer NOT NULL CHECK (discount_bps BETWEEN 1 AND 5000),
+        original_amount_satang integer NOT NULL CHECK (original_amount_satang>=0),
+        discount_amount_satang integer NOT NULL CHECK (discount_amount_satang>=0),
+        final_amount_satang integer NOT NULL CHECK (final_amount_satang>=0),
+        created_at timestamptz NOT NULL DEFAULT now(),
+        UNIQUE(purchase_type,order_id)
+      );
 
-      ALTER TABLE cloud_orders
-        ADD COLUMN IF NOT EXISTS discount_source varchar(24) NOT NULL DEFAULT 'NONE',
-        ADD COLUMN IF NOT EXISTS broker_partner_client_id uuid REFERENCES broker_partner_clients(id) ON DELETE SET NULL,
-        ADD COLUMN IF NOT EXISTS broker_benefit_level varchar(32),
-        ADD COLUMN IF NOT EXISTS broker_benefit_discount_bps integer NOT NULL DEFAULT 0;
+      CREATE INDEX IF NOT EXISTS idx_broker_benefit_order_client
+        ON broker_benefit_order_applications(partner_client_id,created_at DESC);
 
       INSERT INTO broker_benefit_levels(broker_id,code,name,discount_bps,sort_order)
       SELECT id,'STANDARD','Standard',1000,10 FROM brokers WHERE code='EXNESS'
@@ -384,7 +390,12 @@ export class BrokerBenefitService {
     userId: string
   ): Promise<CheckoutBrokerBenefit | null> {
     try {
-      await this.ensureSchema();
+      const available = (
+        await tx.query(
+          "SELECT to_regclass('public.broker_partner_clients') AS clients, to_regclass('public.broker_benefit_levels') AS levels"
+        )
+      ).rows[0];
+      if (!available?.clients || !available?.levels) return null;
 
       const row = (
         await tx.query(
@@ -422,6 +433,44 @@ export class BrokerBenefitService {
       // valid package checkout. The customer simply receives the normal price
       // or an explicitly entered promotion if Broker Benefits are unavailable.
       return null;
+    }
+  }
+
+  async recordCheckoutBenefit(
+    tx: PoolClient,
+    input: {
+      purchaseType: "LOCAL" | "CLOUD";
+      orderId: string;
+      benefit: CheckoutBrokerBenefit;
+      originalAmountSatang: number;
+      discountAmountSatang: number;
+      finalAmountSatang: number;
+    }
+  ) {
+    await tx.query("SAVEPOINT broker_benefit_audit");
+    try {
+      await tx.query(
+        `INSERT INTO broker_benefit_order_applications(
+           purchase_type,order_id,partner_client_id,benefit_level,discount_bps,
+           original_amount_satang,discount_amount_satang,final_amount_satang
+         )
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8)
+         ON CONFLICT(purchase_type,order_id) DO NOTHING`,
+        [
+          input.purchaseType,
+          input.orderId,
+          input.benefit.partnerClientId,
+          input.benefit.levelCode,
+          input.benefit.discountBps,
+          Math.max(0, Math.trunc(input.originalAmountSatang)),
+          Math.max(0, Math.trunc(input.discountAmountSatang)),
+          Math.max(0, Math.trunc(input.finalAmountSatang))
+        ]
+      );
+      await tx.query("RELEASE SAVEPOINT broker_benefit_audit");
+    } catch {
+      await tx.query("ROLLBACK TO SAVEPOINT broker_benefit_audit");
+      await tx.query("RELEASE SAVEPOINT broker_benefit_audit");
     }
   }
 }
