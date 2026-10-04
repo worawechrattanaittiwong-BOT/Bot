@@ -5992,3 +5992,130 @@
   }
 }
 /* ===== /Control Center V60 ===== */
+
+
+/* ===== Control Center V61 · desktop readable typography =====
+   Final desktop typography owner. Keep the established card geometry while
+   removing 9–11px micro text from the primary customer trading workspace. */
+@media(min-width:761px){
+  .cc-v15 .cc-bot-v2-embedded .cc-bot-v2-head h2{
+    font-size:19px!important;
+  }
+  .cc-v15 .cc-bot-v2-embedded .cc-bot-v2-section-title b{
+    font-size:14px!important;
+  }
+
+  .cc-v19-settings-card .cc-bot-setting-help-title,
+  .cc-v19-settings-card .cc-bot-v12-mode-select-wrap>label>span,
+  .cc-v19-settings-card .cc-bot-v2-main .cc-bot-v2-field>span,
+  .cc-v19-settings-card .cc-bot-v2-limit-grid>div>div:first-child{
+    font-size:13px!important;
+    line-height:1.35!important;
+  }
+
+  .cc-v19-settings-card .cc-bot-v12-mode-select,
+  .cc-v19-settings-card .cc-bot-v2-main select.input,
+  .cc-v19-settings-card .cc-bot-v2-main input,
+  .cc-v19-settings-card .cc-bot-v2-main .money-input,
+  .cc-v19-settings-card .cc-bot-v2-main .number-input,
+  .cc-v19-settings-card .cc-bot-v2-main .cc-bot-v2-readonly-control,
+  .cc-v19-settings-card .cc-bot-v2-main .cc-bot-v2-choice-row button b,
+  .cc-v19-settings-card .cc-bot-v2-limit-grid .setting-toggle-text{
+    font-size:13px!important;
+  }
+
+  .cc-v19-settings-card .cc-bot-setting-help-popover{
+    font-size:12px!important;
+    line-height:1.45!important;
+  }
+
+  .cc-bot-v2-embedded .cc-btc-risk-note b{
+    font-size:13px!important;
+  }
+  .cc-bot-v2-embedded .cc-btc-risk-note small{
+    font-size:12px!important;
+    line-height:1.5!important;
+  }
+
+  .cc-v12 .cc-v13-kpis span,
+  .cc-v12 .cc-v13-kpis small{
+    font-size:12px!important;
+  }
+  .cc-v12 .cc-v13-kpis b{
+    font-size:19px!important;
+  }
+
+  .cc-v17-running-head small,
+  .cc-v17-running-head em{
+    font-size:12px!important;
+  }
+  .cc-v17-running-head b{
+    font-size:14px!important;
+  }
+  .cc-v17-running-table>.head{
+    font-size:12px!important;
+  }
+  .cc-v17-running-table .row{
+    font-size:13px!important;
+  }
+  .cc-v17-running-table .row small{
+    font-size:12px!important;
+  }
+
+  .cc-v12-card-head small,
+  .cc-v12-card-head em{
+    font-size:12px!important;
+  }
+  .cc-v12-card-head b{
+    font-size:14px!important;
+  }
+  .cc-v12-mode-table .head{
+    font-size:12px!important;
+  }
+  .cc-v12-mode-table .row{
+    font-size:13px!important;
+  }
+  .cc-v12-mode-table .row>span small{
+    font-size:12px!important;
+  }
+
+  .cc-v46-performance-system-head b{
+    font-size:13px!important;
+  }
+  .cc-v46-performance-system-head small,
+  .cc-v46-performance-system-head em,
+  .cc-v46-performance-system-grid span,
+  .cc-v46-performance-system-grid small{
+    font-size:12px!important;
+  }
+  .cc-v46-performance-system-grid b{
+    font-size:13px!important;
+  }
+
+  .cc-shell-v4 .cc-v42-card-head b,
+  .cc-shell-v4 .cc-v42-mini-stats b,
+  .cc-shell-v4 .cc-v42-news-status b{
+    font-size:13px!important;
+  }
+  .cc-shell-v4 .cc-v42-card-head small,
+  .cc-shell-v4 .cc-v42-card-head em,
+  .cc-shell-v4 .cc-v42-card-head button,
+  .cc-shell-v4 .cc-v42-table-head,
+  .cc-shell-v4 .cc-v42-table-row,
+  .cc-shell-v4 .cc-v42-log-row time,
+  .cc-shell-v4 .cc-v42-log-row small,
+  .cc-shell-v4 .cc-v42-mini-stats small,
+  .cc-shell-v4 .cc-v42-news-list small,
+  .cc-shell-v4 .cc-v42-news-list em,
+  .cc-shell-v4 .cc-v42-news-note,
+  .cc-shell-v4 .cc-v42-risk li,
+  .cc-shell-v4 .cc-v42-system-grid span,
+  .cc-shell-v4 .cc-v42-system-grid small{
+    font-size:12px!important;
+  }
+  .cc-shell-v4 .cc-v42-risk p,
+  .cc-shell-v4 .cc-v42-system-grid b{
+    font-size:13px!important;
+  }
+}
+/* ===== /Control Center V61 ===== */
