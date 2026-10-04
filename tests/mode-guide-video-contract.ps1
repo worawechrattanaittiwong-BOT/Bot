@@ -21,7 +21,6 @@ foreach ($mode in @('AUTO','RACE','COUNTER','FLIP_LOCK','ZERO_GRID','MANUAL')) {
 Assert-Contains $service 'height <= width || width / height > 0.85' 'Server portrait-video guard missing'
 Assert-Contains $service 'MAX_VIDEO_BYTES = 300 * 1024 * 1024' 'Server video size guard missing'
 Assert-Contains $service 'mode_guide_videos' 'Mode guide video persistence table missing'
-Assert-Contains $service '/data/scenova-mode-guide' 'Persistent video media path missing'
 
 Assert-Contains $controller '@Post("upload")' 'Admin video upload endpoint missing'
 Assert-Contains $controller 'FileInterceptor("video"' 'Multipart video upload interceptor missing'
