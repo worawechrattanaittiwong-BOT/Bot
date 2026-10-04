@@ -1,0 +1,57 @@
+$ErrorActionPreference = 'Stop'
+
+$root = Split-Path -Parent $PSScriptRoot
+$service = Get-Content (Join-Path $root 'apps/api/src/mode-guide-video.service.ts') -Raw
+$controller = Get-Content (Join-Path $root 'apps/api/src/mode-guide-video.controller.ts') -Raw
+$module = Get-Content (Join-Path $root 'apps/api/src/app.module.ts') -Raw
+$dashboard = Get-Content (Join-Path $root 'apps/web/app/dashboard/page.tsx') -Raw
+$component = Get-Content (Join-Path $root 'apps/web/components/TradingModeGuideVideos.tsx') -Raw
+$css = Get-Content (Join-Path $root 'apps/web/app/premium-dashboard.css') -Raw
+$api = Get-Content (Join-Path $root 'apps/web/lib/api.ts') -Raw
+$compose = Get-Content (Join-Path $root 'infrastructure/linux/docker-compose.hostinger.yml') -Raw
+$nginx = Get-Content (Join-Path $root 'scripts/configure-domain.sh') -Raw
+
+function Assert-Contains([string]$Text,[string]$Needle,[string]$Message) {
+  if (-not $Text.Contains($Needle)) { throw $Message }
+}
+
+foreach ($mode in @('AUTO','RACE','COUNTER','FLIP_LOCK','ZERO_GRID','MANUAL')) {
+  Assert-Contains $service ("'" + $mode + "'") ("Mode guide video schema/service missing mode " + $mode)
+}
+Assert-Contains $service 'height <= width || width / height > 0.85' 'Server portrait-video guard missing'
+Assert-Contains $service 'MAX_VIDEO_BYTES = 300 * 1024 * 1024' 'Server video size guard missing'
+Assert-Contains $service 'mode_guide_videos' 'Mode guide video persistence table missing'
+Assert-Contains $service '/data/scenova-mode-guide' 'Persistent video media path missing'
+
+Assert-Contains $controller '@Post("upload")' 'Admin video upload endpoint missing'
+Assert-Contains $controller 'FileInterceptor("video"' 'Multipart video upload interceptor missing'
+Assert-Contains $controller '@Get(":id/content")' 'Video streaming endpoint missing'
+Assert-Contains $controller 'Content-Range' 'HTTP range streaming support missing'
+Assert-Contains $controller '@UseGuards(AdminGuard)' 'Admin video mutation guard missing'
+Assert-Contains $controller '@UseGuards(JwtGuard)' 'Authenticated video catalog guard missing'
+
+Assert-Contains $module 'ModeGuideVideoAdminController' 'Mode guide admin controller not registered'
+Assert-Contains $module 'ModeGuideVideoController' 'Mode guide controller not registered'
+Assert-Contains $module 'ModeGuideVideoService' 'Mode guide service not registered'
+
+Assert-Contains $dashboard 'canManageGuideVideos={isOwner}' 'Dashboard must expose video manager only to Owner/Admin'
+Assert-Contains $dashboard '<TradingModeGuideVideos' 'Trading Mode Guide video UI missing'
+
+Assert-Contains $component 'type="file"' 'Inline admin file picker missing'
+Assert-Contains $component 'accept="video/mp4,video/quicktime,video/webm,video/*"' 'Mobile video picker formats missing'
+Assert-Contains $component 'inspectPortraitVideo' 'Client portrait validation missing'
+Assert-Contains $component 'หน้านี้รองรับวิดีโอแนวตั้งเท่านั้น' 'Portrait-only admin feedback missing'
+Assert-Contains $component 'ดูวิดีโอ' 'Customer watch-video action missing'
+Assert-Contains $component 'playsInline' 'Mobile inline playback contract missing'
+
+Assert-Contains $css 'aspect-ratio:9/16' 'Vertical 9:16 video player CSS missing'
+Assert-Contains $css '.cc-mode-guide-video-admin' 'Inline admin video manager styling missing'
+Assert-Contains $api 'init.body instanceof FormData' 'Authenticated FormData support missing'
+Assert-Contains $api 'API_UPLOAD_TIMEOUT_MS' 'Long video upload timeout missing'
+
+Assert-Contains $compose 'MODE_GUIDE_MEDIA_DIR: /data/scenova-mode-guide' 'Production media directory env missing'
+Assert-Contains $compose 'mode_guide_media:/data/scenova-mode-guide' 'Persistent production video volume mount missing'
+Assert-Contains $compose 'mode_guide_media:' 'Persistent production video volume declaration missing'
+Assert-Contains $nginx 'client_max_body_size 320m;' 'Nginx upload allowance must support 300 MB guide videos'
+
+Write-Host 'Trading Mode Guide vertical video contract PASS'
