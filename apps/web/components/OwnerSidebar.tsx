@@ -41,6 +41,10 @@ const packagesNavItem: NavItem = {
   section:"MANAGEMENT", key:"packages", href:"/packages", icon:"wallet",
   label:"Packages", hint:"Trial, Local MT5 & Cloud MT5"
 };
+const brokerNavItem: NavItem = {
+  section:"MANAGEMENT", key:"broker-center", href:"/broker", icon:"cloud",
+  label:"Broker", hint:"Broker connections & partner onboarding"
+};
 const inviteEarnNavItem: NavItem = {
   section:"MANAGEMENT", key:"referrals", href:"/referrals", icon:"referral",
   label:"Invite & Earn", hint:"Share your link & earn rewards"
@@ -58,6 +62,7 @@ export const ownerNavItems: NavItem[] = [
   mt5EaNavItem,
   fleetMonitorNavItem,
   performanceNavItem,
+  brokerNavItem,
   myAccountNavItem,
   inviteEarnNavItem,
   { section:"MANAGEMENT", key:"admin-customers", href:"/admin?view=customers", icon:"users", label:"Customers & Memberships", hint:"Trials, subscriptions & customer access" },
@@ -71,7 +76,7 @@ export const ownerNavItems: NavItem[] = [
   { section:"SYSTEM", key:"website", href:"/website", icon:"strategy", label:"Website", hint:"SCENOVA public website" }
 ];
 
-export const customerNavItems: NavItem[] = [...sharedTradingNavItems, packagesNavItem, myAccountNavItem, inviteEarnNavItem];
+export const customerNavItems: NavItem[] = [...sharedTradingNavItems, packagesNavItem, brokerNavItem, myAccountNavItem, inviteEarnNavItem];
 
 type SidebarNavigateHandler = (href:string)=>boolean | void;
 type PartnerSummary = {

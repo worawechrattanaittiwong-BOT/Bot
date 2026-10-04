@@ -318,6 +318,14 @@ export class PromotionService {
     );
   }
 
+  async releaseReservation(tx: PoolClient, redemptionId: string | null) {
+    if (!redemptionId) return;
+    await tx.query(
+      "UPDATE promotion_redemptions SET status='RELEASED',reserved_until=NULL WHERE id=$1 AND status='RESERVED'",
+      [redemptionId]
+    );
+  }
+
   async consume(tx: PoolClient, type: "LOCAL" | "CLOUD", orderId: string) {
     await tx.query(`
       UPDATE promotion_redemptions

@@ -72,7 +72,7 @@ export class RuntimeSecretsService implements OnApplicationBootstrap {
 
   normalizeCategory(value: unknown) {
     const category = String(value || "OTHER").trim().toUpperCase();
-    return ["EMAIL","SMS","PAYMENT","AI","NEWS","MARKET_DATA","OTHER"].includes(category)
+    return ["EMAIL","SMS","PAYMENT","AI","NEWS","MARKET_DATA","BROKER","OTHER"].includes(category)
       ? category
       : "OTHER";
   }

@@ -19,6 +19,7 @@ import { ReferralService } from "./referral.service";
 import { PromotionService } from "./promotion.service";
 import { EasySlipPaymentService } from "./easyslip-payment.service";
 import { discountedUsdCents, getUsdThbQuote, usdCentsToThbSatang } from "./commerce-currency";
+import { BrokerBenefitService } from "./brokers/broker-benefit.service";
 
 function omiseMode() {
   const key = String(process.env.OMISE_SECRET_KEY || "").trim();
@@ -55,7 +56,8 @@ export class LocalPackageService implements OnApplicationBootstrap, OnModuleDest
     private readonly db: DbService,
     private readonly referrals: ReferralService,
     private readonly promotions: PromotionService,
-    private readonly easyslip: EasySlipPaymentService
+    private readonly easyslip: EasySlipPaymentService,
+    private readonly brokerBenefits: BrokerBenefitService
   ) {}
 
   onApplicationBootstrap() {
@@ -392,6 +394,7 @@ export class LocalPackageService implements OnApplicationBootstrap, OnModuleDest
 
       const listPriceUsdCents = Math.max(0, Math.trunc(Number(pack.price_usd_cents || 0)));
       const originalAmountSatang = usdCentsToThbSatang(listPriceUsdCents, quote.usdThb);
+      const benefit = await this.brokerBenefits.safeCheckoutBenefit(tx, userId);
       const promo = await this.promotions.reserve(tx, {
         code: promoCode,
         userId,
@@ -399,7 +402,23 @@ export class LocalPackageService implements OnApplicationBootstrap, OnModuleDest
         months: pack.months,
         originalAmountSatang
       });
-      const finalPriceUsdCents = discountedUsdCents(listPriceUsdCents, promo.discountPercent);
+
+      const promoBps = Math.max(0, Math.min(10000, Math.round(Number(promo.discountPercent || 0) * 100)));
+      const benefitBps = Math.max(0, Math.min(5000, Number(benefit?.discountBps || 0)));
+      const benefitWins = Boolean(benefit && benefitBps > 0 && benefitBps >= promoBps);
+
+      if (benefitWins && promo.redemptionId) {
+        await this.promotions.releaseReservation(tx, promo.redemptionId);
+      }
+
+      const effectiveBps = benefitWins ? benefitBps : promoBps;
+      const effectiveDiscountPercent = effectiveBps / 100;
+      const discountAmountSatang = Math.floor(originalAmountSatang * effectiveBps / 10000);
+      const finalAmountSatang = Math.max(0, originalAmountSatang - discountAmountSatang);
+      const finalPriceUsdCents = discountedUsdCents(listPriceUsdCents, effectiveDiscountPercent);
+      const appliedPromoCode = benefitWins ? null : promo.code;
+      const appliedPromoRedemptionId = benefitWins ? null : promo.redemptionId;
+
       const order = (
         await tx.query(
           `INSERT INTO local_orders(
@@ -407,12 +426,33 @@ export class LocalPackageService implements OnApplicationBootstrap, OnModuleDest
              list_price_usd_cents,final_price_usd_cents,fx_rate_usd_thb,fx_source,fx_quoted_at
            ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
            RETURNING *`,
-          [userId, pack.months, promo.finalAmountSatang, originalAmountSatang,
-           promo.discountAmountSatang, promo.code, promo.redemptionId,
-           listPriceUsdCents, finalPriceUsdCents, quote.usdThb, quote.source, quote.quotedAt]
+          [
+            userId,
+            pack.months,
+            finalAmountSatang,
+            originalAmountSatang,
+            discountAmountSatang,
+            appliedPromoCode,
+            appliedPromoRedemptionId,
+            listPriceUsdCents,
+            finalPriceUsdCents,
+            quote.usdThb,
+            quote.source,
+            quote.quotedAt
+          ]
         )
       ).rows[0];
-      await this.promotions.attachOrder(tx, promo.redemptionId, order.id);
+      await this.promotions.attachOrder(tx, appliedPromoRedemptionId, order.id);
+      if (benefitWins && benefit) {
+        await this.brokerBenefits.recordCheckoutBenefit(tx, {
+          purchaseType: "LOCAL",
+          orderId: order.id,
+          benefit,
+          originalAmountSatang,
+          discountAmountSatang,
+          finalAmountSatang
+        });
+      }
       return order;
     });
 
