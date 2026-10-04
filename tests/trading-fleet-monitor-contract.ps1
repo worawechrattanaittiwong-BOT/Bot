@@ -91,6 +91,8 @@ foreach ($required in @(
   '.tone_good',
   '.tone_warn',
   '.tone_bad',
+  '.currencyPeriodRow{',
+  'grid-template-columns:minmax(430px,32%) minmax(0,1fr)',
   '.periodBar{',
   '.dateField{',
   '.periodApplied{'
