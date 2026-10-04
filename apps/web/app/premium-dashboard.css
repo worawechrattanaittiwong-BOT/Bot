@@ -5731,16 +5731,27 @@ body.cc-mode-guide-active .cc-mobile-mirror-launch{
   }
   .cc-mode-guide-video-zone{
     min-height:0;
+    height:auto;
+    max-height:none;
     grid-template-columns:58px minmax(0,1fr);
+    grid-template-areas:
+      "poster copy"
+      "actions actions";
+    grid-template-rows:auto auto;
+    align-items:start;
     gap:12px;
     padding:12px;
     border-radius:15px;
   }
+  .cc-mode-guide-video-zone.is-empty{min-height:0}
   .cc-mode-guide-video-poster{
+    grid-area:poster;
+    align-self:start;
     width:54px;
     max-height:92px;
     border-radius:11px;
   }
+  .cc-mode-guide-video-zone-copy{grid-area:copy}
   .cc-mode-guide-video-poster-screen{
     min-height:82px;
     border-radius:8px;
@@ -5757,11 +5768,18 @@ body.cc-mode-guide-active .cc-mobile-mirror-launch{
   }
   .cc-mode-guide-video-meta{margin-top:7px}
   .cc-mode-guide-video-actions{
-    grid-column:1/-1;
-    grid-template-columns:1fr 1fr;
+    grid-area:actions;
+    grid-column:auto;
+    width:100%;
     min-width:0;
+    margin-top:1px;
+    grid-template-columns:1fr 1fr;
+    align-self:stretch;
   }
-  .cc-mode-guide-video-actions>*{width:100%}
+  .cc-mode-guide-video-actions>*{
+    width:100%;
+    min-height:44px;
+  }
   .cc-mode-guide-video-actions>.cc-mode-guide-video-empty{grid-column:1/-1}
   .cc-mode-guide-video-admin{
     position:fixed;
