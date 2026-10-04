@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.1.20"
-#define SCENOVA_EA_VERSION "1.1.20"
-#define SCENOVA_PRODUCT_VERSION "1.1.20"
+#property version   "1.1.21"
+#define SCENOVA_EA_VERSION "1.1.21"
+#define SCENOVA_PRODUCT_VERSION "1.1.21"
 #define SCENOVA_BUILD_ID "SOURCE"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_CONFIGURED_LOSS_ONLY_V1"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
@@ -175,6 +175,7 @@ input double          InpCounterPerPositionProfitMoney = 0.50;
 #define FLAT_HEARTBEAT_HTTP_TIMEOUT_MS 4000
 #define FLAT_HEARTBEAT_RETRY_DELAY_MS 100
 #define CLOUD_RELAY_PENDING_CODE -5902
+#define CLOUD_LIVE_EXECUTION_INTERVAL_MS 200
 #define ZERO_GRID_JOURNAL_FORCE_INTERVAL_MS 3000
 #define ZERO_GRID_JOURNAL_HTTP_TIMEOUT_MS 500
 #define LOCAL_DYNAMIC_PROTECTION_INTERVAL_MS 150
@@ -295,6 +296,7 @@ int    g_ordersInWindow = 0;
 datetime g_lastHeartbeat = 0;
 ulong  g_lastHeartbeatTickMs = 0;
 ulong  g_lastMarketTickMs = 0;
+ulong  g_lastCloudLiveExecutionSnapshotMs = 0;
 ulong  g_lastTimerEventTickMs = 0;
 ulong  g_timerArmedAtTickMs = 0;
 ulong  g_cloudSymbolResolveUntilMs = 0;
@@ -5504,6 +5506,7 @@ void OnTick()
    // directly. SaaS heartbeat/telemetry is never a price source for trading.
    g_lastMarketTickMs=GetTickCount64();
    SampleSpread();
+   PublishCloudLiveExecutionSnapshot();
 
    // Profit target owns the tick before any non-close analysis.
    if(FastProfitClosePriority())
@@ -6439,6 +6442,65 @@ void PublishRealtimeEvent(string eventType, ulong dealTicket=0)
    ResetLastError();
    int out = FileOpen(eventFile,FILE_WRITE|FILE_TXT|FILE_ANSI,0,CP_UTF8);
    if(out == INVALID_HANDLE)
+      return;
+
+   FileWriteString(out,payload);
+   FileClose(out);
+}
+
+void PublishCloudLiveExecutionSnapshot()
+{
+   // Cloud-only fast telemetry path. This is deliberately local file I/O:
+   // no WebRequest, no trade decision, no risk decision, and no waiting on SaaS.
+   // The Cloud Worker drains only the newest snapshot and pushes it through SSE.
+   if(MQLInfoInteger(MQL_TESTER) || !InpCloudRelay ||
+      StringLen(InpInstanceId) < 8)
+      return;
+
+   int positionCount=ScenovaAccountPositionCount();
+   if(positionCount<=0)
+      return;
+
+   ulong nowMs=GetTickCount64();
+   if(g_lastCloudLiveExecutionSnapshotMs>0 &&
+      nowMs>=g_lastCloudLiveExecutionSnapshotMs &&
+      nowMs-g_lastCloudLiveExecutionSnapshotMs<CLOUD_LIVE_EXECUTION_INTERVAL_MS)
+      return;
+
+   // Throttle before filesystem work so a transient file error can never turn
+   // this observability path into a busy loop inside OnTick.
+   g_lastCloudLiveExecutionSnapshotMs=nowMs;
+
+   MqlTick tick;
+   long occurredAtMs=(long)TimeCurrent()*1000;
+   if(SymbolInfoTick(_Symbol,tick) && tick.time_msc>0)
+      occurredAtMs=tick.time_msc;
+
+   string eventId=
+      "live-" +
+      IntegerToString((long)TimeLocal()) + "-" +
+      IntegerToString((long)nowMs);
+   string chartTag=IntegerToString((long)ChartID());
+   string eventFile=
+      "scenova-live-" + chartTag + "-" + eventId + ".request.txt";
+
+   string payload=StringFormat(
+      "{\"eventId\":\"%s\",\"eventType\":\"LIVE_EXECUTION\",\"instanceId\":\"%s\",\"occurredAt\":%I64d,\"occurredAtMs\":%I64d,\"state\":\"%s\",\"executionStatus\":\"%s\",\"symbol\":\"%s\",\"positions\":%d,\"openPositions\":%s,\"liveExecutionIntervalMs\":%d}",
+      RealtimeJsonEscape(eventId),
+      RealtimeJsonEscape(InpInstanceId),
+      (long)TimeCurrent(),
+      occurredAtMs,
+      RealtimeJsonEscape(StateText()),
+      RealtimeJsonEscape(g_executionStatus),
+      RealtimeJsonEscape(_Symbol),
+      positionCount,
+      OpenPositionsTelemetryJson(),
+      CLOUD_LIVE_EXECUTION_INTERVAL_MS
+   );
+
+   ResetLastError();
+   int out=FileOpen(eventFile,FILE_WRITE|FILE_TXT|FILE_ANSI,0,CP_UTF8);
+   if(out==INVALID_HANDLE)
       return;
 
    FileWriteString(out,payload);

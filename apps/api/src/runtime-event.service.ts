@@ -7,6 +7,7 @@ export type RuntimeRealtimeEvent = {
   instanceId: string;
   slotId: string;
   occurredAt: number;
+  occurredAtMs?: number;
   receivedAt: number;
   state?: string | null;
   positions?: number | null;
