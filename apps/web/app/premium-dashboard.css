@@ -5789,7 +5789,7 @@ button.cc-mode-guide-video-poster{
     min-height:154px;
     height:auto;
     max-height:none;
-    grid-template-columns:58px minmax(0,1fr);
+    grid-template-columns:82px minmax(0,1fr);
     grid-template-areas:
       "poster copy"
       "actions actions";
@@ -5799,13 +5799,13 @@ button.cc-mode-guide-video-poster{
     padding:12px;
     border-radius:15px;
   }
-  .cc-mode-guide-video-zone.is-empty{min-height:146px}
+  .cc-mode-guide-video-zone.is-empty{min-height:170px}
   .cc-mode-guide-video-poster{
     grid-area:poster;
     align-self:start;
-    width:54px;
-    max-height:92px;
-    border-radius:11px;
+    width:78px;
+    max-height:139px;
+    border-radius:12px;
   }
   .cc-mode-guide-video-zone-copy{grid-area:copy}
   .cc-mode-guide-video-poster-screen{
@@ -6000,8 +6000,8 @@ button.cc-mode-guide-video-poster{
   .cc-mode-guide-heading small{letter-spacing:.05em}
   .cc-mode-guide-tabs{padding-left:8px;padding-right:8px}
   .cc-mode-guide-content{padding:8px}
-  .cc-mode-guide-video-zone{min-height:148px;grid-template-columns:52px minmax(0,1fr);gap:10px;padding:10px}
-  .cc-mode-guide-video-poster{width:48px;max-height:84px}
+  .cc-mode-guide-video-zone{min-height:166px;grid-template-columns:72px minmax(0,1fr);gap:10px;padding:10px}
+  .cc-mode-guide-video-poster{width:68px;max-height:121px}
   .cc-mode-guide-video-poster-screen{min-height:74px}
   .cc-mode-guide-video-actions{grid-template-columns:1fr}
   .cc-mode-guide-video-actions>.cc-mode-guide-video-empty{grid-column:1}
