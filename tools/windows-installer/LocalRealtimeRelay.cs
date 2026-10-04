@@ -98,7 +98,7 @@ internal static class LocalRealtimeRelay
         }
 
         if (payload.Length < 32 ||
-            !payload.Contains(""LIVE_EXECUTION"", StringComparison.Ordinal))
+            !payload.Contains("\"LIVE_EXECUTION\"", StringComparison.Ordinal))
             return;
 
         var installToken = ScenovaRuntime.TryUnprotect(config.InstallTokenProtected);
