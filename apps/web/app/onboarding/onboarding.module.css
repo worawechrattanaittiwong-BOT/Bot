@@ -15,6 +15,8 @@
 .headerActions{display:flex;align-items:center;gap:10px}
 .headerActions button{border:1px solid #392f55;border-radius:9px;background:#0b0914;color:#bcb5d1;padding:8px 12px;font-size:12px}
 .headerActions button:hover{border-color:#725fd2;color:#fff}
+.homeButton{display:inline-flex;align-items:center;gap:7px;min-height:34px;padding:8px 11px;border:1px solid rgba(105,88,190,.55);border-radius:9px;background:rgba(30,24,58,.72);color:#d9d0ff;text-decoration:none;font-size:12px;font-weight:800}
+.homeButton:hover{border-color:#806bdf;background:rgba(47,36,88,.92);color:#fff}
 .secureBadge{display:flex;align-items:center;gap:7px;color:#9dddc7;font-size:11px;letter-spacing:.06em}
 .shell{position:relative;z-index:1;max-width:1200px;margin:28px auto 0}
 .hero{max-width:760px}
@@ -84,7 +86,10 @@
   .secureBadge{display:none}
   .hero h1{font-size:38px}
   .identity{margin-top:16px}
+  .headerActions{gap:7px}
   .headerActions button{padding:7px 9px}
+  .homeButton{min-height:32px;padding:7px 9px}
+  .homeButton span{display:none}
   .runtimeTabs{gap:5px;padding:6px}
   .runtimeTabs button{min-height:48px;font-size:13px}
   .runtimeContent{min-height:0;padding:24px 18px 20px}
