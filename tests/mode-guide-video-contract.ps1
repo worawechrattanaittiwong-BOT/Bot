@@ -8,8 +8,10 @@ $dashboard = Get-Content (Join-Path $root 'apps/web/app/dashboard/page.tsx') -Ra
 $component = Get-Content (Join-Path $root 'apps/web/components/TradingModeGuideVideos.tsx') -Raw
 $css = Get-Content (Join-Path $root 'apps/web/app/premium-dashboard.css') -Raw
 $api = Get-Content (Join-Path $root 'apps/web/lib/api.ts') -Raw
+$nextConfig = Get-Content (Join-Path $root 'apps/web/next.config.mjs') -Raw
 $compose = Get-Content (Join-Path $root 'infrastructure/linux/docker-compose.hostinger.yml') -Raw
 $nginx = Get-Content (Join-Path $root 'scripts/configure-domain.sh') -Raw
+$deploy = Get-Content (Join-Path $root 'scripts/deploy-hostinger.sh') -Raw
 
 function Assert-Contains([string]$Text,[string]$Needle,[string]$Message) {
   if (-not $Text.Contains($Needle)) { throw $Message }
@@ -53,12 +55,17 @@ Assert-Contains $css '@media(max-width:760px)' 'Trading Mode Guide mobile breakp
 Assert-Contains $css 'height:100dvh;' 'Trading Mode Guide must use the mobile dynamic viewport'
 Assert-Contains $css 'scroll-snap-type:x proximity;' 'Trading Mode Guide tabs must remain swipeable on mobile'
 Assert-Contains $css '.cc-mode-guide-video-admin' 'Inline admin video manager styling missing'
+Assert-Contains $css 'body.cc-mode-guide-active .bps-launcher' 'Bot summary launcher must hide while the mode guide is open'
+Assert-Contains $css 'body.cc-mode-guide-active .cc-mobile-mirror-launch' 'SCENOVA mascot must hide while the mode guide is open'
+Assert-Contains $dashboard 'document.body.classList.add("cc-mode-guide-active")' 'Mode guide must mark the document while open'
 Assert-Contains $api 'init.body instanceof FormData' 'Authenticated FormData support missing'
 Assert-Contains $api 'API_UPLOAD_TIMEOUT_MS' 'Long video upload timeout missing'
+Assert-Contains $nextConfig 'middlewareClientMaxBodySize: "320mb"' 'Next.js proxy must accept guide videos larger than the default 10 MB'
 
 Assert-Contains $compose 'MODE_GUIDE_MEDIA_DIR: /data/scenova-mode-guide' 'Production media directory env missing'
 Assert-Contains $compose 'mode_guide_media:/data/scenova-mode-guide' 'Persistent production video volume mount missing'
 Assert-Contains $compose 'mode_guide_media:' 'Persistent production video volume declaration missing'
 Assert-Contains $nginx 'client_max_body_size 320m;' 'Nginx upload allowance must support 300 MB guide videos'
+Assert-Contains $deploy 'client_max_body_size 320m;' 'Production deploy must repair historical Nginx upload limits'
 
 Write-Host 'Trading Mode Guide vertical video contract PASS'
