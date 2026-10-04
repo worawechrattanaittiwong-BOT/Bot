@@ -488,11 +488,30 @@
 }
 
 .loadingCard {
+  max-width: 520px;
   padding: 20px 24px;
+  display: grid;
+  gap: 10px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 16px;
   background: #120e1c;
   color: #d8d1e3;
+}
+
+.loadingCard span {
+  color: #958da1;
+  line-height: 1.5;
+}
+
+.loadingCard button {
+  min-height: 40px;
+  border: 1px solid rgba(141, 105, 255, 0.45);
+  border-radius: 11px;
+  background: rgba(126, 87, 255, 0.12);
+  color: #ddd3ff;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
 }
 
 @media (max-width: 920px) {
