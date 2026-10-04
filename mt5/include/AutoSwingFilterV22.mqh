@@ -13,6 +13,9 @@ int g_autoV22EmaH4_50 = INVALID_HANDLE;
 int g_autoV22EmaH4_100 = INVALID_HANDLE;
 double g_autoV22InitialRiskPoints = 0.0;
 string g_autoV22LastFilterReason = "INITIALIZING";
+datetime g_autoV22LastNewsCheckAt = 0;
+bool g_autoV22CachedNewsPause = false;
+string g_autoV22CachedNewsReason = "NONE";
 
 string AutoV22RiskStateKey()
 {
@@ -57,7 +60,33 @@ void AutoV22RecoverInitialRisk(int direction)
 {
    if(AutoV22InitialRisk()>0.0 || direction==0)
       return;
-   double entry=AutoV21WeightedEntryPrice(direction);
+
+   double weighted=0.0;
+   double total=0.0;
+   for(int i=PositionsTotal()-1;i>=0;i--)
+   {
+      ulong ticket=PositionGetTicket(i);
+      if(ticket==0 || !PositionSelectByTicket(ticket))
+         continue;
+      if(PositionGetString(POSITION_SYMBOL)!=_Symbol ||
+         PositionGetInteger(POSITION_MAGIC)!=InpMagic)
+         continue;
+      if(StringFind(PositionGetString(POSITION_COMMENT),AUTO_V20_LIVE_COMMENT)<0)
+         continue;
+
+      long type=PositionGetInteger(POSITION_TYPE);
+      int posDirection=type==POSITION_TYPE_BUY ? 1 : -1;
+      if(posDirection!=direction)
+         continue;
+
+      double volume=PositionGetDouble(POSITION_VOLUME);
+      if(volume<=0.0)
+         continue;
+      weighted+=PositionGetDouble(POSITION_PRICE_OPEN)*volume;
+      total+=volume;
+   }
+
+   double entry=total>0.0 ? weighted/total : 0.0;
    if(entry<=0.0 || g_autoV20BasketStopPrice<=0.0)
       return;
    AutoV22SetInitialRisk(entry,g_autoV20BasketStopPrice);
@@ -150,6 +179,16 @@ bool AutoV22MajorNewsPause(string &reasonOut)
    datetime now=TimeTradeServer();
    if(now<=0) now=TimeCurrent();
 
+   if(g_autoV22LastNewsCheckAt>0 &&
+      now-g_autoV22LastNewsCheckAt<30)
+   {
+      reasonOut=g_autoV22CachedNewsReason;
+      return g_autoV22CachedNewsPause;
+   }
+   g_autoV22LastNewsCheckAt=now;
+   g_autoV22CachedNewsPause=false;
+   g_autoV22CachedNewsReason="NONE";
+
    string currency=SymbolInfoString(_Symbol,SYMBOL_CURRENCY_PROFIT);
    if(currency=="") currency="USD";
 
@@ -188,7 +227,9 @@ bool AutoV22MajorNewsPause(string &reasonOut)
    if(nearest==1000000)
       return false;
 
-   reasonOut="AUTO_V22_MAJOR_NEWS_"+nearestName;
+   g_autoV22CachedNewsPause=true;
+   g_autoV22CachedNewsReason="AUTO_V22_MAJOR_NEWS_"+nearestName;
+   reasonOut=g_autoV22CachedNewsReason;
    return true;
 }
 
