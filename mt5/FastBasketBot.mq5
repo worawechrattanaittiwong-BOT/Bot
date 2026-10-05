@@ -185,6 +185,16 @@ input double          InpCounterPerPositionProfitMoney = 0.50;
 #define AUTO_V21_EXIT_LAST_FILL_GRACE_SECONDS 15
 #define AUTO_V21_EXIT_CONFIRM_SECONDS 10
 #define AUTO_V21_EXIT_SEVERE_CONFIRM_SECONDS 6
+// First-entry quality gate. AUTO must observe a fresh, continuously valid
+// setup after RUNNING is authorized; historical chart context alone is not
+// enough to fire immediately on the first market tick.
+#define AUTO_FIRST_ENTRY_START_WARMUP_SECONDS 12
+#define AUTO_FIRST_ENTRY_STABLE_CONFIRM_SECONDS 5
+#define AUTO_FIRST_ENTRY_SIGNAL_GAP_SECONDS 2
+#define AUTO_FIRST_ENTRY_MIN_NET_RR 1.20
+// A wrong-direction exit is an emergency quality correction, not a tiny-loss
+// scalper. Require a meaningful fraction of the original SL distance first.
+#define AUTO_WRONG_DIRECTION_MIN_R 0.25
 // AUTO initial Broker SL standard for XAUUSD: use a fixed 0.01-lot reference
 // so the price distance corresponds to about USD 10 on a standard USD account.
 // Actual configured Lot never changes the SL price distance; e.g. 0.02 lot
@@ -416,6 +426,10 @@ datetime g_autoV20ExitCandidateSince = 0;
 double g_autoV20ExitCandidatePeakAdverse = 0.0;
 double g_autoV20LotCeiling = 0.0;
 double g_autoV20PeakProfit = 0.0;
+datetime g_autoFirstEntryRunStartedAt = 0;
+datetime g_autoFirstEntryCandidateSince = 0;
+datetime g_autoFirstEntryCandidateLastSeenAt = 0;
+int g_autoFirstEntryCandidateDirection = 0;
 double g_autoV20Confidence = 0.0;
 double g_autoV20WinProbability = 0.0;
 int g_autoV20WinSamples = 0;
@@ -1886,6 +1900,7 @@ int OnInit()
       g_state = STATE_RUNNING;
       g_lastSuccessfulHeartbeat = TimeCurrent();
       g_lastRunAuthorization = TimeCurrent();
+      g_autoFirstEntryRunStartedAt = TimeCurrent();
       Print("Strategy Tester mode: SaaS heartbeat bypassed for historical testing only.");
    }
 
@@ -7741,6 +7756,7 @@ void SendHeartbeat()
       JsonNumber(response,"indicatorEvScore",g_indicatorHistoryEvScore)));
 
    string realtimeStateBeforeControl = StateText();
+   bool runAuthorizedBeforeControl = g_runAuthorized;
 
    // desiredState is authoritative. A stale START/SAFE_STOP command must never
    // override the latest state selected on the website.
@@ -7778,6 +7794,13 @@ void SendHeartbeat()
          {
             g_runAuthorized = true;
             g_lastRunAuthorization = TimeCurrent();
+            if(!runAuthorizedBeforeControl || realtimeStateBeforeControl != "RUNNING")
+            {
+               g_autoFirstEntryRunStartedAt = TimeCurrent();
+               g_autoFirstEntryCandidateSince = 0;
+               g_autoFirstEntryCandidateLastSeenAt = 0;
+               g_autoFirstEntryCandidateDirection = 0;
+            }
             g_executionStatus = "EVALUATING";
          }
       }
@@ -7786,11 +7809,19 @@ void SendHeartbeat()
    {
       g_state = STATE_SAFE_STOP;
       g_runAuthorized = false;
+      g_autoFirstEntryRunStartedAt = 0;
+      g_autoFirstEntryCandidateSince = 0;
+      g_autoFirstEntryCandidateLastSeenAt = 0;
+      g_autoFirstEntryCandidateDirection = 0;
       g_executionStatus = "SAFE_STOP";
    }
    else if(desired == "STOPPED")
    {
       g_runAuthorized = false;
+      g_autoFirstEntryRunStartedAt = 0;
+      g_autoFirstEntryCandidateSince = 0;
+      g_autoFirstEntryCandidateLastSeenAt = 0;
+      g_autoFirstEntryCandidateDirection = 0;
       if(ScenovaAccountPositionCount()==0 && ScenovaAccountPendingCount()==0)
       {
          g_state = STATE_STOPPED;
@@ -15948,6 +15979,66 @@ int AutoV20PrecisionDirection(double momentum)
          g_adaptiveBlockReason=swingReason;
          return 0;
       }
+
+      // Genuine NO-TRADE state: when both AUTO sides are nearly tied and no
+      // high-quality zone reaction breaks the tie, wait instead of forcing a
+      // fallback BUY/SELL from old chart context.
+      double confidenceEdge=MathAbs(g_autoV20Buy.confidence-g_autoV20Sell.confidence);
+      double rankEdge=MathAbs(g_autoV20Buy.rankScore-g_autoV20Sell.rankScore);
+      if(!sharedZoneFirst && g_macroTrendDirection==0 &&
+         confidenceEdge<4.0 && rankEdge<5.0)
+      {
+         g_autoV20RejectReason="AUTO_FIRST_DIRECTION_AMBIGUOUS";
+         g_adaptiveBlockReason=g_autoV20RejectReason;
+         return 0;
+      }
+
+      // RR is now a real first-entry gate, not just a ranking adjustment.
+      if(selected.rr<AUTO_FIRST_ENTRY_MIN_NET_RR)
+      {
+         g_autoV20RejectReason="AUTO_FIRST_RR_TOO_LOW";
+         g_adaptiveBlockReason=g_autoV20RejectReason;
+         return 0;
+      }
+
+      datetime firstNow=TimeCurrent();
+      if(g_autoFirstEntryRunStartedAt<=0)
+      {
+         g_autoFirstEntryRunStartedAt=firstNow;
+         g_autoFirstEntryCandidateSince=0;
+         g_autoFirstEntryCandidateLastSeenAt=0;
+         g_autoFirstEntryCandidateDirection=0;
+      }
+
+      if(firstNow-g_autoFirstEntryRunStartedAt<AUTO_FIRST_ENTRY_START_WARMUP_SECONDS)
+      {
+         g_autoV20RejectReason="AUTO_FIRST_FRESH_WARMUP";
+         g_adaptiveBlockReason=g_autoV20RejectReason;
+         return 0;
+      }
+
+      bool candidateBroken=
+         g_autoFirstEntryCandidateDirection!=direction ||
+         g_autoFirstEntryCandidateSince<=0 ||
+         g_autoFirstEntryCandidateLastSeenAt<=0 ||
+         firstNow-g_autoFirstEntryCandidateLastSeenAt>AUTO_FIRST_ENTRY_SIGNAL_GAP_SECONDS;
+      if(candidateBroken)
+      {
+         g_autoFirstEntryCandidateDirection=direction;
+         g_autoFirstEntryCandidateSince=firstNow;
+         g_autoFirstEntryCandidateLastSeenAt=firstNow;
+         g_autoV20RejectReason="AUTO_FIRST_FRESH_CONFIRM_ARMED";
+         g_adaptiveBlockReason=g_autoV20RejectReason;
+         return 0;
+      }
+
+      g_autoFirstEntryCandidateLastSeenAt=firstNow;
+      if(firstNow-g_autoFirstEntryCandidateSince<AUTO_FIRST_ENTRY_STABLE_CONFIRM_SECONDS)
+      {
+         g_autoV20RejectReason="AUTO_FIRST_FRESH_CONFIRM_WAIT";
+         g_adaptiveBlockReason=g_autoV20RejectReason;
+         return 0;
+      }
    }
 
    if(count>0)
@@ -16250,6 +16341,12 @@ bool AutoV21WrongDirectionConfirmed(int direction,double momentum,string &reason
 
    double normalFloor=MathMax(spread*3.50,MathMax(atrM1*0.65,atrM5*0.32));
    double severeFloor=MathMax(spread*6.00,MathMax(atrM1*1.10,atrM5*0.60));
+   double initialRiskPoints=AutoV22InitialRisk();
+   if(initialRiskPoints>0.0)
+   {
+      normalFloor=MathMax(normalFloor,initialRiskPoints*AUTO_WRONG_DIRECTION_MIN_R);
+      severeFloor=MathMax(severeFloor,initialRiskPoints*0.45);
+   }
    if(!candidateActive && adversePoints<normalFloor) return false;
 
    int opposite=-direction;
@@ -16268,6 +16365,7 @@ bool AutoV21WrongDirectionConfirmed(int direction,double momentum,string &reason
    if(vectorExitLost) confirmations++;
 
    bool structureConfirmed=
+      confirmations>=4 &&
       m5Opposite &&
       (emaM5Opposite || m15Opposite) &&
       (m1Opposite || momentumOpposite || vectorExitLost);
@@ -16310,6 +16408,9 @@ void AutoV20OnOrderSent(int direction)
 {
    AUTO_V20_SIDE selected=direction>0 ? g_autoV20Buy : g_autoV20Sell;
    datetime now=TimeCurrent();
+   g_autoFirstEntryCandidateSince=0;
+   g_autoFirstEntryCandidateLastSeenAt=0;
+   g_autoFirstEntryCandidateDirection=0;
    if(g_autoV20BasketStartedAt<=0)
    {
       g_autoV20BasketStartedAt=now;

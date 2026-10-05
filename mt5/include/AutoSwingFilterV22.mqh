@@ -233,14 +233,14 @@ bool AutoV22MajorNewsPause(string &reasonOut)
    return true;
 }
 
-bool AutoV22StrongExecutionConfirmation(
+int AutoV22ExecutionConfirmationCount(
    int direction,
    double momentum,
    AUTO_V20_PULLBACK &pb
 )
 {
    if(direction==0)
-      return false;
+      return 0;
 
    string pattern=direction>0 ? g_priceActionBuy : g_priceActionSell;
    double patternScore=direction>0 ? g_priceActionBuyScore : g_priceActionSellScore;
@@ -261,7 +261,20 @@ bool AutoV22StrongExecutionConfirmation(
        (RecentDirectionalBody(direction,PERIOD_M1) &&
         MomentumSupportsDirection(direction,momentum,0.18)));
 
-   return strongPattern || m5Confirm || pullbackResume;
+   int confirmations=0;
+   if(strongPattern) confirmations++;
+   if(m5Confirm) confirmations++;
+   if(pullbackResume) confirmations++;
+   return confirmations;
+}
+
+bool AutoV22StrongExecutionConfirmation(
+   int direction,
+   double momentum,
+   AUTO_V20_PULLBACK &pb
+)
+{
+   return AutoV22ExecutionConfirmationCount(direction,momentum,pb)>0;
 }
 
 bool AutoV22SwingEntryAllowed(
@@ -378,9 +391,14 @@ bool AutoV22SwingEntryAllowed(
       return false;
    }
 
-   if(!AutoV22StrongExecutionConfirmation(direction,momentum,pb))
+   int executionConfirmations=
+      AutoV22ExecutionConfirmationCount(direction,momentum,pb);
+   int requiredExecutionConfirmations=isAdd ? 1 : 2;
+   if(executionConfirmations<requiredExecutionConfirmations)
    {
-      reasonOut="AUTO_V22_WAIT_M5_M1_CONFIRM";
+      reasonOut=isAdd
+         ? "AUTO_V22_WAIT_M5_M1_CONFIRM"
+         : "AUTO_V22_WAIT_MULTI_EXEC_CONFIRM";
       g_autoV22LastFilterReason=reasonOut;
       return false;
    }
