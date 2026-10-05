@@ -258,7 +258,7 @@ const defaultSettings = {
 };
 
 export default function DashboardPage() {
-  const { showPopup, confirmPopup } = useSystemPopup();
+  const { showPopup, confirmPopup, promptPopup } = useSystemPopup();
   const [data, setData] = useState<Dashboard | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -2757,10 +2757,17 @@ export default function DashboardPage() {
     }
 
     const currentName = String(data?.account?.display_name || "").trim();
-    const nextName = window.prompt(
-      "ตั้งชื่อบัญชี MT5 " + accountNumber + "\nเว้นว่างเพื่อลบชื่อที่ตั้งไว้",
-      currentName
-    );
+    const nextName = await promptPopup({
+      title:currentName ? "เปลี่ยนชื่อบัญชี MT5" : "ตั้งชื่อบัญชี MT5",
+      tone:"info",
+      message:
+        "MT5 " + accountNumber +
+        (currentName ? "\nชื่อปัจจุบัน: " + currentName : "") +
+        "\n\nตั้งชื่อที่จำง่ายเพื่อป้องกันการเริ่มบอทผิดบัญชี",
+      placeholder:currentName || "เช่น พอร์ตหลัก",
+      cancelLabel:"ยกเลิก",
+      confirmLabel:"บันทึกชื่อ"
+    });
     if (nextName === null) return;
 
     const displayName = nextName.trim().replace(/\s+/g, " ");
