@@ -298,6 +298,8 @@ export default function DashboardPage() {
   const [accessClockNow, setAccessClockNow] = useState(()=>Date.now());
   const [selectedSlotId, setSelectedSlotId] = useState("");
   const selectedSlotIdRef = useRef("");
+  const [slotMenuOpen, setSlotMenuOpen] = useState(false);
+  const slotMenuRef = useRef<HTMLDivElement | null>(null);
   const mt5OperationRestoreUserRef = useRef("");
   const connectionWasOnlineRef = useRef<Record<string,boolean>>({});
   const dashboardLoadInFlightRef = useRef(false);
@@ -798,6 +800,24 @@ export default function DashboardPage() {
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [botSettingsOpen]);
+
+  useEffect(() => {
+    if (!slotMenuOpen) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!slotMenuRef.current?.contains(event.target as Node)) {
+        setSlotMenuOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSlotMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [slotMenuOpen]);
 
   useEffect(() => {
     if (!logsOpen || !data?.instance?.id) return;
@@ -2721,11 +2741,53 @@ export default function DashboardPage() {
     setSettingsDirty(false);
     selectedSlotIdRef.current = slotId;
     setSelectedSlotId(slotId);
+    setSlotMenuOpen(false);
     setError("");
     setNotice("");
     setActivationMessage("");
     setTradingPassword("");
     load(slotId);
+  }
+
+  async function renameMt5Account() {
+    const accountNumber = String(data?.account?.account_number || "").trim();
+    if (!accountNumber) {
+      setError("Slot นี้ยังไม่เชื่อมบัญชี MT5 จึงยังตั้งชื่อไม่ได้");
+      return;
+    }
+
+    const currentName = String(data?.account?.display_name || "").trim();
+    const nextName = window.prompt(
+      "ตั้งชื่อบัญชี MT5 " + accountNumber + "\nเว้นว่างเพื่อลบชื่อที่ตั้งไว้",
+      currentName
+    );
+    if (nextName === null) return;
+
+    const displayName = nextName.trim().replace(/\s+/g, " ");
+    if (displayName.length > 80) {
+      setError("ชื่อบัญชียาวเกิน 80 ตัวอักษร");
+      return;
+    }
+
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const slotId = selectedSlotIdRef.current || String(data?.selectedSlot?.id || "");
+      await api(
+        "/bot/mt5/display-name" + (slotId ? "?slotId=" + encodeURIComponent(slotId) : ""),
+        {
+          method:"POST",
+          body:JSON.stringify({ displayName })
+        }
+      );
+      setNotice(displayName ? "บันทึกชื่อบัญชี “" + displayName + "” แล้ว" : "ลบชื่อบัญชีที่ตั้งไว้แล้ว");
+      await load(slotId, true);
+    } catch (e:any) {
+      setError(String(e?.message || "บันทึกชื่อบัญชีไม่สำเร็จ"));
+    } finally {
+      setBusy(false);
+    }
   }
 
   function selectConnectionMode(nextMode: "LOCAL" | "CLOUD") {
@@ -3371,6 +3433,27 @@ export default function DashboardPage() {
     }
 
     if (path.startsWith("/bot/start")) {
+      const currentSlot = (data?.slots || []).find(
+        (slot:any)=>String(slot?.id || "") === String(selectedSlotIdRef.current || data?.selectedSlot?.id || "")
+      ) || data?.selectedSlot || {};
+      const displayName = String(data?.account?.display_name || currentSlot?.account_display_name || "").trim();
+      const accountNo = String(data?.account?.account_number || currentSlot?.account_number || "").trim();
+      const modeLabel = String(currentSlot?.mode || "").toUpperCase() === "CLOUD"
+        ? "VPS Slot #" + String(currentSlot?.slot_number || "1")
+        : "Local MT5";
+      const confirmedAccount = await confirmPopup({
+        title:"ยืนยันบัญชีก่อนเริ่มบอท",
+        tone:"warning",
+        message:
+          (displayName ? "ชื่อบัญชี: " + displayName + "\n" : "") +
+          "MT5: " + (accountNo || "ยังไม่เชื่อมบัญชี") + "\n" +
+          "ตำแหน่ง: " + modeLabel +
+          "\n\nตรวจชื่อและเลขบัญชีให้ถูกต้องก่อนเริ่มบอท",
+        cancelLabel:"กลับไปตรวจสอบ",
+        confirmLabel:"ถูกต้อง · เริ่มบอท"
+      });
+      if (!confirmedAccount) return;
+
       const startSymbol = String(
         metrics.symbol ||
         settings.startupSymbol ||
@@ -3938,6 +4021,32 @@ export default function DashboardPage() {
       const bMode = String(b?.mode || "").toUpperCase() === "CLOUD" ? 0 : 1;
       return aMode - bMode || Number(a?.slot_number || 0) - Number(b?.slot_number || 0);
     });
+  const activeSlotId = String(data.selectedSlot?.id || selectedSlotId || "");
+  const activeSlot = controlSlots.find((slot:any)=>String(slot?.id || "") === activeSlotId) || data.selectedSlot || {};
+  const activeAccountName = String(data.account?.display_name || activeSlot?.account_display_name || "").trim();
+  const activeAccountNumber = String(data.account?.account_number || activeSlot?.account_number || "").trim();
+  const activeSlotMode = String(activeSlot?.mode || "").toUpperCase();
+  const activeSlotFallback = activeSlotMode === "CLOUD"
+    ? "VPS Slot #" + String(activeSlot?.slot_number || "1")
+    : "Local MT5";
+  const activeSlotTitle = activeAccountName || activeSlotFallback;
+  const slotRuntimeState = (slot:any) => {
+    const actual = String(slot?.actual_state || "STOPPED").toUpperCase();
+    const wanted = String(slot?.desired_state || "STOPPED").toUpperCase();
+    if (actual === "RUNNING" || wanted === "RUNNING") return "RUNNING";
+    if (actual === "SAFE_STOP" || wanted === "SAFE_STOP") return "SAFE STOP";
+    if (actual === "OFFLINE") return "OFFLINE";
+    return "STOPPED";
+  };
+  const slotModeLabel = (slot:any) =>
+    String(slot?.mode || "").toUpperCase() === "CLOUD"
+      ? "VPS #" + String(slot?.slot_number || "1")
+      : "Local MT5";
+  const slotDisplayName = (slot:any) =>
+    String(slot?.account_display_name || "").trim() ||
+    (String(slot?.mode || "").toUpperCase() === "CLOUD"
+      ? "VPS Slot #" + String(slot?.slot_number || "1")
+      : "Local MT5");
   const ownerActiveKey =
     activeView === "account" ? "trading-account" :
     activeView === "backtest" ? "trading-backtest" :
@@ -4000,37 +4109,74 @@ export default function DashboardPage() {
           <section className="cc-slot-switcher" aria-label="บัญชีบอทที่กำลังควบคุม">
             <div className="cc-slot-switcher-copy">
               <small>BOT INSTANCE</small>
-              <b>
-                {String(data.selectedSlot?.mode || "").toUpperCase() === "CLOUD"
-                  ? "VPS Slot #" + String(data.selectedSlot?.slot_number || "1")
-                  : "Local MT5"}
-                {" · "}
-                {data.account?.account_number || "ยังไม่เชื่อม MT5"}
-              </b>
+              <b>{activeSlotTitle}</b>
+              <span>{slotModeLabel(activeSlot)} · MT5 {activeAccountNumber || "ยังไม่เชื่อม"}</span>
             </div>
+
             <div className="cc-slot-switcher-actions">
-              {controlSlots.length > 1 ? (
-                <select
-                  value={String(data.selectedSlot?.id || selectedSlotId || "")}
-                  onChange={event=>selectSlot(event.target.value)}
-                  aria-label="สลับ VPS Slot หรือ Local MT5"
-                >
-                  {controlSlots.map((slot:any)=>(
-                    <option key={slot.id} value={slot.id}>
-                      {String(slot.mode || "").toUpperCase() === "CLOUD"
-                        ? "VPS Slot #" + String(slot.slot_number || "1")
-                        : "Local MT5"}
-                      {slot.account_number ? " · " + String(slot.account_number) : " · ยังไม่เชื่อม MT5"}
-                      {slot.actual_state ? " · " + String(slot.actual_state).toUpperCase() : ""}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <span className="cc-slot-single">1 Slot</span>
-              )}
               <button
                 type="button"
-                className="btn ghost"
+                className="cc-slot-rename"
+                disabled={busy || !activeAccountNumber}
+                onClick={renameMt5Account}
+                title="ตั้งชื่อบัญชี MT5 เพื่อป้องกันการเลือกผิด"
+              >
+                ตั้งชื่อ
+              </button>
+
+              <div className="cc-slot-picker" ref={slotMenuRef}>
+                <button
+                  type="button"
+                  className="cc-slot-picker-trigger"
+                  onClick={()=>controlSlots.length > 1 && setSlotMenuOpen(open=>!open)}
+                  aria-haspopup={controlSlots.length > 1 ? "listbox" : undefined}
+                  aria-expanded={controlSlots.length > 1 ? slotMenuOpen : undefined}
+                >
+                  <span className="cc-slot-picker-trigger-copy">
+                    <b>{activeSlotTitle}</b>
+                    <small>{activeAccountNumber || "ยังไม่เชื่อม MT5"}</small>
+                  </span>
+                  <span className="cc-slot-picker-trigger-side">
+                    <span className={"cc-slot-state state-" + slotRuntimeState(activeSlot).toLowerCase().replace(/\s+/g,"-")}>
+                      {slotRuntimeState(activeSlot)}
+                    </span>
+                    {controlSlots.length > 1 && <ScenovaIcon name="arrow-down" size={14}/>}
+                  </span>
+                </button>
+
+                {slotMenuOpen && controlSlots.length > 1 && (
+                  <div className="cc-slot-picker-menu" role="listbox" aria-label="เลือกบัญชี MT5 ที่ต้องการควบคุม">
+                    {controlSlots.map((slot:any)=>{
+                      const selected = String(slot?.id || "") === activeSlotId;
+                      const runtime = slotRuntimeState(slot);
+                      return (
+                        <button
+                          type="button"
+                          key={slot.id}
+                          role="option"
+                          aria-selected={selected}
+                          className={"cc-slot-picker-option " + (selected ? "selected" : "")}
+                          onClick={()=>{
+                            if (selected) setSlotMenuOpen(false);
+                            else selectSlot(String(slot.id));
+                          }}
+                        >
+                          <span className={"cc-slot-picker-radio " + (selected ? "selected" : "")}><i/></span>
+                          <span className="cc-slot-picker-option-copy">
+                            <b>{slotDisplayName(slot)}</b>
+                            <small>{slotModeLabel(slot)} · {slot.account_number ? "MT5 " + String(slot.account_number) : "ยังไม่เชื่อม MT5"}</small>
+                          </span>
+                          <span className={"cc-slot-state state-" + runtime.toLowerCase().replace(/\s+/g,"-")}>{runtime}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <button
+                type="button"
+                className="btn ghost cc-slot-manage"
                 onClick={()=>{
                   setActiveView("account");
                   window.history.pushState({}, "", "/dashboard?view=account");

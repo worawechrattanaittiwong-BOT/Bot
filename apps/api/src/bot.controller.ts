@@ -657,6 +657,7 @@ export class BotController {
          bi.pending_broker_server,
          a.id mt5_account_id,
          a.account_number,
+         a.display_name account_display_name,
          a.broker,
          a.broker_server,
          a.status account_status,
@@ -1786,6 +1787,47 @@ export class BotController {
   @Header("Cache-Control", "no-store, no-cache, must-revalidate")
   async slots(@Req() req: any) {
     return this.slotRows(req.user.sub);
+  }
+
+  @Post("mt5/display-name")
+  async updateMt5DisplayName(
+    @Req() req: any,
+    @Query("slotId") slotId = "",
+    @Body() body: { displayName?: string }
+  ) {
+    const displayName = String(body?.displayName || "").trim().replace(/\s+/g, " ");
+    if (displayName.length > 80) {
+      throw new BadRequestException("ชื่อบัญชียาวเกิน 80 ตัวอักษร");
+    }
+
+    const slot = await this.resolveSlot(req.user.sub, slotId || null);
+    const account = await this.db.one(
+      `SELECT a.id,a.account_number,a.broker_server,a.display_name
+       FROM bot_instances bi
+       JOIN mt5_accounts a ON a.id=bi.mt5_account_id
+       WHERE bi.slot_id=$1 AND a.user_id=$2`,
+      [slot.id, req.user.sub]
+    );
+    if (!account) {
+      throw new ConflictException("Slot นี้ยังไม่เชื่อมบัญชี MT5");
+    }
+
+    if (displayName) {
+      const duplicate = await this.db.one(
+        "SELECT account_number FROM mt5_accounts WHERE user_id=$1 AND id<>$2 AND lower(display_name)=lower($3) LIMIT 1",
+        [req.user.sub, account.id, displayName]
+      );
+      if (duplicate) {
+        throw new ConflictException(
+          "ชื่อนี้ถูกใช้กับ MT5 " + duplicate.account_number + " แล้ว กรุณาใช้ชื่อที่ต่างกัน"
+        );
+      }
+    }
+
+    return this.db.one(
+      "UPDATE mt5_accounts SET display_name=NULLIF($2,'') WHERE id=$1 RETURNING id,account_number,broker,broker_server,mode,status,display_name",
+      [account.id, displayName]
+    );
   }
 
   @Get("logs")

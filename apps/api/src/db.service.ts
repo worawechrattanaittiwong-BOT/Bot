@@ -16,6 +16,12 @@ export class DbService implements OnModuleInit, OnModuleDestroy {
       ALTER TABLE plans
         ADD COLUMN IF NOT EXISTS allow_resale boolean NOT NULL DEFAULT false;
 
+      ALTER TABLE mt5_accounts
+        ADD COLUMN IF NOT EXISTS display_name varchar(80);
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_mt5_account_display_name_user
+        ON mt5_accounts(user_id, lower(display_name))
+        WHERE display_name IS NOT NULL;
+
       INSERT INTO plans(code,name_th,mode,max_mt5_accounts,active,allow_resale)
       VALUES
         ('LOCAL_3SLOT','Local MT5 3 Slots','LOCAL',3,false,false),
