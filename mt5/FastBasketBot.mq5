@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.1.25"
-#define SCENOVA_EA_VERSION "1.1.25"
-#define SCENOVA_PRODUCT_VERSION "1.1.25"
+#property version   "1.1.26"
+#define SCENOVA_EA_VERSION "1.1.26"
+#define SCENOVA_PRODUCT_VERSION "1.1.26"
 #define SCENOVA_BUILD_ID "SOURCE"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_CONFIGURED_LOSS_ONLY_V1"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
@@ -191,7 +191,10 @@ input double          InpCounterPerPositionProfitMoney = 0.50;
 // keeps the same SL price and therefore carries about twice the money risk.
 #define AUTO_V20_REFERENCE_SL_LOT 0.01
 #define AUTO_V20_REFERENCE_SL_USD 10.00
-#define AUTO_V20_REFERENCE_SL_STRUCTURE_CAP 1.20
+// "ประมาณ USD 10" means a dynamic band, not a fixed USD 10 floor.
+// ATR/structure chooses the actual stop inside this band.
+#define AUTO_V20_REFERENCE_SL_MIN_RATIO 0.80
+#define AUTO_V20_REFERENCE_SL_MAX_RATIO 1.20
 // Non-XAU / non-USD fallback remains volatility based.
 #define AUTO_V20_STOP_ATR_FLOOR 1.25
 #define AUTO_V20_STOP_ATR_CAP 2.40
@@ -15388,11 +15391,10 @@ void AutoV20PlanPrices(AUTO_V20_SIDE &side,AUTO_V20_LEVELS &levels)
       AverageTrueRangePoints(PERIOD_M5,g_atrPeriod)*_Point);
    side.entryPrice=side.direction>0 ? tick.ask : tick.bid;
 
-   // XAUUSD standard: choose the price distance that would lose about USD 10
-   // for a fixed 0.01-lot reference position. This is intentionally independent
-   // of account balance/equity and of the customer's actual configured Lot.
-   // If the broker/account cannot express that USD reference safely, fall back
-   // to the existing ATR standard.
+   // XAUUSD standard: USD 10 at 0.01 lot is the CENTER reference, not a
+   // fixed stop and not a minimum. ATR + live structure choose the actual stop
+   // inside an approximately USD 8-12 reference band. Balance/equity and the
+   // customer's actual Lot never change the SL price distance.
    double referenceMoneyStop=AutoV20ReferenceMoneyStopDistance(
       side.direction,side.entryPrice
    );
@@ -15408,30 +15410,53 @@ void AutoV20PlanPrices(AUTO_V20_SIDE &side,AUTO_V20_LEVELS &levels)
    )+2.0;
    double brokerFloorPrice=brokerFloorPoints*_Point;
 
-   double referenceFloor=referenceMoneyStop>0.0
-      ? referenceMoneyStop
-      : atrFallback;
-   double standardStopFloor=MathMax(
-      referenceFloor,
-      MathMax(spreadFloorPrice,brokerFloorPrice)
-   );
+   double standardStopFloor=0.0;
+   double structureStopCap=0.0;
+   double stopDistance=0.0;
 
-   // On XAUUSD/USD the zone/structure layer may widen the ~USD 10 reference
-   // only modestly (up to ~20%). It can never pull the stop closer than the
-   // reference distance. Other symbols retain the ATR 2.40x outer envelope.
-   double structureStopCap=referenceMoneyStop>0.0
-      ? MathMax(
+   if(referenceMoneyStop>0.0)
+   {
+      // Dynamic XAU stop centered near USD 10 @ 0.01 lot.
+      // Example on a standard XAU contract: roughly USD 8-12 loss equivalent.
+      double referenceMin=
+         referenceMoneyStop*AUTO_V20_REFERENCE_SL_MIN_RATIO;
+      double referenceMax=
+         referenceMoneyStop*AUTO_V20_REFERENCE_SL_MAX_RATIO;
+
+      // Spread and broker rules are hard mechanical floors. If either exceeds
+      // the normal band, obey the broker rather than submit an invalid stop.
+      standardStopFloor=MathMax(
+         referenceMin,
+         MathMax(spreadFloorPrice,brokerFloorPrice)
+      );
+      structureStopCap=MathMax(standardStopFloor,referenceMax);
+
+      // ATR decides where we start INSIDE the band; it no longer forces every
+      // XAU trade to exactly the USD 10 reference distance.
+      stopDistance=AutoV20Clamp(
+         atrFallback,
          standardStopFloor,
-         referenceMoneyStop*AUTO_V20_REFERENCE_SL_STRUCTURE_CAP
-      )
-      : atrPrice*AUTO_V20_STOP_ATR_CAP;
+         structureStopCap
+      );
+   }
+   else
+   {
+      // Non-XAU / unsupported account currency keeps the volatility fallback.
+      standardStopFloor=MathMax(
+         atrFallback,
+         MathMax(spreadFloorPrice,brokerFloorPrice)
+      );
+      structureStopCap=MathMax(
+         standardStopFloor,
+         atrPrice*AUTO_V20_STOP_ATR_CAP
+      );
+      stopDistance=standardStopFloor;
+   }
 
-   double stopDistance=standardStopFloor;
    bool zoneStopApplied=false;
 
-   // Zone-First AUTO may widen the standard SL beyond the active Demand/Supply
-   // boundary, but a nearby zone is never allowed to pull SL back inside the
-   // standard stop floor.
+   // Zone-First AUTO may widen the dynamic stop toward Demand/Supply, but only
+   // inside the reference band (unless broker mechanics force a wider floor).
    if(side.direction>0 &&
       g_demandZoneLow>0.0 && g_demandZoneHigh>=g_demandZoneLow &&
       side.entryPrice<=g_demandZoneHigh+atrPrice*0.30)
@@ -15475,10 +15500,9 @@ void AutoV20PlanPrices(AUTO_V20_SIDE &side,AUTO_V20_LEVELS &levels)
          stopDistance=MathMax(stopDistance,structureDistance);
    }
 
-   // Keep AUTO bounded. For XAUUSD/USD, structure stays near the USD 10
-   // reference instead of reopening a very wide ATR envelope. The configured
+   // Keep AUTO bounded near the dynamic reference band. The configured
    // system hard stop may tighten only the outer envelope; it can never shrink
-   // the initial SL below the standard floor.
+   // the initial SL below the mechanical/reference floor.
    double maximumStop=structureStopCap;
    double configuredStop=EffectiveStopLossDistancePoints()*_Point;
    if(configuredStop>standardStopFloor)
