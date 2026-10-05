@@ -10,6 +10,21 @@ const LOGIN_EMAIL_KEY = "scenova_login_email";
 const LOGIN_BACKGROUND_DESKTOP_URL = "/assets/scenova-login-globe-desktop-v1.webp";
 const LOGIN_BACKGROUND_MOBILE_URL = "/assets/scenova-login-globe-mobile-v1.webp";
 
+type PublicExnessSignupInfo = {
+  active: boolean;
+  broker: string;
+  platform: "WEB" | "MOBILE";
+  benefitMessage: string;
+  url: string;
+};
+
+function isMobileDevice() {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent || "";
+  const touchMac = /Macintosh/i.test(ua) && navigator.maxTouchPoints > 1;
+  return /Android|iPhone|iPad|iPod|Mobile/i.test(ua) || touchMac;
+}
+
 function LoginBackground() {
   return (
     <>
@@ -41,6 +56,8 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [rememberEmail, setRememberEmail] = useState(true);
   const [inviteCode, setInviteCode] = useState("");
+  const [exnessInfo, setExnessInfo] = useState<PublicExnessSignupInfo | null>(null);
+  const [exnessBusy, setExnessBusy] = useState(false);
 
   const passwordChecks = useMemo(() => ({
     length: password.length >= 8,
@@ -95,6 +112,31 @@ export default function LoginPage() {
         localStorage.removeItem("bot_token");
         setCheckingSession(false);
       });
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    const platform = isMobileDevice() ? "MOBILE" : "WEB";
+    fetch(
+      API_URL + "/api/public/brokers/exness/signup?platform=" + encodeURIComponent(platform),
+      { cache: "no-store" }
+    )
+      .then(async response => {
+        const payload = await response.json().catch(() => null);
+        if (!response.ok || !payload) throw new Error("Exness signup unavailable");
+        return payload as PublicExnessSignupInfo;
+      })
+      .then(payload => {
+        if (mounted && payload.active && /^https:\/\//i.test(String(payload.url || ""))) {
+          setExnessInfo(payload);
+        }
+      })
+      .catch(() => {
+        if (mounted) setExnessInfo(null);
+      });
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   async function submit(e: FormEvent) {
@@ -188,6 +230,13 @@ export default function LoginPage() {
     setMessage("การกู้รหัสผ่านยังดำเนินการผ่านผู้ดูแล SCENOVA กรุณาติดต่อผู้ดูแลที่ผูกกับบัญชีของคุณ");
   }
 
+  function openExnessSignup() {
+    const url = String(exnessInfo?.url || "");
+    if (!/^https:\/\//i.test(url)) return;
+    setExnessBusy(true);
+    window.location.assign(url);
+  }
+
   if (checkingSession) {
     return (
       <main className={styles.page}>
@@ -234,6 +283,30 @@ export default function LoginPage() {
                 </div>
               </div>
             </div>
+
+            {exnessInfo?.active && (
+              <aside className={styles.partnerCard} aria-label="สมัคร Exness ผ่าน Partner SCENOVA">
+                <div className={styles.partnerMark} aria-hidden="true">E</div>
+                <div className={styles.partnerCopy}>
+                  <small>PARTNER SCENOVA · EXNESS</small>
+                  <b>เปิดบัญชี Exness ผ่าน Partner SCENOVA</b>
+                  <span>{exnessInfo.benefitMessage || "สมัครผ่านลิงก์ Partner ของ SCENOVA แล้วกลับมาเชื่อม MT5 ได้ภายหลัง"}</span>
+                </div>
+                <button
+                  type="button"
+                  className={styles.partnerButton}
+                  onClick={openExnessSignup}
+                  disabled={exnessBusy}
+                >
+                  {exnessBusy ? "กำลังเปิด..." : "สมัคร Exness"} <span aria-hidden="true">↗</span>
+                </button>
+                <div className={styles.partnerTrust}>
+                  <ScenovaIcon name="shield" size={15}/>
+                  <span>Official Partner Link · ใช้ลิงก์สำหรับ {exnessInfo.platform === "MOBILE" ? "มือถือ" : "คอมพิวเตอร์"}</span>
+                </div>
+              </aside>
+            )}
+
             <div className={styles.visualFooter}>DESIGNED FOR YOUR TRADING JOURNEY</div>
           </div>
 

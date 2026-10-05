@@ -13,6 +13,16 @@ import { AdminGuard, JwtGuard } from "../security";
 import { BrokerService } from "./broker.service";
 import { BrokerBenefitService } from "./broker-benefit.service";
 
+@Controller("public/brokers")
+export class PublicBrokerController {
+  constructor(private readonly brokers: BrokerService) {}
+
+  @Get("exness/signup")
+  async exnessSignup(@Query("platform") platform = "WEB") {
+    return this.brokers.publicRegistrationInfo(platform);
+  }
+}
+
 @Controller("brokers")
 @UseGuards(JwtGuard)
 export class BrokerController {

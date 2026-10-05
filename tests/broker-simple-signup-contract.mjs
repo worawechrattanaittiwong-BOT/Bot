@@ -8,9 +8,12 @@ function read(path) {
 const sidebar = read("apps/web/components/OwnerSidebar.tsx");
 const dashboard = read("apps/web/app/dashboard/page.tsx");
 const signup = read("apps/web/components/ExnessSignupCard.tsx");
+const login = read("apps/web/app/login/page.tsx");
+const loginCss = read("apps/web/app/login/login.module.css");
 const brokerPage = read("apps/web/app/broker/page.tsx");
 const brokerService = read("apps/api/src/brokers/broker.service.ts");
 const brokerController = read("apps/api/src/brokers/broker.controller.ts");
+const appModule = read("apps/api/src/app.module.ts");
 const migration = read("database/065_broker_signup_simplify.sql");
 
 assert.match(sidebar, /ownerNavItems:[\s\S]*brokerNavItem/);
@@ -27,6 +30,12 @@ assert.match(signup, /คอมพิวเตอร์/);
 assert.match(signup, /platform: mobile \? "MOBILE" : "WEB"/);
 assert.match(signup, /ไปสมัคร Exness/);
 
+assert.match(login, /PARTNER SCENOVA · EXNESS/);
+assert.match(login, /สมัคร Exness/);
+assert.match(login, /\/api\/public\/brokers\/exness\/signup\?platform=/);
+assert.match(loginCss, /\.partnerCard\{/);
+assert.match(loginCss, /\.partnerButton\{/);
+
 assert.match(brokerPage, /Exness Partner Setup/);
 assert.match(brokerPage, /ลิงก์สำหรับคอมพิวเตอร์/);
 assert.match(brokerPage, /ลิงก์สำหรับมือถือ/);
@@ -37,7 +46,10 @@ assert.doesNotMatch(brokerPage, /Commission & Rebate/);
 assert.doesNotMatch(brokerPage, /API & Automation/);
 
 assert.match(brokerController, /@Get\("exness\/signup"\)/);
+assert.match(brokerController, /@Controller\("public\/brokers"\)[\s\S]*publicRegistrationInfo/);
+assert.match(appModule, /PublicBrokerController/);
 assert.match(brokerService, /registrationInfo/);
+assert.match(brokerService, /publicRegistrationInfo/);
 assert.match(brokerService, /Partner Code/);
 assert.match(brokerService, /ลิงก์คอมพิวเตอร์และลิงก์มือถือให้ครบ/);
 assert.match(brokerService, /platform === "MOBILE"[\s\S]*row\.mobile_partner_link[\s\S]*row\.web_partner_link/);

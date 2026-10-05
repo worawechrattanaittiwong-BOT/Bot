@@ -136,6 +136,50 @@ export class BrokerService {
     };
   }
 
+  async publicRegistrationInfo(platformValue: unknown) {
+    await this.ensureSchema();
+    const platform = this.normalizePlatform(platformValue);
+
+    const row = await this.db.one(
+      `SELECT
+         b.active AS broker_active,
+         COALESCE(s.active,false) AS partner_active,
+         COALESCE(s.partner_code,'') AS partner_code,
+         COALESCE(s.web_partner_link,'') AS web_partner_link,
+         COALESCE(s.mobile_partner_link,'') AS mobile_partner_link,
+         COALESCE(
+           NULLIF(s.benefit_message,''),
+           'สมัครผ่านลิงก์ Partner ของ SCENOVA เพื่อรับราคาพิเศษและสิทธิประโยชน์เพิ่มเติมในระบบ SCENOVA'
+         ) AS benefit_message
+       FROM brokers b
+       LEFT JOIN broker_partner_settings s ON s.broker_id=b.id
+       WHERE b.code='EXNESS'
+       LIMIT 1`
+    );
+
+    const partnerCode = String(row?.partner_code || "").trim();
+    const preferred = platform === "MOBILE"
+      ? String(row?.mobile_partner_link || "").trim()
+      : String(row?.web_partner_link || "").trim();
+    let url = "";
+
+    if (row?.broker_active && row?.partner_active && partnerCode && preferred) {
+      try {
+        url = this.cleanPartnerUrl(preferred, "Partner Link");
+      } catch {
+        url = "";
+      }
+    }
+
+    return {
+      active: Boolean(url),
+      broker: "EXNESS",
+      platform,
+      benefitMessage: String(row?.benefit_message || ""),
+      url
+    };
+  }
+
   async exnessSummary(userId: string) {
     await this.ensureSchema();
 
