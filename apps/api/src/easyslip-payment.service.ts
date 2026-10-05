@@ -363,7 +363,7 @@ export class EasySlipPaymentService implements OnApplicationBootstrap {
          VALUES('CUSTOMER','PAYMENT_CANCELLED','order',$1,$2::jsonb)`,
         [
           order.id,
-          JSON.stringify({ paymentProvider: "EASYSLIP", orderType: input.orderType })
+          JSON.stringify({ paymentProvider: String(order.payment_provider || "EASYSLIP"), orderType: input.orderType })
         ]
       );
       return { ok: true, status: "FAILED" };
@@ -387,6 +387,9 @@ export class EasySlipPaymentService implements OnApplicationBootstrap {
     );
     if (!snapshot) throw new BadRequestException("ไม่พบรายการชำระเงิน");
     if (snapshot.status === "PAID") return { ok: true, status: "PAID" };
+    if (String(snapshot.payment_provider || "").toUpperCase() === "MANUAL_PROMPTPAY") {
+      throw new ConflictException("รายการ PromptPay สำรองนี้รอผู้ดูแลตรวจสอบก่อนเปิดสิทธิ์");
+    }
     if (!["PENDING", "REVIEW"].includes(String(snapshot.status))) {
       throw new ConflictException("รายการนี้ไม่อยู่ในสถานะที่สามารถแนบสลิปได้");
     }

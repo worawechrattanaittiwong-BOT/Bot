@@ -69,6 +69,7 @@ type CloudOrder = {
   discount_amount?:number|null;
   promotion_code?:string|null;
   status:string;
+  payment_provider?:string|null;
   charge_id?:string|null;
   qr_url?:string|null;
   expires_at?:string|null;
@@ -1702,9 +1703,14 @@ export default function DashboardPage() {
     primaryCloudRemaining > 0
   );
   const vpsPaymentOrder = cloudOrders.find(order=>order.id===vpsPaymentOrderId) || null;
-  const vpsPaymentUsesEasySlip = Boolean(vpsPaymentOrder) &&
-    String(cloudCatalog?.paymentMode || "").toUpperCase() === "EASYSLIP" &&
-    !String(vpsPaymentOrder?.charge_id || "").trim();
+  const vpsPaymentProvider = String(vpsPaymentOrder?.payment_provider || "").toUpperCase();
+  const vpsPaymentManualPromptPay = vpsPaymentProvider === "MANUAL_PROMPTPAY";
+  const vpsPaymentUsesEasySlip = Boolean(vpsPaymentOrder) && (
+    vpsPaymentProvider
+      ? vpsPaymentProvider === "EASYSLIP"
+      : String(cloudCatalog?.paymentMode || "").toUpperCase() === "EASYSLIP" &&
+        !String(vpsPaymentOrder?.charge_id || "").trim()
+  );
   const vpsPaymentAccount = cloudCatalog?.paymentAccounts?.[0] || null;
   const vpsPackages = (cloudCatalog?.addonPackages || [])
     .filter(pack=>pack.enabled && Number(pack.price_usd_cents) > 0)
@@ -5243,7 +5249,7 @@ export default function DashboardPage() {
                         ? "ต่ออายุ VPS Slot เสริม #" + vpsRenewSlot.slot_number
                         : "ซื้อ VPS Slot เสริม"}
                 </h2>
-                {vpsPaymentOrder && <p>สแกน QR และแนบสลิปได้ในหน้าต่างนี้</p>}
+                {vpsPaymentOrder && <p>{vpsPaymentManualPromptPay ? "สแกน PromptPay QR สำรอง · หลังโอนเก็บสลิปไว้ให้ผู้ดูแลตรวจ" : vpsPaymentUsesEasySlip ? "สแกน QR และแนบสลิปได้ในหน้าต่างนี้" : "สแกน QR แล้วรอระบบยืนยันการชำระเงิน"}</p>}
               </div>
               <div className="vps-slot-dialog-head-actions">
                 {String(data.user?.role || "").toUpperCase()==="OWNER" && !ownerAddonPriceEditorOpen && !vpsPaymentOrder && (
@@ -5480,6 +5486,24 @@ export default function DashboardPage() {
                             ยกเลิกรายการ
                           </button>
                         </div>
+                      </>
+                    ) : vpsPaymentManualPromptPay ? (
+                      <>
+                        <p>
+                          สแกน PromptPay QR ตามยอดจริง <b>฿{formatThbSatang(vpsPaymentOrder.amount)} THB</b> ได้ทันที
+                          ระบบตรวจชำระเงินอัตโนมัติไม่พร้อมใช้งานชั่วคราว รายการนี้จึงรอผู้ดูแลตรวจสอบก่อนเปิด Slot
+                        </p>
+                        <div className="vps-slot-capacity-warning">
+                          หลังโอน กรุณาเก็บสลิปและแจ้งผู้ดูแลพร้อมเลขรายการ {vpsPaymentOrder.id.slice(0,8)}
+                        </div>
+                        <button
+                          type="button"
+                          className="btn ghost btn-lg"
+                          disabled={vpsPurchaseBusy}
+                          onClick={()=>void cancelVpsSlotOrder(true)}
+                        >
+                          ยกเลิกรายการ
+                        </button>
                       </>
                     ) : (
                       <>

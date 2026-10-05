@@ -203,6 +203,7 @@ CREATE TABLE IF NOT EXISTS cloud_orders (
 CREATE UNIQUE INDEX IF NOT EXISTS cloud_order_user_pending ON cloud_orders(user_id)
  WHERE status IN ('CREATING','PENDING','REVIEW');
 ALTER TABLE cloud_orders ADD COLUMN IF NOT EXISTS checked_at timestamptz;
+ALTER TABLE cloud_orders ADD COLUMN IF NOT EXISTS payment_provider varchar(32);
 ALTER TABLE cloud_orders ADD COLUMN IF NOT EXISTS purchase_type varchar(16) NOT NULL DEFAULT 'PACKAGE';
 ALTER TABLE cloud_orders ADD COLUMN IF NOT EXISTS list_price_usd_cents integer CHECK(list_price_usd_cents>=0);
 ALTER TABLE cloud_orders ADD COLUMN IF NOT EXISTS final_price_usd_cents integer CHECK(final_price_usd_cents>=0);
@@ -248,6 +249,7 @@ CREATE TABLE IF NOT EXISTS local_orders (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS local_order_user_pending ON local_orders(user_id)
  WHERE status IN ('CREATING','PENDING','REVIEW');
+ALTER TABLE local_orders ADD COLUMN IF NOT EXISTS payment_provider varchar(32);
 ALTER TABLE local_orders ADD COLUMN IF NOT EXISTS list_price_usd_cents integer CHECK(list_price_usd_cents>=0);
 ALTER TABLE local_orders ADD COLUMN IF NOT EXISTS final_price_usd_cents integer CHECK(final_price_usd_cents>=0);
 ALTER TABLE local_orders ADD COLUMN IF NOT EXISTS fx_rate_usd_thb numeric(12,6);

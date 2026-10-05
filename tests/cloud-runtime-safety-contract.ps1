@@ -9,6 +9,7 @@ $botApi = Get-Content (Join-Path $root 'apps/api/src/bot.controller.ts') -Raw
 $cloudApi = Get-Content (Join-Path $root 'apps/api/src/cloud.controller.ts') -Raw
 $localPackageApi = Get-Content (Join-Path $root 'apps/api/src/local-package.controller.ts') -Raw
 $easySlipApi = Get-Content (Join-Path $root 'apps/api/src/easyslip-payment.service.ts') -Raw
+$promptPayQr = Get-Content (Join-Path $root 'apps/api/src/promptpay-qr.ts') -Raw
 $packagesUi = Get-Content (Join-Path $root 'apps/web/app/packages/page.tsx') -Raw
 $cloudUpdate = Get-Content (Join-Path $root 'apps/api/src/cloud-update.service.ts') -Raw
 $cloudUpdateController = Get-Content (Join-Path $root 'apps/api/src/cloud-update.controller.ts') -Raw
@@ -110,12 +111,22 @@ Assert-Contains $workerApi "'PRIMARY_EXPIRED'" 'Worker must identify primary-pac
 Assert-Contains $workerApi 'primary_access.primary_active IS DISTINCT FROM true' 'Worker must stop every Cloud runtime when primary is inactive'
 Assert-Contains $dashboard 'ตั้งราคา Slot เสริม' 'Owner add-on pricing control missing'
 Assert-Contains $cloudApi 'if (qr?.dataUrl)' 'Cloud checkout must require a real EasySlip QR image before using EasySlip flow'
-Assert-Contains $cloudApi 'o.status,o.charge_id,o.qr_url' 'Cloud customer orders must expose charge identity for provider fallback UI'
+Assert-Contains $cloudApi 'o.status,o.payment_provider,o.charge_id,o.qr_url' 'Cloud customer orders must expose payment provider and charge identity for fallback UI'
 Assert-Contains $dashboard 'const vpsPaymentUsesEasySlip' 'Cloud checkout UI must distinguish EasySlip from provider fallback per order'
 Assert-Contains $localPackageApi 'if (qr?.dataUrl)' 'Local checkout must require a real EasySlip QR image before using EasySlip flow'
 Assert-Contains $easySlipApi 'if (error instanceof ConflictException) throw error' 'EasySlip QR provider errors must not be swallowed'
 Assert-Contains $easySlipApi 'EasySlip ไม่ส่งข้อมูลรูป QR กลับมา' 'EasySlip empty QR responses must fail explicitly'
-Assert-Contains $packagesUi '!String(order.charge_id || "").trim()' 'Package checkout UI must distinguish provider fallback per order'
+Assert-Contains $easySlipApi 'รายการ PromptPay สำรองนี้รอผู้ดูแลตรวจสอบก่อนเปิดสิทธิ์' 'Manual PromptPay must never pass through automatic EasySlip activation'
+Assert-Contains $schema 'payment_provider varchar(32)' 'Payment orders must persist the provider used for each QR'
+Assert-Contains $promptPayQr 'A000000677010111' 'Server PromptPay fallback must use the Thai PromptPay AID'
+Assert-Contains $promptPayQr 'crc16CcittFalse' 'Server PromptPay fallback must append a valid EMV CRC'
+Assert-Contains $cloudApi "payment_provider='MANUAL_PROMPTPAY'" 'Cloud checkout must preserve a scannable PromptPay fallback when providers are unavailable'
+Assert-Contains $localPackageApi "payment_provider='MANUAL_PROMPTPAY'" 'Local checkout must preserve a scannable PromptPay fallback when providers are unavailable'
+Assert-Contains $cloudApi 'manualReview: true' 'Cloud manual PromptPay fallback must never claim automatic activation'
+Assert-Contains $localPackageApi 'manualReview: true' 'Local manual PromptPay fallback must never claim automatic activation'
+Assert-Contains $packagesUi 'const manualPromptPay = paymentProvider === "MANUAL_PROMPTPAY";' 'Package UI must distinguish manual PromptPay from EasySlip and Omise'
+Assert-Contains $dashboard 'const vpsPaymentManualPromptPay = vpsPaymentProvider === "MANUAL_PROMPTPAY";' 'VPS Slot checkout must distinguish manual PromptPay from EasySlip and Omise'
+Assert-Contains $packagesUi '!String(order.charge_id || "").trim()' 'Package checkout UI must preserve legacy provider fallback detection'
 Assert-Contains $cloudApi '@Post("owner/addon-slot")' 'Owner direct unlimited VPS Slot endpoint missing'
 Assert-Contains $cloudApi "'OWNER_CLOUD_ADDON_SLOT_CREATED'" 'Owner direct Slot creation audit missing'
 Assert-Contains $cloudApi '$1,$1,NULL,''CLOUD''' 'Owner direct Slot must not depend on a paid subscription'

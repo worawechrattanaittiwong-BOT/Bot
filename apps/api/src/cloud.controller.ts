@@ -9,6 +9,7 @@ import { EasySlipPaymentService } from "./easyslip-payment.service";
 import { CLOUD_SERVER_RELEASE, versionAtLeast, versionExact } from "./cloud-server-release";
 import { discountedUsdCents, getUsdThbQuote, usdCentsToThbSatang } from "./commerce-currency";
 import { BrokerBenefitService } from "./brokers/broker-benefit.service";
+import { createServerPromptPayQr } from "./promptpay-qr";
 
 function omiseMode() {
   const key = String(process.env.OMISE_SECRET_KEY || "").trim();
@@ -446,7 +447,7 @@ export class CloudCustomerController {
   }
 
   @Get("orders") async orders(@Req() req: any) {
-    return (await this.db.query(`SELECT o.id,o.months,o.amount,o.original_amount,o.discount_amount,o.promotion_code,o.status,o.charge_id,o.qr_url,o.expires_at,o.created_at,o.paid_at,o.slot_id,o.purchase_type,
+    return (await this.db.query(`SELECT o.id,o.months,o.amount,o.original_amount,o.discount_amount,o.promotion_code,o.status,o.payment_provider,o.charge_id,o.qr_url,o.expires_at,o.created_at,o.paid_at,o.slot_id,o.purchase_type,
       o.list_price_usd_cents,o.final_price_usd_cents,o.fx_rate_usd_thb,o.fx_source,o.fx_quoted_at,
       s.expires_at subscription_expires_at,b.actual_state,b.last_seen_at,a.account_number,ls.slot_type
       FROM cloud_orders o
@@ -794,7 +795,7 @@ export class CloudCustomerController {
       }
       if (qr?.dataUrl) {
         await this.db.query(
-          "UPDATE cloud_orders SET status='PENDING',qr_url=$2,expires_at=now()+interval '24 hours' WHERE id=$1 AND status='CREATING'",
+          "UPDATE cloud_orders SET status='PENDING',payment_provider='EASYSLIP',qr_url=$2,expires_at=now()+interval '24 hours' WHERE id=$1 AND status='CREATING'",
           [order.id, qr.dataUrl]
         );
         return { id: order.id, paymentMode: "EASYSLIP", qrAvailable:true };
@@ -807,6 +808,23 @@ export class CloudCustomerController {
         fallbackMode === "LIVE" ||
         (fallbackMode === "TEST" && String(process.env.NODE_ENV || "").toLowerCase() !== "production");
       if (!fallbackAllowed) {
+        const manualQr = await createServerPromptPayQr({
+          promptPayId: process.env.EASYSLIP_PROMPTPAY_ID,
+          amountSatang: Number(order.amount)
+        }).catch(() => null);
+        if (manualQr?.dataUrl) {
+          await this.db.query(
+            "UPDATE cloud_orders SET status='REVIEW',payment_provider='MANUAL_PROMPTPAY',qr_url=$2,expires_at=now()+interval '24 hours' WHERE id=$1 AND status='CREATING'",
+            [order.id, manualQr.dataUrl]
+          );
+          return {
+            id: order.id,
+            paymentMode: "MANUAL_PROMPTPAY",
+            qrAvailable: true,
+            manualReview: true
+          };
+        }
+
         await this.db.query(
           "UPDATE cloud_orders SET status='REVIEW',expires_at=now() WHERE id=$1 AND status='CREATING'",
           [order.id]
@@ -829,10 +847,27 @@ export class CloudCustomerController {
       if (!qrUrl) {
         throw new ConflictException("Opn / Omise ไม่ส่ง PromptPay QR กลับมา");
       }
-      await this.db.query("UPDATE cloud_orders SET charge_id=$2,qr_url=$3,expires_at=$4,status=CASE WHEN status='CREATING' THEN 'PENDING' ELSE status END WHERE id=$1",
+      await this.db.query("UPDATE cloud_orders SET payment_provider='OMISE',charge_id=$2,qr_url=$3,expires_at=$4,status=CASE WHEN status='CREATING' THEN 'PENDING' ELSE status END WHERE id=$1",
         [order.id,charge.id,qrUrl,charge.expires_at || null]);
       return { id: order.id, paymentMode: paymentMode() === "EASYSLIP" ? "OMISE_FALLBACK" : omiseMode() };
     } catch (error: any) {
+      const manualQr = await createServerPromptPayQr({
+        promptPayId: process.env.EASYSLIP_PROMPTPAY_ID,
+        amountSatang: Number(order.amount)
+      }).catch(() => null);
+      if (manualQr?.dataUrl) {
+        await this.db.query(
+          "UPDATE cloud_orders SET status='REVIEW',payment_provider='MANUAL_PROMPTPAY',qr_url=$2,expires_at=now()+interval '24 hours' WHERE id=$1 AND status='CREATING'",
+          [order.id, manualQr.dataUrl]
+        );
+        return {
+          id: order.id,
+          paymentMode: "MANUAL_PROMPTPAY",
+          qrAvailable: true,
+          manualReview: true
+        };
+      }
+
       await this.db.query("UPDATE cloud_orders SET status='REVIEW' WHERE id=$1 AND status='CREATING'", [order.id]);
       const detail = String(error?.message || "").trim();
       throw new ConflictException(

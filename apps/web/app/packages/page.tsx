@@ -93,6 +93,7 @@ type Order = {
   months: number;
   amount: number;
   status: string;
+  payment_provider?: string | null;
   charge_id?: string | null;
   qr_url: string | null;
   expires_at: string | null;
@@ -619,9 +620,14 @@ export default function PackagesPage() {
   const checkoutOrder = checkoutOrderId
     ? activeOrders.find(order => order.id === checkoutOrderId) || null
     : null;
-  const checkoutUsesEasySlip = Boolean(checkoutOrder) &&
-    String(activeCatalog?.paymentMode || "").toUpperCase() === "EASYSLIP" &&
-    !String(checkoutOrder?.charge_id || "").trim();
+  const checkoutPaymentProvider = String(checkoutOrder?.payment_provider || "").toUpperCase();
+  const checkoutManualPromptPay = checkoutPaymentProvider === "MANUAL_PROMPTPAY";
+  const checkoutUsesEasySlip = Boolean(checkoutOrder) && (
+    checkoutPaymentProvider
+      ? checkoutPaymentProvider === "EASYSLIP"
+      : String(activeCatalog?.paymentMode || "").toUpperCase() === "EASYSLIP" &&
+        !String(checkoutOrder?.charge_id || "").trim()
+  );
   const partnerDiscountPercent = brokerBenefit?.partner?.verified
     ? Math.max(0, Math.min(50, Number(brokerBenefit.partner.benefit?.discountPercent || 0)))
     : 0;
@@ -1033,7 +1039,7 @@ export default function PackagesPage() {
               <div>
                 <span className={styles.eyebrow}>SCENOVA CHECKOUT</span>
                 <h2 id="checkout-title">{checkoutOrder ? "ชำระเงินแพ็กเกจ" : "แพ็กเกจที่คุณเลือก"}</h2>
-                <p>{checkoutOrder ? (checkoutUsesEasySlip ? "สแกน QR และแนบสลิปได้ในหน้าต่างนี้" : "สแกน QR แล้วรอระบบยืนยันการชำระเงิน") : "ตรวจสอบรายละเอียด แล้วดำเนินการชำระเงิน"}</p>
+                <p>{checkoutOrder ? (checkoutManualPromptPay ? "สแกน PromptPay QR สำรอง · หลังโอนเก็บสลิปไว้ให้ผู้ดูแลตรวจ" : checkoutUsesEasySlip ? "สแกน QR และแนบสลิปได้ในหน้าต่างนี้" : "สแกน QR แล้วรอระบบยืนยันการชำระเงิน") : "ตรวจสอบรายละเอียด แล้วดำเนินการชำระเงิน"}</p>
               </div>
               <button
                 type="button"
@@ -1052,7 +1058,7 @@ export default function PackagesPage() {
               </span>
               <i aria-hidden="true"/>
               <span aria-current={checkoutOrder ? "step" : undefined} className={checkoutOrder ? styles.checkoutStepActive : ""}>
-                <b>02</b> {checkoutOrder && !checkoutUsesEasySlip ? "สแกน QR" : "สแกน + แนบสลิป"}
+                <b>02</b> {checkoutOrder && (checkoutManualPromptPay || !checkoutUsesEasySlip) ? "สแกน QR" : "สแกน + แนบสลิป"}
               </span>
             </div>
 
@@ -1362,10 +1368,14 @@ function PaymentCard({
     return () => URL.revokeObjectURL(url);
   }, [slip]);
 
-  const easySlip = paymentMode === "EASYSLIP" && !String(order.charge_id || "").trim();
+  const paymentProvider = String(order.payment_provider || "").toUpperCase();
+  const manualPromptPay = paymentProvider === "MANUAL_PROMPTPAY";
+  const easySlip = paymentProvider
+    ? paymentProvider === "EASYSLIP"
+    : paymentMode === "EASYSLIP" && !String(order.charge_id || "").trim();
   const account = paymentAccounts[0] || null;
   const qrSrc = String(order.qr_url || "");
-  const hasQr = order.status === "PENDING" && (
+  const hasQr = ["PENDING","REVIEW"].includes(String(order.status || "").toUpperCase()) && (
     /^https:\/\//.test(qrSrc) ||
     /^data:image\/(?:png|jpeg|webp);base64,/i.test(qrSrc)
   );
@@ -1509,6 +1519,20 @@ function PaymentCard({
               </button>
             </div>
             {!account && <div className={styles.paymentWarning}>ยังไม่พบบัญชีรับเงินที่ผูกกับ EasySlip จึงยังตรวจสลิปไม่ได้</div>}
+          </>
+        ) : manualPromptPay ? (
+          <>
+            <p>
+              สแกน PromptPay QR ตามยอดจริง <b>฿{thbMoney(order.amount)} THB</b> ได้ทันที
+              ระบบตรวจชำระเงินอัตโนมัติของ EasySlip ไม่พร้อมใช้งานชั่วคราว รายการนี้จึงรอผู้ดูแลตรวจสอบก่อนเปิดสิทธิ์
+            </p>
+            <div className={styles.paymentWarning}>
+              หลังโอน กรุณาเก็บสลิปและแจ้งผู้ดูแลพร้อมเลขรายการ {order.id.slice(0,8)}
+            </div>
+            <small>QR สำรองหมดอายุ: {date(order.expires_at)}</small>
+            <button type="button" className={styles.secondaryButton} onClick={()=>void onCancel()} disabled={busy}>
+              ยกเลิกรายการ
+            </button>
           </>
         ) : (
           <>

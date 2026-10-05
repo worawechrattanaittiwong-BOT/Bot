@@ -20,6 +20,7 @@ import { PromotionService } from "./promotion.service";
 import { EasySlipPaymentService } from "./easyslip-payment.service";
 import { discountedUsdCents, getUsdThbQuote, usdCentsToThbSatang } from "./commerce-currency";
 import { BrokerBenefitService } from "./brokers/broker-benefit.service";
+import { createServerPromptPayQr } from "./promptpay-qr";
 
 function omiseMode() {
   const key = String(process.env.OMISE_SECRET_KEY || "").trim();
@@ -474,7 +475,7 @@ export class LocalPackageService implements OnApplicationBootstrap, OnModuleDest
       if (qr?.dataUrl) {
         await this.db.query(
           `UPDATE local_orders
-           SET status='PENDING',qr_url=$2,expires_at=now()+interval '24 hours'
+           SET status='PENDING',payment_provider='EASYSLIP',qr_url=$2,expires_at=now()+interval '24 hours'
            WHERE id=$1 AND status='CREATING'`,
           [order.id, qr.dataUrl]
         );
@@ -485,6 +486,25 @@ export class LocalPackageService implements OnApplicationBootstrap, OnModuleDest
         fallbackMode === "LIVE" ||
         (fallbackMode === "TEST" && String(process.env.NODE_ENV || "").toLowerCase() !== "production");
       if (!fallbackAllowed) {
+        const manualQr = await createServerPromptPayQr({
+          promptPayId: process.env.EASYSLIP_PROMPTPAY_ID,
+          amountSatang: Number(order.amount)
+        }).catch(() => null);
+        if (manualQr?.dataUrl) {
+          await this.db.query(
+            `UPDATE local_orders
+             SET status='REVIEW',payment_provider='MANUAL_PROMPTPAY',qr_url=$2,expires_at=now()+interval '24 hours'
+             WHERE id=$1 AND status='CREATING'`,
+            [order.id, manualQr.dataUrl]
+          );
+          return {
+            id: order.id,
+            paymentMode: "MANUAL_PROMPTPAY",
+            qrAvailable: true,
+            manualReview: true
+          };
+        }
+
         await this.db.query(
           `UPDATE local_orders
            SET status='REVIEW',expires_at=now()
@@ -523,7 +543,7 @@ export class LocalPackageService implements OnApplicationBootstrap, OnModuleDest
 
       await this.db.query(
         `UPDATE local_orders
-         SET charge_id=$2,qr_url=$3,expires_at=$4,
+         SET payment_provider='OMISE',charge_id=$2,qr_url=$3,expires_at=$4,
              status=CASE WHEN status='CREATING' THEN 'PENDING' ELSE status END
          WHERE id=$1`,
         [
@@ -536,6 +556,25 @@ export class LocalPackageService implements OnApplicationBootstrap, OnModuleDest
 
       return { id: order.id, paymentMode: paymentMode() === "EASYSLIP" ? "OMISE_FALLBACK" : omiseMode() };
     } catch (error: any) {
+      const manualQr = await createServerPromptPayQr({
+        promptPayId: process.env.EASYSLIP_PROMPTPAY_ID,
+        amountSatang: Number(order.amount)
+      }).catch(() => null);
+      if (manualQr?.dataUrl) {
+        await this.db.query(
+          `UPDATE local_orders
+           SET status='REVIEW',payment_provider='MANUAL_PROMPTPAY',qr_url=$2,expires_at=now()+interval '24 hours'
+           WHERE id=$1 AND status='CREATING'`,
+          [order.id, manualQr.dataUrl]
+        );
+        return {
+          id: order.id,
+          paymentMode: "MANUAL_PROMPTPAY",
+          qrAvailable: true,
+          manualReview: true
+        };
+      }
+
       await this.db.query(
         `UPDATE local_orders
          SET status='REVIEW'
@@ -627,7 +666,7 @@ export class LocalPackageCustomerController {
     return (
       await this.db.query(
         `SELECT
-           o.id,o.months,o.amount,o.original_amount,o.discount_amount,o.promotion_code,o.status,o.charge_id,o.qr_url,o.expires_at,o.created_at,o.paid_at,
+           o.id,o.months,o.amount,o.original_amount,o.discount_amount,o.promotion_code,o.status,o.payment_provider,o.charge_id,o.qr_url,o.expires_at,o.created_at,o.paid_at,
            o.list_price_usd_cents,o.final_price_usd_cents,o.fx_rate_usd_thb,o.fx_source,o.fx_quoted_at,
            o.slot_id,o.subscription_id,s.expires_at subscription_expires_at
          FROM local_orders o
