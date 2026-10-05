@@ -70,6 +70,63 @@ function instrumentRoot(value: unknown) {
   return normalized;
 }
 
+function normalizeSymbolAccountType(value: unknown) {
+  const profile = String(value || "").trim().toUpperCase();
+  if (profile === "USD") return "USD";
+  if (["USD_CENT","USDC","CENT"].includes(profile)) return "USD_CENT";
+  return "";
+}
+
+function accountProfileCandidate(symbol: string, root: string, profile: string) {
+  const upper = normalizeSymbol(symbol).toUpperCase();
+  if (!upper) return false;
+
+  if (root === "XAUUSD" && profile === "USD_CENT" && upper === "XAUUSC") {
+    return true;
+  }
+  if (root === "BTCUSD" && profile === "USD_CENT" && ["BTCUSC","XBTUSC"].includes(upper)) {
+    return true;
+  }
+
+  const normalizedRoot = root === "BTCUSD" && upper.startsWith("XBTUSD")
+    ? "XBTUSD"
+    : root;
+  if (!upper.startsWith(normalizedRoot)) return false;
+
+  const suffix = upper.slice(normalizedRoot.length).replace(/[._#-]/g, "");
+  if (profile === "USD_CENT") return suffix === "C" || suffix === "CENT";
+  if (profile === "USD") return suffix === "" || suffix === "M";
+  return false;
+}
+
+function resolveAccountProfileTradingSymbol(
+  requested: unknown,
+  metrics: any,
+  profileValue: unknown
+) {
+  const symbol = normalizeSymbol(requested);
+  const profile = normalizeSymbolAccountType(profileValue);
+  if (!symbol || !profile) return symbol;
+
+  const root = instrumentRoot(symbol);
+  if (!["XAUUSD","BTCUSD"].includes(root)) return symbol;
+
+  const candidates = marketWatchSymbols(metrics).filter(item =>
+    accountProfileCandidate(item, root, profile)
+  );
+  const exact = candidates.find(
+    item => item.toUpperCase() === symbol.toUpperCase()
+  );
+  if (exact) return exact;
+
+  return candidates
+    .sort((a, b) => {
+      const aRoot = a.toUpperCase() === root ? 0 : 1;
+      const bRoot = b.toUpperCase() === root ? 0 : 1;
+      return aRoot - bRoot || a.length - b.length || a.localeCompare(b);
+    })[0] || symbol;
+}
+
 function isExnessBroker(broker: unknown, brokerServer: unknown) {
   const name = String(broker || "").trim();
   const server = String(brokerServer || "").trim();
@@ -156,26 +213,30 @@ export class TradingSymbolController {
     const fallbackRequestedSymbol = normalizeSymbol(settings.symbol);
     const desiredRequestedSymbol =
       explicitRequestedSymbol || activeSymbol || fallbackRequestedSymbol || "XAUUSD";
-    const exactResolution =
-      String(settings.symbolResolutionMode || "").toUpperCase() === "EXACT";
-    const explicitSymbol = explicitRequestedSymbol
-      ? exactResolution
-        ? explicitRequestedSymbol
+    const resolutionMode = String(settings.symbolResolutionMode || "").toUpperCase();
+    const exactResolution = resolutionMode === "EXACT";
+    const accountProfileResolution = resolutionMode === "ACCOUNT_PROFILE";
+    const resolveConfiguredSymbol = (value: string) =>
+      accountProfileResolution
+        ? resolveAccountProfileTradingSymbol(
+            value,
+            metrics,
+            settings.symbolAccountType
+          )
         : resolveBrokerTradingSymbol(
-            explicitRequestedSymbol,
+            value,
             metrics,
             instance.account_broker,
             instance.account_broker_server
-          )
+          );
+    const explicitSymbol = explicitRequestedSymbol
+      ? exactResolution
+        ? explicitRequestedSymbol
+        : resolveConfiguredSymbol(explicitRequestedSymbol)
       : "";
     const desiredSymbol = exactResolution
       ? desiredRequestedSymbol
-      : resolveBrokerTradingSymbol(
-          desiredRequestedSymbol,
-          metrics,
-          instance.account_broker,
-          instance.account_broker_server
-        );
+      : resolveConfiguredSymbol(desiredRequestedSymbol);
     const tradeMode = parseTradeMode(metrics.symbolTradeMode);
     const tradingAllowed = symbolTradeAllowed(tradeMode);
     const matches = Boolean(
@@ -189,6 +250,8 @@ export class TradingSymbolController {
     return {
       desiredSymbol,
       requestedSymbol: desiredRequestedSymbol,
+      symbolAccountType: normalizeSymbolAccountType(settings.symbolAccountType) || null,
+      symbolResolutionMode: resolutionMode || null,
       explicitSymbol: explicitSymbol || null,
       activeSymbol: activeSymbol || null,
       instrumentProfile: bitcoin ? "BTC" : "STANDARD",

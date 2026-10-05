@@ -307,6 +307,7 @@ export default function DashboardPage() {
   const [brokerCode, setBrokerCode] = useState("EXNESS");
   const [customBrokerName, setCustomBrokerName] = useState("");
   const [brokerServer, setBrokerServer] = useState("");
+  const [symbolAccountType, setSymbolAccountType] = useState<"USD"|"USD_CENT">("USD");
   const [cloudMt5DialogError, setCloudMt5DialogError] = useState("");
   const [tradingPassword, setTradingPassword] = useState("");
   const [cloudMt5DialogMode, setCloudMt5DialogMode] = useState<"NEW"|"RECONNECT">("NEW");
@@ -2941,6 +2942,14 @@ export default function DashboardPage() {
     setCloudMt5DialogError("");
 
     if (dialogMode === "RECONNECT" && slot?.account_number) {
+      const savedSymbolAccountType = String(slot?.symbol_account_type || "").trim().toUpperCase();
+      const savedStartupSymbol = String(slot?.startup_symbol || slot?.active_symbol || "").trim().toUpperCase();
+      const centSymbol = savedStartupSymbol === "XAUUSC" || /^XAUUSD[._#-]?(C|CENT)$/i.test(savedStartupSymbol);
+      setSymbolAccountType(
+        savedSymbolAccountType === "USD_CENT" || savedSymbolAccountType === "USDC" || centSymbol
+          ? "USD_CENT"
+          : "USD"
+      );
       setAccountNumber(String(slot.account_number || ""));
       const brokerMatch = brokerCatalog.find(item =>
         String(item.name || "").toLowerCase() === String(slot.broker || "").toLowerCase() ||
@@ -2955,6 +2964,7 @@ export default function DashboardPage() {
       }
       setBrokerServer(String(slot.broker_server || ""));
     } else {
+      setSymbolAccountType("USD");
       setAccountNumber("");
       setBrokerServer("");
       if (!brokerCatalog.some(item=>item.code===brokerCode)) {
@@ -3021,7 +3031,8 @@ export default function DashboardPage() {
           method:"POST",
           body:JSON.stringify({
             mt5AccountId:cloudMt5DialogAccountId,
-            tradingPassword
+            tradingPassword,
+            symbolAccountType
           })
         });
       } else {
@@ -3037,7 +3048,8 @@ export default function DashboardPage() {
             broker:selectedBrokerName,
             brokerServer:selectedServer.trim(),
             mode:"CLOUD",
-            tradingPassword
+            tradingPassword,
+            symbolAccountType
           })
         });
       }
@@ -5055,6 +5067,23 @@ export default function DashboardPage() {
                   {!brokerCatalog.length && <option value="EXNESS">Exness</option>}
                   <option value="OTHER">อื่น ๆ / กรอกชื่อ Broker เอง</option>
                 </select>
+              </label>
+
+              <label className="field">
+                <span>ประเภท Symbol ของบัญชี</span>
+                <select
+                  className="input"
+                  value={symbolAccountType}
+                  onChange={e=>{
+                    setSymbolAccountType(e.target.value === "USD_CENT" ? "USD_CENT" : "USD");
+                    setCloudMt5DialogError("");
+                  }}
+                  required
+                >
+                  <option value="USD">USD · XAUUSD / XAUUSDm</option>
+                  <option value="USD_CENT">USDc · XAUUSDc / Cent Symbol</option>
+                </select>
+                <small>ระบบจะค้นหา Symbol ที่มีอยู่จริงและเปิดเทรดได้ใน MT5 ของบัญชีนี้</small>
               </label>
 
               {brokerCode === "OTHER" && (

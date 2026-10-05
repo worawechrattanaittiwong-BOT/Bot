@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.1.21"
-#define SCENOVA_EA_VERSION "1.1.21"
-#define SCENOVA_PRODUCT_VERSION "1.1.21"
+#property version   "1.1.22"
+#define SCENOVA_EA_VERSION "1.1.22"
+#define SCENOVA_PRODUCT_VERSION "1.1.22"
 #define SCENOVA_BUILD_ID "SOURCE"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_CONFIGURED_LOSS_ONLY_V1"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
@@ -1530,11 +1530,86 @@ bool CloudStartupFamilyMatch(const string candidate,const string canonical)
    return candidateUpper==canonicalUpper;
 }
 
+string CloudStartupSymbolAccountType(const string requested)
+{
+   string upper=requested;
+   StringToUpper(upper);
+
+   if(upper=="XAUUSC" || upper=="BTCUSC" || upper=="XBTUSC")
+      return "USD_CENT";
+
+   string root="";
+   if(StringFind(upper,"XAUUSD")==0)
+      root="XAUUSD";
+   else if(StringFind(upper,"BTCUSD")==0)
+      root="BTCUSD";
+   else if(StringFind(upper,"XBTUSD")==0)
+      root="XBTUSD";
+   else
+      return "";
+
+   string suffix=StringSubstr(upper,StringLen(root));
+   StringReplace(suffix,".","");
+   StringReplace(suffix,"_","");
+   StringReplace(suffix,"-","");
+   StringReplace(suffix,"#","");
+
+   if(suffix=="" || suffix=="M")
+      return "USD";
+   if(suffix=="C" || suffix=="CENT")
+      return "USD_CENT";
+
+   // Broker-native suffixes outside the standard/Cent profile remain exact.
+   return "EXACT";
+}
+
+bool CloudStartupAccountTypeMatch(
+   const string candidate,
+   const string canonical,
+   const string accountType)
+{
+   string candidateUpper=candidate;
+   string canonicalUpper=canonical;
+   StringToUpper(candidateUpper);
+   StringToUpper(canonicalUpper);
+
+   if(accountType=="USD_CENT" && canonicalUpper=="XAUUSD" && candidateUpper=="XAUUSC")
+      return true;
+   if(accountType=="USD_CENT" && canonicalUpper=="BTCUSD" &&
+      (candidateUpper=="BTCUSC" || candidateUpper=="XBTUSC"))
+      return true;
+
+   string candidateRoot=canonicalUpper;
+   if(canonicalUpper=="BTCUSD" && StringFind(candidateUpper,"XBTUSD")==0)
+      candidateRoot="XBTUSD";
+   else if(StringFind(candidateUpper,canonicalUpper)!=0)
+      return false;
+
+   string suffix=StringSubstr(candidateUpper,StringLen(candidateRoot));
+   StringReplace(suffix,".","");
+   StringReplace(suffix,"_","");
+   StringReplace(suffix,"-","");
+   StringReplace(suffix,"#","");
+
+   if(accountType=="USD")
+      return suffix=="" || suffix=="M";
+   if(accountType=="USD_CENT")
+      return suffix=="C" || suffix=="CENT";
+
+   return false;
+}
+
 string ResolveCloudStartupSymbol(const string requested)
 {
    string canonical=CloudCanonicalStartupSymbol(requested);
    string canonicalUpper=canonical;
+   string requestedUpper=requested;
    StringToUpper(canonicalUpper);
+   StringToUpper(requestedUpper);
+
+   string accountType=CloudStartupSymbolAccountType(requested);
+   if(accountType=="EXACT")
+      return requested;
 
    string best="";
    int bestScore=-1000000;
@@ -1543,7 +1618,13 @@ string ResolveCloudStartupSymbol(const string requested)
    for(int i=0;i<total;i++)
    {
       string candidate=SymbolName(i,false);
-      if(StringLen(candidate)<=0 || !CloudStartupFamilyMatch(candidate,canonical))
+      if(StringLen(candidate)<=0)
+         continue;
+
+      bool matches=StringLen(accountType)>0
+         ? CloudStartupAccountTypeMatch(candidate,canonical,accountType)
+         : CloudStartupFamilyMatch(candidate,canonical);
+      if(!matches)
          continue;
 
       long tradeMode=SymbolInfoInteger(candidate,SYMBOL_TRADE_MODE);
@@ -1555,6 +1636,8 @@ string ResolveCloudStartupSymbol(const string requested)
       StringToUpper(candidateUpper);
 
       int score=0;
+      if(candidateUpper==requestedUpper)
+         score+=20000;
       if(candidateUpper==canonicalUpper)
          score+=10000;
 
