@@ -1284,6 +1284,62 @@ export default function AdminPage() {
                     {selectedCustomer.role === "OWNER" || selectedCustomer.role === "ADMIN" ? (
                       <div className="owner-system-readonly">
                         <b>บัญชีผู้ดูแลระบบ</b>
+                        <small>สิทธิ์ระบบเป็นแบบถาวร · เครื่องมือด้านล่างจัดการเฉพาะ MT5 / Slot ของบัญชีนี้</small>
+                        <section className="owner-control-card owner-system-mt5-tools">
+                          <div className="owner-control-card-head">
+                            <div><h3>MT5 และ Slot</h3></div>
+                            <span className="owner-count">{customerSlots(selectedCustomer).length} SLOT</span>
+                          </div>
+                          <div className="owner-slot-list">
+                            {customerSlots(selectedCustomer).map((slot:any)=>(
+                              <div className="owner-slot-row" key={slot.id}>
+                                <span className={"owner-mode-badge "+String(slot.mode).toLowerCase()}>{slot.mode==="CLOUD"?"CLOUD VPS":"LOCAL"}</span>
+                                <div>
+                                  <b>Slot #{Number(slot.slot_number || 0)} · {slot.account_number?"MT5 "+slot.account_number:"รอเชื่อม MT5"}</b>
+                                  <small>
+                                    {slot.mode==="LOCAL"?(slot.mt5_online?"ONLINE":"OFFLINE"):(String(slot.actual_state||"OFFLINE").toUpperCase()==="RUNNING"?"ONLINE":"OFFLINE")}
+                                    {slot.requested_symbol ? " · เลือก "+slot.requested_symbol : ""}
+                                    {slot.active_symbol && String(slot.active_symbol).toUpperCase()!==String(slot.requested_symbol||"").toUpperCase() ? " · ใช้งานจริง "+slot.active_symbol : ""}
+                                    {slot.provisioning_error ? " · "+slot.provisioning_error : ""}
+                                  </small>
+                                </div>
+                                <div className="owner-slot-actions">
+                                  {slot.account_number && (
+                                    <>
+                                      <button
+                                        type="button"
+                                        className="btn owner-slot-select-symbol"
+                                        disabled={Boolean(customerAction)}
+                                        onClick={()=>void selectCustomerSlotSymbol(selectedCustomer,slot)}
+                                      >
+                                        {customerAction==="slot-select-symbol:"+slot.id?"กำลังตั้ง...":"เลือก Symbol"}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="btn owner-slot-refresh"
+                                        disabled={Boolean(customerAction)}
+                                        onClick={()=>void refreshCustomerSlotSymbol(selectedCustomer,slot)}
+                                      >
+                                        {customerAction==="slot-symbol:"+slot.id?"กำลังโหลด...":"โหลด Symbol ใหม่"}
+                                      </button>
+                                      {slot.mode==="CLOUD" && (
+                                        <button
+                                          type="button"
+                                          className="btn primary owner-slot-repair"
+                                          disabled={Boolean(customerAction)}
+                                          onClick={()=>void repairCustomerSlotRuntime(selectedCustomer,slot)}
+                                        >
+                                          {customerAction==="slot-repair:"+slot.id?"กำลังซ่อม...":"ซ่อม MT5 / EA"}
+                                        </button>
+                                      )}
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                            {!customerSlots(selectedCustomer).length && <div className="owner-control-empty">ยังไม่มี Slot ที่ผูกกับบัญชีผู้ดูแลระบบ</div>}
+                          </div>
+                        </section>
                       </div>
                     ) : (
                       <>

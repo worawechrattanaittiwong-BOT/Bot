@@ -77,7 +77,7 @@ assert.doesNotMatch(accountPage, /0812345678|08x xxx|placeholder="000000"/);
 assert.match(packagesPage, /ทดลองใช้งาน/);
 assert.match(packagesPage, /Local MT5/);
 assert.match(packagesPage, /Cloud MT5/);
-assert.match(packagesPage, /ส่ง OTP/);
+assert.match(packagesPage, /ส่งรหัสยืนยัน/);
 assert.match(packagesPage, /\/trial-access\/request-code/);
 assert.match(packagesPage, /\/trial-access\/redeem/);
 assert.match(packagesPage, /\/packages\/local\/checkout/);
@@ -112,6 +112,23 @@ assert.match(adminApi, /@Post\("slots\/repair-runtime"\)/);
 assert.match(adminApi, /ADMIN_REPAIR_CLOUD_RUNTIME/);
 assert.match(adminPage, /\/admin\/slots\/repair-runtime/);
 assert.match(adminPage, /ซ่อม MT5 \/ EA/);
+const ownerSystemStart = adminPage.indexOf('selectedCustomer.role === "OWNER" || selectedCustomer.role === "ADMIN" ? (');
+const ownerSystemEnd = adminPage.indexOf(') : (', ownerSystemStart);
+const ownerSystemBlock = ownerSystemStart >= 0 && ownerSystemEnd > ownerSystemStart
+  ? adminPage.slice(ownerSystemStart, ownerSystemEnd)
+  : "";
+assert.match(ownerSystemBlock, /owner-system-mt5-tools/);
+assert.match(ownerSystemBlock, /selectCustomerSlotSymbol\(selectedCustomer,slot\)/);
+assert.match(ownerSystemBlock, /refreshCustomerSlotSymbol\(selectedCustomer,slot\)/);
+assert.match(ownerSystemBlock, /repairCustomerSlotRuntime\(selectedCustomer,slot\)/);
+assert.doesNotMatch(ownerSystemBlock, /grantTrial\(selectedCustomer\)|sendPasswordReset\(selectedCustomer\)|activate\(selectedCustomer/);
+const adminSlotLookupStart = adminApi.indexOf("private async adminCustomerSlot");
+const adminSlotLookupEnd = adminApi.indexOf('@Post("slots/select-symbol")', adminSlotLookupStart);
+const adminSlotLookupBlock = adminSlotLookupStart >= 0 && adminSlotLookupEnd > adminSlotLookupStart
+  ? adminApi.slice(adminSlotLookupStart, adminSlotLookupEnd)
+  : "";
+assert.match(adminSlotLookupBlock, /ls\.assigned_user_id=\$2/);
+assert.doesNotMatch(adminSlotLookupBlock, /role NOT IN|role IN/);
 assert.match(adminApi, /ADMIN_REFRESH_SLOT_SYMBOL/);
 assert.match(adminApi, /ADMIN_DISCONNECT_SLOT_MT5/);
 assert.match(adminApi, /marketWatchSymbols/);
@@ -123,7 +140,7 @@ assert.match(fs.readFileSync("apps/web/app/dashboard/page.tsx","utf8"), /ตั�
 assert.match(adminApi, /Local MT5 ใช้ได้ 1 Slot/);
 assert.doesNotMatch(adminPage, /ค้นหาบัญชี → เลือกลูกค้า/);
 assert.doesNotMatch(adminPage, /ใช้สำหรับสิทธิ์ทดลองชั่วคราวเท่านั้น/);
-assert.match(adminPage, /extendDays/);
+assert.match(adminPage, /adjustSubscriptionDays/);
 assert.doesNotMatch(adminPage, /อนุมัติ Trial 3h/);
 
 assert.match(resetPage, /Set New Password/);
