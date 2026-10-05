@@ -233,6 +233,13 @@ input double          InpCounterPerPositionProfitMoney = 0.50;
 // COUNTER entry pacing is internal operational safety, not a trading signal.
 #define COUNTER_FILL_INTERVAL_MS 1000
 #define COUNTER_MAX_ORDERS_PER_MINUTE 30
+// COUNTER Recenter is internal inventory balance protection. It is based only
+// on BUY/SELL entry-price geometry and market volatility, never account size.
+#define COUNTER_RECENTER_MIN_GAP_POINTS 20.0
+#define COUNTER_RECENTER_SPREAD_MULTIPLIER 8.0
+#define COUNTER_RECENTER_ATR_M1_MULTIPLIER 1.10
+#define COUNTER_RECENTER_ATR_M5_MULTIPLIER 0.45
+#define COUNTER_RECENTER_RELEASE_RATIO 0.65
 // ZERO GRID is isolated from AUTO/RACE and requires an MT5 Hedging account.
 #define ZERO_GRID_MAX_LEVELS 30
 #define ZERO_GRID_DEFAULT_LEVELS 3
@@ -452,10 +459,14 @@ bool   g_raceCloseAllProfitEnabled = true;
 double g_raceCloseAllProfitMoney = 0.50;
 string g_raceProfitTargetMode = "BASKET";
 double g_racePerPositionProfitMoney = 0.50;
-// COUNTER is intentionally minimal: no SL/TP/basket/daily/recovery logic.
+// COUNTER keeps no SL/TP/basket/daily/recovery logic. Recenter only prevents
+// its own BUY/SELL inventory averages from drifting farther apart over time.
 double g_counterPerPositionProfitMoney = 0.50;
 datetime g_counterOrderWindowStart = 0;
 int      g_counterOrdersInWindow = 0;
+bool     g_counterRecenterActive = false;
+double   g_counterRecenterGapPoints = 0.0;
+double   g_counterRecenterTriggerPoints = 0.0;
 // Legacy 30-second order-flow storage/functions are retained only for source
 // compatibility; OnTick no longer samples them. RACE 1.1.20 trading decisions
 // do NOT read this window. COUNTER keeps its existing 2-second Bid helper.
@@ -4267,6 +4278,240 @@ int CounterFilledUnitsByDirection(int direction)
    return MathMax(positions,MathMax(0,volumeUnits));
 }
 
+bool CounterSideStats(
+   int direction,
+   double &averagePrice,
+   double &totalVolume,
+   int &positions
+)
+{
+   averagePrice=0.0;
+   totalVolume=0.0;
+   positions=0;
+   if(direction==0)
+      return false;
+
+   long expectedType=direction>0 ? POSITION_TYPE_BUY : POSITION_TYPE_SELL;
+   double weightedPrice=0.0;
+
+   for(int i=PositionsTotal()-1;i>=0;i--)
+   {
+      ulong ticket=PositionGetTicket(i);
+      if(ticket==0 || !PositionSelectByTicket(ticket))
+         continue;
+      if(PositionGetString(POSITION_SYMBOL)!=_Symbol ||
+         PositionGetInteger(POSITION_MAGIC)!=InpMagic ||
+         StringFind(PositionGetString(POSITION_COMMENT),"SaaSCounter")<0 ||
+         PositionGetInteger(POSITION_TYPE)!=expectedType)
+         continue;
+
+      double volume=PositionGetDouble(POSITION_VOLUME);
+      double openPrice=PositionGetDouble(POSITION_PRICE_OPEN);
+      if(volume<=0.0 || openPrice<=0.0)
+         continue;
+
+      weightedPrice+=openPrice*volume;
+      totalVolume+=volume;
+      positions++;
+   }
+
+   if(totalVolume<=0.0 || positions<=0)
+      return false;
+
+   averagePrice=weightedPrice/totalVolume;
+   return averagePrice>0.0;
+}
+
+double CounterRecenterDynamicTriggerPoints()
+{
+   MqlTick tick;
+   double spreadPoints=0.0;
+   if(SymbolInfoTick(_Symbol,tick) && tick.ask>tick.bid && _Point>0.0)
+      spreadPoints=(tick.ask-tick.bid)/_Point;
+
+   double trigger=MathMax(
+      COUNTER_RECENTER_MIN_GAP_POINTS,
+      spreadPoints*COUNTER_RECENTER_SPREAD_MULTIPLIER
+   );
+
+   double atrM1=AverageTrueRangePoints(PERIOD_M1,g_atrPeriod);
+   double atrM5=AverageTrueRangePoints(PERIOD_M5,g_atrPeriod);
+   if(atrM1>0.0)
+      trigger=MathMax(trigger,atrM1*COUNTER_RECENTER_ATR_M1_MULTIPLIER);
+   if(atrM5>0.0)
+      trigger=MathMax(trigger,atrM5*COUNTER_RECENTER_ATR_M5_MULTIPLIER);
+
+   return MathMax(COUNTER_RECENTER_MIN_GAP_POINTS,trigger);
+}
+
+bool CounterRefreshRecenterState()
+{
+   double buyAverage=0.0,buyVolume=0.0;
+   double sellAverage=0.0,sellVolume=0.0;
+   int buyPositions=0,sellPositions=0;
+
+   bool hasBuy=CounterSideStats(1,buyAverage,buyVolume,buyPositions);
+   bool hasSell=CounterSideStats(-1,sellAverage,sellVolume,sellPositions);
+   if(!hasBuy || !hasSell || _Point<=0.0)
+   {
+      g_counterRecenterActive=false;
+      g_counterRecenterGapPoints=0.0;
+      g_counterRecenterTriggerPoints=0.0;
+      return false;
+   }
+
+   double gapPoints=MathAbs(buyAverage-sellAverage)/_Point;
+   double triggerPoints=CounterRecenterDynamicTriggerPoints();
+   g_counterRecenterGapPoints=gapPoints;
+   g_counterRecenterTriggerPoints=triggerPoints;
+
+   if(g_counterRecenterActive)
+   {
+      double releasePoints=triggerPoints*COUNTER_RECENTER_RELEASE_RATIO;
+      if(gapPoints<=releasePoints)
+         g_counterRecenterActive=false;
+   }
+   else if(gapPoints>=triggerPoints)
+   {
+      g_counterRecenterActive=true;
+   }
+
+   return g_counterRecenterActive;
+}
+
+bool CounterProjectedGapAfterFill(
+   int direction,
+   double entryPrice,
+   double &currentGapPoints,
+   double &projectedGapPoints
+)
+{
+   currentGapPoints=0.0;
+   projectedGapPoints=0.0;
+   if(direction==0 || entryPrice<=0.0 || _Point<=0.0)
+      return false;
+
+   double buyAverage=0.0,buyVolume=0.0;
+   double sellAverage=0.0,sellVolume=0.0;
+   int buyPositions=0,sellPositions=0;
+   if(!CounterSideStats(1,buyAverage,buyVolume,buyPositions) ||
+      !CounterSideStats(-1,sellAverage,sellVolume,sellPositions))
+      return false;
+
+   double addVolume=NormalizeTradeVolume(g_lot);
+   if(addVolume<=0.0)
+      return false;
+
+   currentGapPoints=MathAbs(buyAverage-sellAverage)/_Point;
+   if(direction>0)
+      buyAverage=(buyAverage*buyVolume+entryPrice*addVolume)/(buyVolume+addVolume);
+   else
+      sellAverage=(sellAverage*sellVolume+entryPrice*addVolume)/(sellVolume+addVolume);
+
+   projectedGapPoints=MathAbs(buyAverage-sellAverage)/_Point;
+   return true;
+}
+
+bool CounterRecenterAllowsFill(int direction)
+{
+   if(!CounterRefreshRecenterState())
+      return true;
+
+   MqlTick tick;
+   if(!SymbolInfoTick(_Symbol,tick))
+      return false;
+
+   double entryPrice=direction>0 ? tick.ask : tick.bid;
+   double currentGapPoints=0.0;
+   double projectedGapPoints=0.0;
+   if(!CounterProjectedGapAfterFill(
+         direction,entryPrice,currentGapPoints,projectedGapPoints))
+      return false;
+
+   double improvementTolerance=MathMax(
+      0.5,
+      g_counterRecenterTriggerPoints*0.01
+   );
+   if(projectedGapPoints+improvementTolerance<currentGapPoints)
+      return true;
+
+   g_executionStatus=direction>0
+      ? "COUNTER_RECENTER_BLOCK_BUY"
+      : "COUNTER_RECENTER_BLOCK_SELL";
+   return false;
+}
+
+bool CounterProjectedGapAfterClose(
+   ulong ticket,
+   double closeVolume,
+   double &currentGapPoints,
+   double &projectedGapPoints
+)
+{
+   currentGapPoints=0.0;
+   projectedGapPoints=0.0;
+   if(ticket==0 || closeVolume<=0.0 || _Point<=0.0 ||
+      !PositionSelectByTicket(ticket))
+      return false;
+
+   if(PositionGetString(POSITION_SYMBOL)!=_Symbol ||
+      PositionGetInteger(POSITION_MAGIC)!=InpMagic ||
+      StringFind(PositionGetString(POSITION_COMMENT),"SaaSCounter")<0)
+      return false;
+
+   long type=PositionGetInteger(POSITION_TYPE);
+   int direction=type==POSITION_TYPE_BUY ? 1 : -1;
+   double openPrice=PositionGetDouble(POSITION_PRICE_OPEN);
+
+   double buyAverage=0.0,buyVolume=0.0;
+   double sellAverage=0.0,sellVolume=0.0;
+   int buyPositions=0,sellPositions=0;
+   if(!CounterSideStats(1,buyAverage,buyVolume,buyPositions) ||
+      !CounterSideStats(-1,sellAverage,sellVolume,sellPositions))
+      return false;
+
+   currentGapPoints=MathAbs(buyAverage-sellAverage)/_Point;
+   if(direction>0)
+   {
+      double remaining=buyVolume-closeVolume;
+      if(remaining<=0.00000001)
+         return false;
+      buyAverage=(buyAverage*buyVolume-openPrice*closeVolume)/remaining;
+   }
+   else
+   {
+      double remaining=sellVolume-closeVolume;
+      if(remaining<=0.00000001)
+         return false;
+      sellAverage=(sellAverage*sellVolume-openPrice*closeVolume)/remaining;
+   }
+
+   projectedGapPoints=MathAbs(buyAverage-sellAverage)/_Point;
+   return true;
+}
+
+bool CounterRecenterAllowsProfitClose(ulong ticket,double closeVolume)
+{
+   if(!CounterRefreshRecenterState())
+      return true;
+
+   double currentGapPoints=0.0;
+   double projectedGapPoints=0.0;
+   if(!CounterProjectedGapAfterClose(
+         ticket,closeVolume,currentGapPoints,projectedGapPoints))
+   {
+      g_executionStatus="COUNTER_RECENTER_HOLD_PROFIT";
+      return false;
+   }
+
+   double tolerance=MathMax(0.5,g_counterRecenterTriggerPoints*0.01);
+   if(projectedGapPoints<=currentGapPoints+tolerance)
+      return true;
+
+   g_executionStatus="COUNTER_RECENTER_HOLD_PROFIT";
+   return false;
+}
+
 bool CounterCanSendOrder()
 {
    ulong nowMs=GetTickCount64();
@@ -4405,9 +4650,15 @@ int CounterHarvestProfitablePositions()
       if(closeVolume<=0.0)
          continue;
 
-      // Profit close is a hard local MT5 target. Never delay a winning close
-      // behind COUNTER entry pacing: if this ticket has reached the configured
-      // target, send its close immediately from the EA on this tick.
+      // When BUY/SELL inventory averages have drifted too far apart, keep a
+      // profitable ticket open if removing it would widen that gap further.
+      // This preserves profitable anchors until the two COUNTER sides recenter.
+      if(!CounterRecenterAllowsProfitClose(ticket,closeVolume))
+         continue;
+
+      // Profit close is a hard local MT5 target. Never delay an allowed winning
+      // close behind COUNTER entry pacing: once Recenter says the close does not
+      // worsen inventory geometry, send it immediately on this tick.
       bool closed=ClosePositionVolumeByTicket(ticket,closeVolume,"SCNCounterProfit");
       CounterRegisterOrderRequest();
       if(closed)
@@ -4458,6 +4709,12 @@ bool ProcessCounterFill(int direction)
       g_executionStatus="COUNTER_SYMBOL_DIRECTION_BLOCKED";
       return false;
    }
+
+   // Recenter never changes the COUNTER signal. It only refuses a new fill
+   // when that exact fill would push BUY/SELL weighted entry averages farther
+   // apart while the gap is already abnormally wide.
+   if(!CounterRecenterAllowsFill(direction))
+      return false;
 
    if(!CounterCanSendOrder())
    {

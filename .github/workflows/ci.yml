@@ -141,6 +141,8 @@ jobs:
       - name: COUNTER minimal inverse-flow isolation contract
         shell: pwsh
         run: ./tests/counter-mode-isolation-contract.ps1
+      - name: COUNTER Recenter isolation contract
+        run: node ./tests/counter-recenter-isolation-contract.mjs
       - name: RACE close-all profit contract
         shell: pwsh
         run: ./tests/race-close-all-profit-contract.ps1
