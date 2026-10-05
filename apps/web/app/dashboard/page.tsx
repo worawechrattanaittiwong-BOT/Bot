@@ -1044,6 +1044,10 @@ export default function DashboardPage() {
   // Cloud customer-facing connection has one source of truth: the selected
   // VPS slot runner status shown on the MT5 & EA page.
   const isCloudWorkerOnline = Boolean(selectedCloudSlot?.runner_online);
+  const isCloudControlReady = Boolean(
+    data?.instance?.cloud_control_ready ??
+    selectedCloudSlot?.cloud_control_ready
+  );
   const eaLastSeenAgeSeconds = Number(data?.instance?.ea_last_seen_age_seconds ?? -1);
   // Local keeps the existing MT5/EA connection logic. Cloud deliberately
   // ignores EA heartbeat/terminal freshness for the Connected/Offline badge.
@@ -1601,7 +1605,12 @@ export default function DashboardPage() {
     return () => clearTimeout(id);
   }, [serverOperation?.id, serverOperation?.kind, serverOperation?.status]);
 
-  const startConnectionReady = isMt5Online || isAgentOnline;
+  const startConnectionReady = isCloudRuntime
+    ? isCloudControlReady
+    : (isMt5Online || isAgentOnline);
+  const firstConnectPrimeBlocksStart =
+    firstConnectPrimePending &&
+    !(isCloudRuntime && isCloudControlReady);
   const safeStopPositionCount = Math.max(0, Number(metrics.positions || 0));
   const safeStopOperationRunning =
     serverOperation?.kind === "STOP" &&
@@ -1618,7 +1627,7 @@ export default function DashboardPage() {
   const startBlocked =
     busy ||
     botCommandLocked ||
-    firstConnectPrimePending ||
+    firstConnectPrimeBlocksStart ||
     botStarting ||
     botRunning ||
     safeStopInProgress ||

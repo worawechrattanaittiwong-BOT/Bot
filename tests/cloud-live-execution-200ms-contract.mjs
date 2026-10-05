@@ -11,6 +11,7 @@ const cloudRelease = read("apps/api/src/cloud-server-release.ts");
 const runtimeController = read("apps/api/src/runtime-event.controller.ts");
 const runtimeService = read("apps/api/src/runtime-event.service.ts");
 const dashboard = read("apps/web/app/dashboard/page.tsx");
+const botApi = read("apps/api/src/bot.controller.ts");
 const release = read("apps/api/src/release-version.ts");
 
 assert.match(
@@ -98,15 +99,46 @@ assert.match(
   /String\(event\.eventType \|\| ""\)\.toUpperCase\(\) !== "LIVE_EXECUTION"/,
   "Dashboard must not full-reload on each 200ms live snapshot"
 );
+const idleHelperStart = ea.indexOf("bool CloudStoppedFlatIdle()");
+const onTickStart = ea.indexOf("void OnTick()");
+const onTimerStart = ea.indexOf("void OnTimer()", onTickStart);
+const idleHelper = idleHelperStart >= 0 && onTickStart > idleHelperStart
+  ? ea.slice(idleHelperStart, onTickStart)
+  : "";
+const onTick = onTickStart >= 0 && onTimerStart > onTickStart
+  ? ea.slice(onTickStart, onTimerStart)
+  : "";
+const stoppedFlatGuard = onTick.indexOf("if(CloudStoppedFlatIdle())");
+const heavyTickWork = onTick.indexOf("UpdateMomentum()");
+assert.ok(stoppedFlatGuard >= 0, "STOPPED + flat EA must have an early idle guard");
+assert.ok(
+  heavyTickWork < 0 || stoppedFlatGuard < heavyTickWork,
+  "STOPPED + flat guard must run before indicator-heavy tick work so Timer heartbeat cannot be starved"
+);
+assert.match(
+  idleHelper,
+  /g_state==STATE_STOPPED[\s\S]*?g_pendingCloseReason==CLOSE_REASON_NONE[\s\S]*?!LocalExecutionExposureActive\(\)[\s\S]*?ScenovaAccountPositionCount\(\)<=0[\s\S]*?ScenovaAccountPendingCount\(\)<=0/,
+  "STOPPED idle fast path must preserve exposure and pending-order safety"
+);
+assert.match(
+  ea,
+  /input int\s+InpHeartbeatSeconds\s+= 5;/,
+  "Cloud heartbeat cadence must remain the existing 5 seconds"
+);
+assert.match(
+  botApi,
+  /cloud_control_ready/,
+  "Dashboard API must expose fresh Cloud Worker terminal/EA attach readiness separately from EA heartbeat freshness"
+);
 assert.match(
   dashboard,
-  /LIVE EXECUTION · CLOUD 200ms/,
-  "Dashboard must visibly identify the active Cloud 200ms stream"
+  /const startConnectionReady = isCloudRuntime[\s\S]*?isCloudControlReady[\s\S]*?: \(isMt5Online \|\| isAgentOnline\)/,
+  "Cloud Start button must use Worker-confirmed control readiness instead of transient 20s EA heartbeat freshness"
 );
 
 const eaVersion = ea.match(/#define SCENOVA_EA_VERSION "([^"]+)"/)?.[1];
 const promotedEa = release.match(/DEFAULT_EA_VERSION = "([^"]+)"/)?.[1];
-assert.equal(eaVersion, "1.1.22", "Cloud 200ms requires EA 1.1.22");
+assert.equal(eaVersion, "1.1.23", "Cloud heartbeat/control readiness requires EA 1.1.23");
 assert.equal(eaVersion, promotedEa, "EA source and promoted API version must match");
 
 const workerVersion = workerLoop.match(/Version = "([^"]+)"/)?.[1];

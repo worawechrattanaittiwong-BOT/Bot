@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.1.22"
-#define SCENOVA_EA_VERSION "1.1.22"
-#define SCENOVA_PRODUCT_VERSION "1.1.22"
+#property version   "1.1.23"
+#define SCENOVA_EA_VERSION "1.1.23"
+#define SCENOVA_PRODUCT_VERSION "1.1.23"
 #define SCENOVA_BUILD_ID "SOURCE"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_CONFIGURED_LOSS_ONLY_V1"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
@@ -5556,6 +5556,19 @@ bool FastProfitClosePriority()
    return false;
 }
 
+bool CloudStoppedFlatIdle()
+{
+   if(!InpCloudRelay || MQLInfoInteger(MQL_TESTER))
+      return false;
+
+   return
+      g_state==STATE_STOPPED &&
+      g_pendingCloseReason==CLOSE_REASON_NONE &&
+      !LocalExecutionExposureActive() &&
+      ScenovaAccountPositionCount()<=0 &&
+      ScenovaAccountPendingCount()<=0;
+}
+
 void OnTick()
 {
    // Timer watchdog. Standard timer is independent of market ticks, but a live
@@ -5584,6 +5597,18 @@ void OnTick()
          g_lastHeartbeat=TimeCurrent();
          SendHeartbeat();
       }
+   }
+
+   // STOPPED + flat Cloud runtimes must stay extremely cheap on every market
+   // tick. Running indicator/history/basket work here can monopolize MT5's
+   // single EA event queue on a fast symbol and starve the independent Timer
+   // that services Cloud heartbeat response files. When there is no SCENOVA
+   // exposure and no pending close request, control-plane heartbeat owns the
+   // idle runtime and strategy work can wait until the Server authorizes RUNNING.
+   if(CloudStoppedFlatIdle())
+   {
+      g_executionStatus="STOPPED";
+      return;
    }
 
    // Local execution clock: all price-sensitive management reads the MT5 tick
@@ -6296,6 +6321,15 @@ void OnTimer()
    // heartbeat the whole timer pass before indicators/chart/profit work so a
    // closed market or slow history read cannot starve SaaS connectivity.
    if(SendFlatHeartbeatIfDue())
+   {
+      RefreshChartStatus();
+      return;
+   }
+
+   // Keep STOPPED Cloud control entirely off the heavy indicator/history path.
+   // The 1-second timer remains responsive and a START command is picked up on
+   // the next short idle heartbeat instead of waiting behind market analysis.
+   if(CloudStoppedFlatIdle())
    {
       RefreshChartStatus();
       return;

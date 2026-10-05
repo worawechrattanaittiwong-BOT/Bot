@@ -12,7 +12,7 @@ import {
 } from "@nestjs/common";
 import { DbService } from "./db.service";
 import { CryptoService } from "./security";
-import { DEFAULT_EA_VERSION, EA_RUNTIME_CONTRACT, installerDownloadPath, isEaVersionExact, isVersionExact, isVersionSame, latestEaRelease, latestInstallerVersion } from "./release-version";
+import { EA_RUNTIME_CONTRACT, FIRST_CONNECT_PRIME_MIN_EA_VERSION, installerDownloadPath, isEaVersionExact, isVersionAtLeast, isVersionExact, isVersionSame, latestEaRelease, latestInstallerVersion } from "./release-version";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { MaintenanceService } from "./maintenance.service";
@@ -799,7 +799,7 @@ export class EaController {
     const heartbeatActualState = String(body.state || "").toUpperCase();
     const firstConnectPrimeRuntimeReady =
       firstConnectPrimePending &&
-      isEaVersionExact(metrics.eaVersion, DEFAULT_EA_VERSION) &&
+      isVersionAtLeast(metrics.eaVersion, FIRST_CONNECT_PRIME_MIN_EA_VERSION) &&
       String(metrics.runtimeContract || "") === EA_RUNTIME_CONTRACT;
 
     // Do not send the one-time Start until the current protected EA runtime is

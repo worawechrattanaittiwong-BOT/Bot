@@ -14,7 +14,7 @@ import {
 } from "@nestjs/common";
 import { randomBytes } from "crypto";
 import { DbService } from "./db.service";
-import { EA_RUNTIME_CONTRACT, ZERO_GRID_MAX_LEVELS_PER_SIDE, installerDownloadPath, isEaVersionExact, isVersionExact, isVersionSame, latestEaRelease, latestInstallerVersion } from "./release-version";
+import { EA_RUNTIME_CONTRACT, FIRST_CONNECT_PRIME_MIN_EA_VERSION, ZERO_GRID_MAX_LEVELS_PER_SIDE, installerDownloadPath, isEaVersionExact, isVersionAtLeast, isVersionExact, isVersionSame, latestEaRelease, latestInstallerVersion } from "./release-version";
 import { CryptoService, JwtGuard } from "./security";
 import { MaintenanceService } from "./maintenance.service";
 import { PartnerService } from "./partner.service";
@@ -68,7 +68,10 @@ export class BotController {
   ) {}
 
   private supportedEaRuntime(version: any) {
-    return isEaVersionExact(version, latestEaRelease().eaVersion);
+    // Runtime compatibility is a protocol/safety gate, not a "latest patch"
+    // gate. Older EA patches remain usable until an explicit Admin update is
+    // released/applied, as long as they include the protected Cloud runtime.
+    return isVersionAtLeast(version, FIRST_CONNECT_PRIME_MIN_EA_VERSION);
   }
 
   private async armFirstConnectPrime(
@@ -632,6 +635,21 @@ export class BotController {
            AND bi.last_seen_at <= now() - interval '20 seconds'
            AND bi.last_seen_at > now() - interval '60 seconds') mt5_connection_degraded,
          (wn.last_seen_at IS NOT NULL AND wn.last_seen_at > now() - interval '120 seconds') runner_online,
+         (
+           bi.mode='CLOUD'
+           AND wn.last_seen_at IS NOT NULL
+           AND wn.last_seen_at > now() - interval '30 seconds'
+           AND EXISTS (
+             SELECT 1
+             FROM jsonb_array_elements(
+               COALESCE((wn.telemetry->'instances')::jsonb, '[]'::jsonb)
+             ) AS control_instance
+             WHERE control_instance->>'instanceId'=bi.id::text
+               AND control_instance->>'terminalRunning'='true'
+               AND control_instance->>'chartHasFastBasketBot'='true'
+               AND control_instance->>'presetCloudRelayEnabled'='true'
+           )
+         ) cloud_control_ready,
          bi.device_status,
          bi.device_hostname,
          bi.device_last_seen_at,
@@ -997,6 +1015,21 @@ export class BotController {
            AND bi.last_seen_at <= now() - interval '20 seconds'
            AND bi.last_seen_at > now() - interval '60 seconds') AS mt5_connection_degraded,
          (wn.last_seen_at IS NOT NULL AND wn.last_seen_at > now() - interval '120 seconds') AS runner_online,
+         (
+           bi.mode='CLOUD'
+           AND wn.last_seen_at IS NOT NULL
+           AND wn.last_seen_at > now() - interval '30 seconds'
+           AND EXISTS (
+             SELECT 1
+             FROM jsonb_array_elements(
+               COALESCE((wn.telemetry->'instances')::jsonb, '[]'::jsonb)
+             ) AS control_instance
+             WHERE control_instance->>'instanceId'=bi.id::text
+               AND control_instance->>'terminalRunning'='true'
+               AND control_instance->>'chartHasFastBasketBot'='true'
+               AND control_instance->>'presetCloudRelayEnabled'='true'
+           )
+         ) AS cloud_control_ready,
          (bi.agent_last_seen_at IS NOT NULL AND bi.agent_last_seen_at > now() - interval '30 minutes') AS agent_online,
          (bi.device_last_seen_at IS NOT NULL AND bi.device_last_seen_at > now() - interval '90 seconds') AS device_online,
          CASE WHEN bi.last_seen_at IS NULL THEN NULL ELSE EXTRACT(EPOCH FROM (now() - bi.last_seen_at)) END AS ea_last_seen_age_seconds,
@@ -3101,9 +3134,89 @@ export class BotController {
     );
     const startSettings = startSettingsRow?.settings || {};
     if (startSettings.firstConnectPrimePending === true) {
-      throw new ConflictException(
-        "ระบบกำลัง Start/Stop ครั้งแรกบน VPS เพื่อเตรียมการเชื่อมต่อ กรุณารอให้สถานะพร้อมใช้งานก่อน"
-      );
+      if (instance.mode === "CLOUD") {
+        const primeRuntimeCompatible =
+          this.supportedEaRuntime(instance.metrics?.eaVersion) &&
+          String(instance.metrics?.runtimeContract || "") === EA_RUNTIME_CONTRACT;
+        const workerControl = await this.db.one(
+          `SELECT EXISTS (
+             SELECT 1
+             FROM worker_nodes wn
+             WHERE wn.runner_id=$1
+               AND wn.last_seen_at > now() - interval '30 seconds'
+               AND EXISTS (
+                 SELECT 1
+                 FROM jsonb_array_elements(
+                   COALESCE((wn.telemetry->'instances')::jsonb, '[]'::jsonb)
+                 ) AS control_instance
+                 WHERE control_instance->>'instanceId'=$2::text
+                   AND control_instance->>'terminalRunning'='true'
+                   AND control_instance->>'chartHasFastBasketBot'='true'
+                   AND control_instance->>'presetCloudRelayEnabled'='true'
+               )
+           ) AS ready`,
+          [instance.runner_id, instance.id]
+        );
+        const primeCanYieldToCustomerStart =
+          primeRuntimeCompatible &&
+          workerControl?.ready === true &&
+          livePositions <= 0 &&
+          livePendingOrders <= 0;
+
+        if (!primeCanYieldToCustomerStart) {
+          throw new ConflictException(
+            "ระบบกำลังเตรียม MT5/EA ครั้งแรก กรุณารอให้ VPS ยืนยันว่า EA พร้อมควบคุมก่อนเริ่มบอท"
+          );
+        }
+
+        const completedAt = new Date().toISOString();
+        await this.db.query(
+          `UPDATE bot_settings
+           SET settings=jsonb_set(
+                 jsonb_set(
+                   COALESCE(settings,'{}'::jsonb),
+                   '{firstConnectPrimePending}',
+                   'false'::jsonb,
+                   true
+                 ),
+                 '{firstConnectPrimeCompletedAt}',
+                 to_jsonb($2::text),
+                 true
+               ),
+               updated_at=now()
+           WHERE bot_instance_id=$1`,
+          [instance.id, completedAt]
+        );
+        await this.db.query(
+          `INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail)
+           VALUES(
+             $1,
+             'FIRST_CONNECT_PRIME_COMPLETED_BY_CUSTOMER_START',
+             'bot_instance',
+             $2,
+             jsonb_build_object(
+               'completedAt',$3::text,
+               'eaVersion',$4::text,
+               'runtimeContract',$5::text,
+               'workerControlReady',true,
+               'noEntry',true
+             )
+           )`,
+          [
+            String(req.user?.code || req.user?.sub || "USER").slice(0,160),
+            instance.id,
+            completedAt,
+            String(instance.metrics?.eaVersion || ""),
+            String(instance.metrics?.runtimeContract || "")
+          ]
+        );
+        startSettings.firstConnectPrimePending = false;
+        startSettings.firstConnectPrimeCompletedAt = completedAt;
+      } else {
+        throw new ConflictException(
+          "ระบบกำลัง Start/Stop ครั้งแรกเพื่อเตรียมการเชื่อมต่อ กรุณารอให้สถานะพร้อมใช้งานก่อน"
+        );
+      }
     }
     const currentAccountCurrency = String(instance.metrics?.currency || "").trim().toUpperCase();
     const settingsAccountCurrency = String(startSettings.accountCurrency || "").trim().toUpperCase();

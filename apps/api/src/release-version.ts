@@ -3,8 +3,9 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
 export const DEFAULT_INSTALLER_VERSION = "1.0.13";
-export const DEFAULT_EA_VERSION = "1.1.22";
+export const DEFAULT_EA_VERSION = "1.1.23";
 export const EA_RUNTIME_CONTRACT = "RACE_CONFIGURED_LOSS_ONLY_V1";
+export const FIRST_CONNECT_PRIME_MIN_EA_VERSION = "1.1.19";
 export const ZERO_GRID_MAX_LEVELS_PER_SIDE = 30;
 
 // 3.1.2 introduced the Agent protocol used by the current 1.0.x line
