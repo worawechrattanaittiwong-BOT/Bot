@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.1.23"
-#define SCENOVA_EA_VERSION "1.1.23"
-#define SCENOVA_PRODUCT_VERSION "1.1.23"
+#property version   "1.1.24"
+#define SCENOVA_EA_VERSION "1.1.24"
+#define SCENOVA_PRODUCT_VERSION "1.1.24"
 #define SCENOVA_BUILD_ID "SOURCE"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_CONFIGURED_LOSS_ONLY_V1"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
@@ -185,6 +185,11 @@ input double          InpCounterPerPositionProfitMoney = 0.50;
 #define AUTO_V21_EXIT_LAST_FILL_GRACE_SECONDS 15
 #define AUTO_V21_EXIT_CONFIRM_SECONDS 10
 #define AUTO_V21_EXIT_SEVERE_CONFIRM_SECONDS 6
+// AUTO initial Broker SL standard. It is market-volatility based and must not
+// shrink because of account balance/equity or the configured Lot.
+#define AUTO_V20_STOP_ATR_FLOOR 1.25
+#define AUTO_V20_STOP_ATR_CAP 2.40
+#define AUTO_V20_STOP_SPREAD_MULTIPLIER 4.00
 #define RACE_VOLUME_WINDOW_SECONDS 30
 #define RACE_SIGNAL_MAX_WAIT_SECONDS 60
 #define RACE_VOLUME_MIN_DOMINANCE 0.55
@@ -15324,19 +15329,40 @@ void AutoV20PlanPrices(AUTO_V20_SIDE &side,AUTO_V20_LEVELS &levels)
       AverageTrueRangePoints(PERIOD_M5,g_atrPeriod)*_Point);
    side.entryPrice=side.direction>0 ? tick.ask : tick.bid;
 
-   double stopDistance=atrPrice*0.58;
+   // AUTO used to start at only 0.58 x M5 ATR and could be clamped as low as
+   // 0.32 x ATR. On XAUUSD that places the first Broker SL inside ordinary M5
+   // noise, so a valid entry can be stopped almost immediately. Use a stable
+   // market standard instead: at least 1.25 x M5 ATR, 4 x live spread and the
+   // broker Stops/Freeze requirement. Balance/equity and Lot are deliberately
+   // absent from this calculation.
+   double spreadPoints=CurrentSpreadPoints();
+   double spreadFloorPrice=
+      (spreadPoints>0.0 && spreadPoints<999999.0)
+      ? spreadPoints*_Point*AUTO_V20_STOP_SPREAD_MULTIPLIER
+      : 0.0;
+   double brokerFloorPoints=MathMax(
+      (double)SymbolInfoInteger(_Symbol,SYMBOL_TRADE_STOPS_LEVEL),
+      (double)SymbolInfoInteger(_Symbol,SYMBOL_TRADE_FREEZE_LEVEL)
+   )+2.0;
+   double brokerFloorPrice=brokerFloorPoints*_Point;
+   double standardStopFloor=MathMax(
+      atrPrice*AUTO_V20_STOP_ATR_FLOOR,
+      MathMax(spreadFloorPrice,brokerFloorPrice)
+   );
+   double stopDistance=standardStopFloor;
    bool zoneStopApplied=false;
 
-   // Zone-First AUTO: place SL beyond the active Demand/Supply zone when the
-   // entry came from that area; otherwise fall back to nearest structure.
+   // Zone-First AUTO may widen the standard SL beyond the active Demand/Supply
+   // boundary, but a nearby zone is never allowed to pull SL back inside the
+   // standard volatility floor.
    if(side.direction>0 &&
       g_demandZoneLow>0.0 && g_demandZoneHigh>=g_demandZoneLow &&
       side.entryPrice<=g_demandZoneHigh+atrPrice*0.30)
    {
       double zoneDistance=side.entryPrice-(g_demandZoneLow-atrPrice*0.10);
-      if(zoneDistance>=atrPrice*0.28 && zoneDistance<=atrPrice*0.95)
+      if(zoneDistance>0.0 && zoneDistance<=atrPrice*AUTO_V20_STOP_ATR_CAP)
       {
-         stopDistance=zoneDistance;
+         stopDistance=MathMax(stopDistance,zoneDistance);
          zoneStopApplied=true;
       }
    }
@@ -15345,37 +15371,46 @@ void AutoV20PlanPrices(AUTO_V20_SIDE &side,AUTO_V20_LEVELS &levels)
            side.entryPrice>=g_supplyZoneLow-atrPrice*0.30)
    {
       double zoneDistance=(g_supplyZoneHigh+atrPrice*0.10)-side.entryPrice;
-      if(zoneDistance>=atrPrice*0.28 && zoneDistance<=atrPrice*0.95)
+      if(zoneDistance>0.0 && zoneDistance<=atrPrice*AUTO_V20_STOP_ATR_CAP)
       {
-         stopDistance=zoneDistance;
+         stopDistance=MathMax(stopDistance,zoneDistance);
          zoneStopApplied=true;
       }
    }
 
+   // Without an active entry zone, use nearest confirmed structure when it
+   // needs more breathing room than the standard floor.
    if(!zoneStopApplied &&
       side.direction>0 && levels.nearestSupport>0.0 &&
       levels.nearestSupport<side.entryPrice)
    {
       double structureDistance=side.entryPrice-(levels.nearestSupport-atrPrice*0.08);
-      if(structureDistance>=atrPrice*0.30 && structureDistance<=atrPrice*0.85)
-         stopDistance=structureDistance;
+      if(structureDistance>0.0 &&
+         structureDistance<=atrPrice*AUTO_V20_STOP_ATR_CAP)
+         stopDistance=MathMax(stopDistance,structureDistance);
    }
    else if(!zoneStopApplied &&
            side.direction<0 && levels.nearestResistance>side.entryPrice)
    {
       double structureDistance=(levels.nearestResistance+atrPrice*0.08)-side.entryPrice;
-      if(structureDistance>=atrPrice*0.30 && structureDistance<=atrPrice*0.85)
-         stopDistance=structureDistance;
+      if(structureDistance>0.0 &&
+         structureDistance<=atrPrice*AUTO_V20_STOP_ATR_CAP)
+         stopDistance=MathMax(stopDistance,structureDistance);
    }
+
+   // Keep AUTO bounded. The configured system ATR hard stop can tighten the
+   // outer envelope, but it can never shrink the initial SL below the standard
+   // AUTO floor above.
+   double maximumStop=atrPrice*AUTO_V20_STOP_ATR_CAP;
+   double configuredStop=EffectiveStopLossDistancePoints()*_Point;
+   if(configuredStop>standardStopFloor)
+      maximumStop=MathMin(maximumStop,configuredStop);
+   maximumStop=MathMax(maximumStop,standardStopFloor);
    stopDistance=AutoV20Clamp(
       stopDistance,
-      atrPrice*0.32,
-      atrPrice*(zoneStopApplied ? 0.95 : 0.78)
+      standardStopFloor,
+      maximumStop
    );
-
-   double configuredStop=EffectiveStopLossDistancePoints()*_Point;
-   if(configuredStop>_Point)
-      stopDistance=MathMin(stopDistance,configuredStop);
 
    // Default target must be meaningfully larger than the protected stop. A
    // nearby opposing M5 level may shorten it; the net-RR policy then rejects
@@ -15404,7 +15439,10 @@ void AutoV20PlanPrices(AUTO_V20_SIDE &side,AUTO_V20_LEVELS &levels)
       if(room>=atrPrice*0.30 && room<=atrPrice*1.60)
          targetDistance=MathMin(targetDistance,room);
    }
-   targetDistance=AutoV20Clamp(targetDistance,atrPrice*0.30,atrPrice*1.35);
+   // Do not let the old 1.35 ATR cap silently destroy the planned RR after
+   // widening the standard SL. Nearby opposing structure may still shorten TP.
+   double targetDistanceCap=MathMax(atrPrice*1.35,stopDistance*1.80);
+   targetDistance=AutoV20Clamp(targetDistance,atrPrice*0.30,targetDistanceCap);
 
    side.slPrice=side.direction>0
       ? side.entryPrice-stopDistance
