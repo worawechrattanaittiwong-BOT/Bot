@@ -27,7 +27,7 @@ need(ea, 'g_zeroGridCycleLevelsPerSide>0 ? g_zeroGridCycleLevelsPerSide : g_zero
 forbid(ea, 'return ZERO_GRID_MAX_LEVELS;', "EA hardcoded effective levels");
 
 // Explicit isolation sentinels: this feature must not replace AUTO/RACE engines.
-need(ea, 'bool AutoV20Enabled()', "AUTO V20 engine");
+need(ea, 'bool AutoEnabled()', "AUTO engine");
 need(ea, 'int RaceM5CandleDirection()', "RACE engine");
 need(ea, 'bool ZeroGridModeEnabled()', "ZERO isolated engine");
 

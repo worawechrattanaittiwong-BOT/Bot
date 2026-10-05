@@ -1,7 +1,7 @@
 // SCENOVA AUTO + VECTOR EDGE — Phase 2 Shadow Harness
 // ----------------------------------------------------
 // Branch-only observation build. Production FastBasketBot.mq5 stays unchanged.
-// The base engine executes first; VECTOR EDGE only reads AUTO V20 afterward.
+// The base engine executes first; VECTOR EDGE only reads AUTO afterward.
 
 #define OnInit  ScenovaBaseOnInit
 #define OnTimer ScenovaBaseOnTimer
@@ -9,8 +9,8 @@
 #undef OnInit
 #undef OnTimer
 
-#include "include\AutoVectorEdgeV1.mqh"
-#include "include\AutoVectorEdgeShadowV1.mqh"
+#include "include\AutoVectorEdge.mqh"
+#include "include\AutoVectorEdgeShadow.mqh"
 
 bool VectorEdgeShadowHarnessRealAccount()
 {
@@ -37,7 +37,7 @@ void OnTimer()
    ScenovaBaseOnTimer();
 
    // Hard wrapper boundary: other modes run only the unchanged base engine.
-   if(!AutoV20Enabled())
+   if(!AutoEnabled())
       return;
 
    AutoVectorEdgeShadowObserve();

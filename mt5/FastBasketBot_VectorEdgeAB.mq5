@@ -11,9 +11,9 @@
 #undef OnTick
 #undef OnTimer
 
-#include "include\AutoVectorEdgeV1.mqh"
-#include "include\AutoVectorEdgeShadowV1.mqh"
-#include "include\AutoVectorEdgeABV1.mqh"
+#include "include\AutoVectorEdge.mqh"
+#include "include\AutoVectorEdgeShadow.mqh"
+#include "include\AutoVectorEdgeAB.mqh"
 
 bool VectorEdgeHarnessRealAccount()
 {
@@ -37,7 +37,7 @@ int OnInit()
 void VectorEdgeABPostBaseEvent(const ulong orderMarkerBefore)
 {
    // Other execution modes are completely outside VECTOR EDGE ownership.
-   if(!AutoV20Enabled())
+   if(!AutoEnabled())
       return;
 
    // g_lastOrderMs changes after the successful AUTO SendMarketOrder path.
@@ -67,8 +67,8 @@ void OnTimer()
    // Existing timer logic always runs first and remains authoritative.
    ScenovaBaseOnTimer();
 
-   // Outside AUTO V20, do nothing beyond the unchanged base engine.
-   if(!AutoV20Enabled())
+   // Outside AUTO, do nothing beyond the unchanged base engine.
+   if(!AutoEnabled())
       return;
 
    AutoVectorEdgeShadowObserve();

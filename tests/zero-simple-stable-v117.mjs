@@ -33,7 +33,7 @@ for (const forbidden of [
   "Confidence",
   "Session",
   "RaceM5",
-  "AUTO_V20",
+  "AUTO",
   "AverageTrueRange",
   "g_trendM",
   "g_macroTrendDirection"

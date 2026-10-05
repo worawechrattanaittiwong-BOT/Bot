@@ -1,6 +1,6 @@
 # AUTO + VECTOR EDGE — 3-Phase Safety Audit
 
-Branch: `feature/auto-vector-edge-v1`
+Branch: `refactor/auto-core-single`
 
 This audit is intentionally performed before any merge to `main`.
 
@@ -10,7 +10,7 @@ This audit is intentionally performed before any merge to `main`.
 - `mt5/FastBasketBot.mq5` is unchanged.
 - VECTOR EDGE files are new branch-only modules/harnesses.
 - Phase 2/3 harnesses refuse REAL-account initialization.
-- Shadow/A-B logic is hard-gated by `AutoV20Enabled()`.
+- Shadow/A-B logic is hard-gated by `AutoEnabled()`.
 - RACE, ZERO_GRID, ASSISTED, and MANUAL do not run VECTOR EDGE observers.
 - VECTOR EDGE modules contain no order-send/modify/close implementation.
 - No VECTOR EDGE output is assigned to base execution state, sizing, SL/TP,
@@ -29,12 +29,12 @@ absolute side probability/proxy.
 
 ### 2. AUTO cost was double-counted
 
-AUTO V20 stores `expectedProfitMoney` net of known cost and
+AUTO stores `expectedProfitMoney` net of known cost and
 `expectedLossMoney` including known cost. Passing these directly into an EV
 formula that subtracts `knownCostMoney` again double-counted execution cost.
 
 Fix: Phase 2 derives gross win/loss primarily from AUTO entry/TP/SL/planned-lot
-geometry through the existing read-only `AutoV20ProfitForMove()` calculation,
+geometry through the existing read-only `AutoProfitForMove()` calculation,
 then applies known cost exactly once in VECTOR EDGE EV.
 
 ### 3. Normal spread was over-penalized
@@ -98,9 +98,9 @@ Tester and demo validation remain available.
 Static source audit cannot prove MetaEditor compilation or runtime equivalence.
 Before merge or live behavior integration:
 
-1. Compile `mt5/tests/AutoVectorEdgeV1SelfTest.mq5` with zero errors/warnings.
+1. Compile `mt5/tests/AutoVectorEdgeSelfTest.mq5` with zero errors/warnings.
 2. Run it and require `failed=0`.
-3. Compile `mt5/tests/AutoVectorEdgeABV1SelfTest.mq5` with zero errors/warnings.
+3. Compile `mt5/tests/AutoVectorEdgeABSelfTest.mq5` with zero errors/warnings.
 4. Run it and require `failed=0`.
 5. Compile `mt5/FastBasketBot_VectorEdgeShadow.mq5` with zero errors/warnings.
 6. Compile `mt5/FastBasketBot_VectorEdgeAB.mq5` with zero errors/warnings.

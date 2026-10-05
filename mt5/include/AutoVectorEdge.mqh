@@ -1,10 +1,10 @@
-#ifndef SCENOVA_AUTO_VECTOR_EDGE_V1_MQH
-#define SCENOVA_AUTO_VECTOR_EDGE_V1_MQH
+#ifndef SCENOVA_AUTO_VECTOR_EDGE_MQH
+#define SCENOVA_AUTO_VECTOR_EDGE_MQH
 
-// SCENOVA AUTO VECTOR EDGE V1
+// SCENOVA AUTO VECTOR EDGE
 // Pure decision-support math for AUTO. No trade/order APIs are allowed here.
 
-#define VECTOR_EDGE_V1_VERSION "1.2.3-live-compatible"
+#define VECTOR_EDGE_BUILD "1.2.3-live-compatible"
 
 struct VECTOR_EDGE_INPUT
 {
@@ -198,4 +198,4 @@ VECTOR_EDGE_OUTPUT VectorEvaluateEdge(const VECTOR_EDGE_INPUT &edgeInput)
    return out;
 }
 
-#endif // SCENOVA_AUTO_VECTOR_EDGE_V1_MQH
+#endif // SCENOVA_AUTO_VECTOR_EDGE_MQH

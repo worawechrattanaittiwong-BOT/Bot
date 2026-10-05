@@ -5,10 +5,10 @@ function Need([string]$text,[string]$needle,[string]$message){ if(-not $text.Con
 function Forbid([string]$text,[string]$needle,[string]$message){ if($text.Contains($needle)){throw $message} }
 
 $ea=Read-Text 'mt5/FastBasketBot.mq5'
-$vec=Read-Text 'mt5/include/AutoVectorEdgeLiveV1.mqh'
-$precision=Block $ea 'int AutoV20PrecisionDirection(double momentum)'
+$vec=Read-Text 'mt5/include/AutoVectorEdgeLive.mqh'
+$precision=Block $ea 'int AutoPrecisionDirection(double momentum)'
 $send=Block $ea 'bool SendMarketOrder(int direction)'
-$enabled=Block $ea 'bool AutoV20Enabled()'
+$enabled=Block $ea 'bool AutoEnabled()'
 
 # Keep activity: first-four score policy stays relaxed; there is no forced quota.
 Need $precision 'bool relaxedFirstFour=count<4;' 'AUTO relaxed early score policy disappeared'
@@ -16,7 +16,7 @@ Forbid $precision 'dailyTradeQuota' 'AUTO must not force orders to hit a daily q
 Forbid $precision 'minimumTradesPerDay' 'AUTO must not force orders to hit a daily quota'
 
 # Position 2+ is winner-only and pauses during wrong-direction confirmation.
-Need $precision 'g_autoV20ExitCandidateSince>0' 'AUTO must pause adds during exit confirmation'
+Need $precision 'g_autoExitCandidateSince>0' 'AUTO must pause adds during exit confirmation'
 Need $precision 'EXIT_CANDIDATE_NO_ADD' 'AUTO exit-candidate add rejection missing'
 Need $precision 'progress<0.0 || (progress<required && !pb.resumed)' 'AUTO must not average down'
 Need $precision 'double addProgressFactor=relaxedFirstFour ? 0.05 : 0.08;' 'AUTO early-add progress policy missing'
@@ -31,14 +31,14 @@ Need $precision 'AUTO_VECTOR_EDGE_SAFETY_WAIT' 'AUTO Vector safety telemetry mis
 
 # Vector uncertainty must use the selected side.
 Need $vec 'const int selectedDirection=0' 'Vector selected-side context missing'
-Need $vec 'if(selectedDirection>0) selectedConfidence=g_autoV20Buy.confidence;' 'BUY selected confidence missing'
-Need $vec 'else if(selectedDirection<0) selectedConfidence=g_autoV20Sell.confidence;' 'SELL selected confidence missing'
+Need $vec 'if(selectedDirection>0) selectedConfidence=g_autoBuy.confidence;' 'BUY selected confidence missing'
+Need $vec 'else if(selectedDirection<0) selectedConfidence=g_autoSell.confidence;' 'SELL selected confidence missing'
 Need $vec 'VectorEdgeLiveBuildInput(edgeInput,direction)' 'Vector selected direction not wired into live evaluation'
 
 # Existing AUTO-generated broker SL/TP protection remains mandatory.
 Need $send 'request.sl=autoPlan.slPrice;' 'AUTO-generated SL missing'
 Need $send 'request.tp=hardMoneyProfitTarget ? 0.0 : autoPlan.tpPrice;' 'AUTO-generated TP missing'
-Need $send 'AUTO_V20_BROKER_PROTECTION_INVALID' 'AUTO broker-protection validation missing'
+Need $send 'AUTO_BROKER_PROTECTION_INVALID' 'AUTO broker-protection validation missing'
 
 # Isolation: AUTO remains its own execution owner and precision code must not call other engines.
 Need $enabled 'if(g_engineMode != "AUTO") return false;' 'AUTO engine isolation missing'
@@ -49,4 +49,4 @@ Forbid $precision 'ZeroGrid' 'AUTO precision must not call ZERO GRID'
 Forbid $precision 'FlipLock' 'AUTO precision must not call FLIP LOCK'
 Forbid $precision 'Counter' 'AUTO precision must not call COUNTER'
 
-Write-Host 'AUTO V22 safe-profit isolation contract PASS'
+Write-Host 'AUTO safe-profit isolation contract PASS'

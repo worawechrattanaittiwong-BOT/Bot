@@ -14,11 +14,11 @@ enum ENUM_ENTRY_MODE
    ENTRY_SELL_ONLY     = 2
 };
 
-// Brain V20 AUTO-only decision context -------------------------------------
+// AUTO-only decision context -----------------------------------------------
 // These structures are intentionally isolated from RACE/Turbo and the legacy
 // ASSISTED/MANUAL execution paths. AUTO evaluates BUY and SELL independently
 // and publishes only the selected side into the shared execution telemetry.
-struct AUTO_V20_LEVELS
+struct AUTO_LEVELS
 {
    double nearestSupport;
    double nearestResistance;
@@ -37,7 +37,7 @@ struct AUTO_V20_LEVELS
    string roleFlipState;
 };
 
-struct AUTO_V20_PULLBACK
+struct AUTO_PULLBACK
 {
    int direction;
    double swingStart;
@@ -52,7 +52,7 @@ struct AUTO_V20_PULLBACK
    string state;
 };
 
-struct AUTO_V20_SIDE
+struct AUTO_SIDE
 {
    int direction;
    double confidence;
@@ -180,11 +180,11 @@ input double          InpCounterPerPositionProfitMoney = 0.50;
 #define ZERO_GRID_JOURNAL_HTTP_TIMEOUT_MS 500
 #define LOCAL_DYNAMIC_PROTECTION_INTERVAL_MS 150
 #define DEFERRED_DEAL_JOURNAL_MAX 256
-#define AUTO_V21_POLICY "AUTO_V21_BALANCED_EXIT_V1"
-#define AUTO_V21_EXIT_CYCLE_GRACE_SECONDS 30
-#define AUTO_V21_EXIT_LAST_FILL_GRACE_SECONDS 15
-#define AUTO_V21_EXIT_CONFIRM_SECONDS 10
-#define AUTO_V21_EXIT_SEVERE_CONFIRM_SECONDS 6
+#define AUTO_POLICY "AUTO_BALANCED_EXIT"
+#define AUTO_EXIT_CYCLE_GRACE_SECONDS 30
+#define AUTO_EXIT_LAST_FILL_GRACE_SECONDS 15
+#define AUTO_EXIT_CONFIRM_SECONDS 10
+#define AUTO_EXIT_SEVERE_CONFIRM_SECONDS 6
 // First-entry quality gate. AUTO must observe a fresh, continuously valid
 // setup after RUNNING is authorized; historical chart context alone is not
 // enough to fire immediately on the first market tick.
@@ -199,16 +199,16 @@ input double          InpCounterPerPositionProfitMoney = 0.50;
 // so the price distance corresponds to about USD 10 on a standard USD account.
 // Actual configured Lot never changes the SL price distance; e.g. 0.02 lot
 // keeps the same SL price and therefore carries about twice the money risk.
-#define AUTO_V20_REFERENCE_SL_LOT 0.01
-#define AUTO_V20_REFERENCE_SL_USD 10.00
+#define AUTO_REFERENCE_SL_LOT 0.01
+#define AUTO_REFERENCE_SL_USD 10.00
 // "ประมาณ USD 10" means a dynamic band, not a fixed USD 10 floor.
 // ATR/structure chooses the actual stop inside this band.
-#define AUTO_V20_REFERENCE_SL_MIN_RATIO 0.80
-#define AUTO_V20_REFERENCE_SL_MAX_RATIO 1.20
+#define AUTO_REFERENCE_SL_MIN_RATIO 0.80
+#define AUTO_REFERENCE_SL_MAX_RATIO 1.20
 // Non-XAU / non-USD fallback remains volatility based.
-#define AUTO_V20_STOP_ATR_FLOOR 1.25
-#define AUTO_V20_STOP_ATR_CAP 2.40
-#define AUTO_V20_STOP_SPREAD_MULTIPLIER 4.00
+#define AUTO_STOP_ATR_FLOOR 1.25
+#define AUTO_STOP_ATR_CAP 2.40
+#define AUTO_STOP_SPREAD_MULTIPLIER 4.00
 #define RACE_VOLUME_WINDOW_SECONDS 30
 #define RACE_SIGNAL_MAX_WAIT_SECONDS 60
 #define RACE_VOLUME_MIN_DOMINANCE 0.55
@@ -409,38 +409,38 @@ double g_zeroGridCycleStepPrice = 0.0;
 int    g_zeroGridCycleLevelsPerSide = 0;
 double g_zeroGridCycleBaseLot = 0.0;
 int    g_zeroGridCycleLowVolatility = -1;
-AUTO_V20_LEVELS g_autoV20Levels;
-AUTO_V20_SIDE g_autoV20Buy;
-AUTO_V20_SIDE g_autoV20Sell;
-string g_autoV20Phase = "INITIALIZING";
-string g_autoV20PhaseCandidate = "INITIALIZING";
-int g_autoV20PhaseCandidateTicks = 0;
-datetime g_autoV20PhaseSince = 0;
-double g_autoV20LastMomentum = 0.0;
-double g_autoV20PreviousMomentum = 0.0;
-long g_autoV20DecisionId = 0;
-string g_autoV20DecisionKind = "NONE";
-string g_autoV20DecisionReason = "NONE";
-string g_autoV20RejectReason = "NONE";
-string g_autoV20DirectionChangeReason = "NONE";
-string g_autoV20AddReason = "NONE";
-double g_autoV20AggregateRiskMoney = 0.0;
-double g_autoV20BasketStopPrice = 0.0;
-double g_autoV20BasketTargetPrice = 0.0;
-datetime g_autoV20BasketStartedAt = 0;
-datetime g_autoV20LastFillAt = 0;
-datetime g_autoV20ExitCandidateSince = 0;
-double g_autoV20ExitCandidatePeakAdverse = 0.0;
-double g_autoV20LotCeiling = 0.0;
-double g_autoV20PeakProfit = 0.0;
+AUTO_LEVELS g_autoLevels;
+AUTO_SIDE g_autoBuy;
+AUTO_SIDE g_autoSell;
+string g_autoPhase = "INITIALIZING";
+string g_autoPhaseCandidate = "INITIALIZING";
+int g_autoPhaseCandidateTicks = 0;
+datetime g_autoPhaseSince = 0;
+double g_autoLastMomentum = 0.0;
+double g_autoPreviousMomentum = 0.0;
+long g_autoDecisionId = 0;
+string g_autoDecisionKind = "NONE";
+string g_autoDecisionReason = "NONE";
+string g_autoRejectReason = "NONE";
+string g_autoDirectionChangeReason = "NONE";
+string g_autoAddReason = "NONE";
+double g_autoAggregateRiskMoney = 0.0;
+double g_autoBasketStopPrice = 0.0;
+double g_autoBasketTargetPrice = 0.0;
+datetime g_autoBasketStartedAt = 0;
+datetime g_autoLastFillAt = 0;
+datetime g_autoExitCandidateSince = 0;
+double g_autoExitCandidatePeakAdverse = 0.0;
+double g_autoLotCeiling = 0.0;
+double g_autoPeakProfit = 0.0;
 datetime g_autoFirstEntryRunStartedAt = 0;
 datetime g_autoFirstEntryCandidateSince = 0;
 datetime g_autoFirstEntryCandidateLastSeenAt = 0;
 int g_autoFirstEntryCandidateDirection = 0;
-double g_autoV20Confidence = 0.0;
-double g_autoV20WinProbability = 0.0;
-int g_autoV20WinSamples = 0;
-double g_autoV20AverageNet = 0.0;
+double g_autoConfidence = 0.0;
+double g_autoWinProbability = 0.0;
+int g_autoWinSamples = 0;
+double g_autoAverageNet = 0.0;
 int    g_raceDirection = 0;
 double g_racePeakProfit = 0.0;
 bool   g_raceProfitArmed = false;
@@ -1944,7 +1944,7 @@ void OnDeinit(const int reason)
    FlipLockRemoveAllPending();
    EventKillTimer();
    DeleteTradingFibonacci();
-   AutoV22Release();
+   AutoRelease();
    ReleaseEmaIntelligence();
    ClearChartStatus();
 }
@@ -6088,7 +6088,7 @@ void OnTick()
       return;
    }
 
-   bool autoV20OwnedBasket = count > 0 && BasketHasAutoPosition();
+   bool autoOwnedBasket = count > 0 && BasketHasAutoPosition();
    bool autoFamilyOwnedBasket = count > 0 && BasketHasAutoFamilyPosition();
    bool manualOwnedBasket = count > 0 && BasketHasManualPosition();
 
@@ -6119,8 +6119,8 @@ void OnTick()
             : "BASKET_PROFIT_TARGET";
          bool hardClosed = CloseAllBasket(hardReason);
          ResetTrail();
-         if(hardClosed && autoV20OwnedBasket)
-            AutoV20ResetCycle();
+         if(hardClosed && autoOwnedBasket)
+            AutoResetCycle();
          g_executionStatus = hardReason;
          return;
       }
@@ -6133,7 +6133,7 @@ void OnTick()
       // AUTO ownership follows the broker tag, not the currently selected web
       // mode. A mode switch can stop new AUTO entries but cannot hand its live
       // position to MANUAL/RACE/FLIP management.
-      if(!tacticalBasket && autoV20OwnedBasket && AutoV20FastPriceExit())
+      if(!tacticalBasket && autoOwnedBasket && AutoFastPriceExit())
          return;
 
       // Dynamic protection never decides whether an entry is allowed. It only
@@ -6167,9 +6167,9 @@ void OnTick()
          }
       }
 
-      if(!tacticalBasket && autoV20OwnedBasket)
+      if(!tacticalBasket && autoOwnedBasket)
       {
-         if(AutoV20ManageOpenBasket(momentum))
+         if(AutoManageOpenBasket(momentum))
             return;
       }
       else
@@ -6184,9 +6184,9 @@ void OnTick()
                return;
          }
       }
-      bool autoV21NoRescue=autoV20OwnedBasket && rescueCount<=0;
-      if(autoV21NoRescue && g_rescueState!=RESCUE_NORMAL) ResetRescueState();
-      bool rescueManaging=(tacticalBasket || autoV21NoRescue) ? false : ManageAdaptiveRescue();
+      bool autoNoRescue=autoOwnedBasket && rescueCount<=0;
+      if(autoNoRescue && g_rescueState!=RESCUE_NORMAL) ResetRescueState();
+      bool rescueManaging=(tacticalBasket || autoNoRescue) ? false : ManageAdaptiveRescue();
       if(g_rescueState == RESCUE_ACTIVE ||
          g_rescueState == RESCUE_RECOVERY ||
          g_rescueState == RESCUE_EXIT)
@@ -6231,9 +6231,9 @@ void OnTick()
       }
 
       double cycleProfit = BasketCycleProfit();
-      double effectiveBasketTarget = autoV20OwnedBasket ? 0.0 : EffectiveBasketProfitTarget();
+      double effectiveBasketTarget = autoOwnedBasket ? 0.0 : EffectiveBasketProfitTarget();
 
-      // AUTO V21 owns target-first early-profit decisions inside AutoV20ManageOpenBasket().
+      // AUTO owns target-first early-profit decisions inside AutoManageOpenBasket().
 
       // If no manual Basket/per-position target is configured, multi-position
       // trading falls back to an automatic cycle target.
@@ -6358,8 +6358,8 @@ void OnTick()
    {
       ResetTrail();
       ResetBasketCycleState();
-      if(AutoV20Enabled())
-         AutoV20ResetCycle();
+      if(AutoEnabled())
+         AutoResetCycle();
       if(g_state == STATE_SAFE_STOP)
       {
          g_state = STATE_STOPPED;
@@ -6434,7 +6434,7 @@ void OnTick()
       return;
    }
 
-   if(AutoV20Enabled() && count > 0 && !BasketHasAutoPosition())
+   if(AutoEnabled() && count > 0 && !BasketHasAutoPosition())
    {
       // AUTO never adopts a MANUAL/legacy basket. Wait for the previous owner
       // to become flat before Vector Edge may create a new AUTO cycle.
@@ -6516,7 +6516,7 @@ void OnTick()
       }
    }
 
-   if(count > 0 && !AutoV20Enabled() && !BasketFillEnabled() && !AdaptiveBasketAddAllowed(direction))
+   if(count > 0 && !AutoEnabled() && !BasketFillEnabled() && !AdaptiveBasketAddAllowed(direction))
    {
       g_executionStatus = "WAITING_BASKET_ADD";
       return;
@@ -6543,8 +6543,8 @@ void OnTick()
 
    g_executionStatus = direction > 0 ? "READY_BUY" : "READY_SELL";
    bool sent = SendMarketOrder(direction);
-   if(sent && AutoV20Enabled())
-      AutoV20OnOrderSent(direction);
+   if(sent && AutoEnabled())
+      AutoOnOrderSent(direction);
    if(sent || (LegacyBasketEngineEnabled() && BasketFillEnabled() && !g_tacticalCountertrendActive))
    {
       RegisterOrderRequest();
@@ -7775,40 +7775,40 @@ void SendHeartbeat()
       if(StringLen(payload) >= 2 && !suppressLivePriceTelemetry)
       {
          int auditDirection=g_cachedAdaptiveDirection;
-         AUTO_V20_SIDE auditSide;
-         AutoV20ResetSide(auditSide,auditDirection);
-         if(auditDirection>0) auditSide=g_autoV20Buy;
-         else if(auditDirection<0) auditSide=g_autoV20Sell;
-         string autoV20Diagnostics=StringFormat(
-            ",\"controlMode\":\"%s\",\"autoV20Active\":%s,\"autoV20DecisionId\":%I64d,\"autoV20DecisionKind\":\"%s\",\"autoV20DecisionReason\":\"%s\",\"autoV20RejectReason\":\"%s\",\"autoV20DirectionChangeReason\":\"%s\",\"autoV20AddReason\":\"%s\",\"autoV20Phase\":\"%s\",\"autoV20BuyScore\":%.2f,\"autoV20SellScore\":%.2f,\"autoV20BuyConfidence\":%.2f,\"autoV20SellConfidence\":%.2f,\"autoV20Confidence\":%.2f,\"autoV20WinProbability\":%.2f,\"autoV20WinSamples\":%d,\"autoV20AverageNet\":%.2f,\"autoV20MomentumWithPoints\":%.2f,\"autoV20MomentumAgainstPoints\":%.2f,\"autoV20NearestSupport\":%s,\"autoV20NearestResistance\":%s,\"autoV20MajorSupport\":%s,\"autoV20MajorResistance\":%s,\"autoV20SupportDistanceAtr\":%.4f,\"autoV20ResistanceDistanceAtr\":%.4f,\"autoV20FormingBase\":%s,\"autoV20FormingCeiling\":%s,\"autoV20RoleFlipState\":\"%s\",\"autoV20SwingStart\":%s,\"autoV20SwingExtreme\":%s,\"autoV20PullbackRetracement\":%.4f,\"autoV20PullbackState\":\"%s\",\"autoV20PlannedEntry\":%s,\"autoV20TpPrice\":%s,\"autoV20SlPrice\":%s,\"autoV20RR\":%.3f,\"autoV20ExpectedProfitMoney\":%.2f,\"autoV20ExpectedLossMoney\":%.2f,\"autoV20KnownCostMoney\":%.2f,\"autoV20AggregateRiskMoney\":%.2f}}",
+         AUTO_SIDE auditSide;
+         AutoResetSide(auditSide,auditDirection);
+         if(auditDirection>0) auditSide=g_autoBuy;
+         else if(auditDirection<0) auditSide=g_autoSell;
+         string autoDiagnostics=StringFormat(
+            ",\"controlMode\":\"%s\",\"autoActive\":%s,\"autoDecisionId\":%I64d,\"autoDecisionKind\":\"%s\",\"autoDecisionReason\":\"%s\",\"autoRejectReason\":\"%s\",\"autoDirectionChangeReason\":\"%s\",\"autoAddReason\":\"%s\",\"autoPhase\":\"%s\",\"autoBuyScore\":%.2f,\"autoSellScore\":%.2f,\"autoBuyConfidence\":%.2f,\"autoSellConfidence\":%.2f,\"autoConfidence\":%.2f,\"autoWinProbability\":%.2f,\"autoWinSamples\":%d,\"autoAverageNet\":%.2f,\"autoMomentumWithPoints\":%.2f,\"autoMomentumAgainstPoints\":%.2f,\"autoNearestSupport\":%s,\"autoNearestResistance\":%s,\"autoMajorSupport\":%s,\"autoMajorResistance\":%s,\"autoSupportDistanceAtr\":%.4f,\"autoResistanceDistanceAtr\":%.4f,\"autoFormingBase\":%s,\"autoFormingCeiling\":%s,\"autoRoleFlipState\":\"%s\",\"autoSwingStart\":%s,\"autoSwingExtreme\":%s,\"autoPullbackRetracement\":%.4f,\"autoPullbackState\":\"%s\",\"autoPlannedEntry\":%s,\"autoTpPrice\":%s,\"autoSlPrice\":%s,\"autoRR\":%.3f,\"autoExpectedProfitMoney\":%.2f,\"autoExpectedLossMoney\":%.2f,\"autoKnownCostMoney\":%.2f,\"autoAggregateRiskMoney\":%.2f}}",
             g_controlMode,
-            AutoV20Enabled() ? "true" : "false",
-            g_autoV20DecisionId,
-            g_autoV20DecisionKind,
-            g_autoV20DecisionReason,
-            g_autoV20RejectReason,
-            g_autoV20DirectionChangeReason,
-            g_autoV20AddReason,
-            g_autoV20Phase,
-            g_autoV20Buy.rankScore,
-            g_autoV20Sell.rankScore,
-            g_autoV20Buy.confidence,
-            g_autoV20Sell.confidence,
-            g_autoV20Confidence,
-            g_autoV20WinProbability,
-            g_autoV20WinSamples,
-            g_autoV20AverageNet,
+            AutoEnabled() ? "true" : "false",
+            g_autoDecisionId,
+            g_autoDecisionKind,
+            g_autoDecisionReason,
+            g_autoRejectReason,
+            g_autoDirectionChangeReason,
+            g_autoAddReason,
+            g_autoPhase,
+            g_autoBuy.rankScore,
+            g_autoSell.rankScore,
+            g_autoBuy.confidence,
+            g_autoSell.confidence,
+            g_autoConfidence,
+            g_autoWinProbability,
+            g_autoWinSamples,
+            g_autoAverageNet,
             auditSide.momentumWithPoints,
             auditSide.momentumAgainstPoints,
-            DoubleToString(g_autoV20Levels.nearestSupport,SymbolDigitsNow()),
-            DoubleToString(g_autoV20Levels.nearestResistance,SymbolDigitsNow()),
-            DoubleToString(g_autoV20Levels.majorSupport,SymbolDigitsNow()),
-            DoubleToString(g_autoV20Levels.majorResistance,SymbolDigitsNow()),
-            g_autoV20Levels.nearestSupportDistanceAtr,
-            g_autoV20Levels.nearestResistanceDistanceAtr,
-            DoubleToString(g_autoV20Levels.formingBase,SymbolDigitsNow()),
-            DoubleToString(g_autoV20Levels.formingCeiling,SymbolDigitsNow()),
-            g_autoV20Levels.roleFlipState,
+            DoubleToString(g_autoLevels.nearestSupport,SymbolDigitsNow()),
+            DoubleToString(g_autoLevels.nearestResistance,SymbolDigitsNow()),
+            DoubleToString(g_autoLevels.majorSupport,SymbolDigitsNow()),
+            DoubleToString(g_autoLevels.majorResistance,SymbolDigitsNow()),
+            g_autoLevels.nearestSupportDistanceAtr,
+            g_autoLevels.nearestResistanceDistanceAtr,
+            DoubleToString(g_autoLevels.formingBase,SymbolDigitsNow()),
+            DoubleToString(g_autoLevels.formingCeiling,SymbolDigitsNow()),
+            g_autoLevels.roleFlipState,
             DoubleToString(auditSide.pullbackSwingStart,SymbolDigitsNow()),
             DoubleToString(auditSide.pullbackSwingExtreme,SymbolDigitsNow()),
             auditSide.pullbackRetracement,
@@ -7820,9 +7820,9 @@ void SendHeartbeat()
             auditSide.expectedProfitMoney,
             auditSide.expectedLossMoney,
             auditSide.knownCostMoney,
-            g_autoV20AggregateRiskMoney
+            g_autoAggregateRiskMoney
          );
-         payload=StringSubstr(payload,0,StringLen(payload)-2)+autoV20Diagnostics;
+         payload=StringSubstr(payload,0,StringLen(payload)-2)+autoDiagnostics;
       }
    // Publish market-session telemetry independently of bot RUNNING/SAFE_STOP.
    // The dashboard can show market closed without pretending MT5 disconnected
@@ -8418,29 +8418,29 @@ bool PostTradeJournalDeal(ulong dealTicket)
       payload=StringSubstr(payload,0,StringLen(payload)-1)+journalTimeDiagnostics;
    }
 
-   if(!isExit && AutoV20Enabled() && StringLen(payload)>=1)
+   if(!isExit && AutoEnabled() && StringLen(payload)>=1)
    {
-      AUTO_V20_SIDE auditSide;
-      AutoV20ResetSide(auditSide,positionDirection);
-      if(positionDirection>0) auditSide=g_autoV20Buy;
-      else auditSide=g_autoV20Sell;
+      AUTO_SIDE auditSide;
+      AutoResetSide(auditSide,positionDirection);
+      if(positionDirection>0) auditSide=g_autoBuy;
+      else auditSide=g_autoSell;
       string audit=StringFormat(
          ",\"autoDecisionId\":%I64d,\"autoDecisionKind\":\"%s\",\"autoDecisionReason\":\"%s\",\"autoDirectionChangeReason\":\"%s\",\"autoAddReason\":\"%s\",\"autoBuyScore\":%.2f,\"autoSellScore\":%.2f,\"autoMomentumWithPoints\":%.2f,\"autoMomentumAgainstPoints\":%.2f,\"autoNearestSupport\":%s,\"autoNearestResistance\":%s,\"autoSupportDistanceAtr\":%.4f,\"autoResistanceDistanceAtr\":%.4f,\"autoSwingStart\":%s,\"autoSwingExtreme\":%s,\"autoPullbackRetracement\":%.4f,\"autoPullbackState\":\"%s\",\"autoTpPrice\":%s,\"autoSlPrice\":%s,\"autoRR\":%.3f,\"autoKnownCostMoney\":%.2f,\"autoExpectedProfitMoney\":%.2f,\"autoExpectedLossMoney\":%.2f,\"autoAggregateRiskMoney\":%.2f,\"modelConfidence\":%.2f,\"winProbability\":%.2f,\"winSamples\":%d,\"averageNet\":%.2f}",
-         g_autoV20DecisionId,g_autoV20DecisionKind,g_autoV20DecisionReason,
-         g_autoV20DirectionChangeReason,g_autoV20AddReason,
-         g_autoV20Buy.rankScore,g_autoV20Sell.rankScore,
+         g_autoDecisionId,g_autoDecisionKind,g_autoDecisionReason,
+         g_autoDirectionChangeReason,g_autoAddReason,
+         g_autoBuy.rankScore,g_autoSell.rankScore,
          auditSide.momentumWithPoints,auditSide.momentumAgainstPoints,
-         DoubleToString(g_autoV20Levels.nearestSupport,SymbolDigitsNow()),
-         DoubleToString(g_autoV20Levels.nearestResistance,SymbolDigitsNow()),
-         g_autoV20Levels.nearestSupportDistanceAtr,
-         g_autoV20Levels.nearestResistanceDistanceAtr,
+         DoubleToString(g_autoLevels.nearestSupport,SymbolDigitsNow()),
+         DoubleToString(g_autoLevels.nearestResistance,SymbolDigitsNow()),
+         g_autoLevels.nearestSupportDistanceAtr,
+         g_autoLevels.nearestResistanceDistanceAtr,
          DoubleToString(auditSide.pullbackSwingStart,SymbolDigitsNow()),
          DoubleToString(auditSide.pullbackSwingExtreme,SymbolDigitsNow()),
          auditSide.pullbackRetracement,auditSide.pullbackState,
          DoubleToString(auditSide.tpPrice,SymbolDigitsNow()),
          DoubleToString(auditSide.slPrice,SymbolDigitsNow()),
          auditSide.rr,auditSide.knownCostMoney,auditSide.expectedProfitMoney,
-         auditSide.expectedLossMoney,g_autoV20AggregateRiskMoney,
+         auditSide.expectedLossMoney,g_autoAggregateRiskMoney,
          auditSide.confidence,auditSide.winProbability,auditSide.winSamples,auditSide.averageNet
       );
       payload=StringSubstr(payload,0,StringLen(payload)-1)+audit;
@@ -8740,7 +8740,7 @@ void CaptureBasketJournalEntry(ulong dealTicket)
       g_basketJournalMacdState = g_macdState;
       g_basketJournalLevelFlipState = g_levelFlipState;
       g_basketJournalPremiumDiscountState = g_premiumDiscountState;
-      g_basketJournalAutoDecisionId = AutoV20Enabled() ? g_autoV20DecisionId : 0;
+      g_basketJournalAutoDecisionId = AutoEnabled() ? g_autoDecisionId : 0;
    }
    g_basketJournalVolume += HistoryDealGetDouble(dealTicket, DEAL_VOLUME);
    UpdateBasketPeakPositionCount(BasketPositionCount());
@@ -8988,7 +8988,7 @@ bool BasketFillEnabled()
 
 bool LegacyBasketEngineEnabled()
 {
-   // MANUAL/ASSISTED own the legacy basket queue. AUTO V20 is a different
+   // MANUAL/ASSISTED own the legacy basket queue. AUTO is a different
    // execution owner and must never share the queue with them.
    return EffectiveExecutionMode() == "MANUAL";
 }
@@ -9236,7 +9236,7 @@ void ApplySettings(string json)
       g_dailyProfitDrawdownPercent = 0.0;
    }
 
-   // AUTO V20 and each isolated engine are distinct owners. The MANUAL legacy
+   // AUTO and each isolated engine are distinct owners. The MANUAL legacy
    // queue must never survive a transition into AUTO/RACE/COUNTER/ZERO/FLIP.
    if(EffectiveExecutionMode() != "MANUAL")
       ResetLegacyBurstStateForIsolatedMode();
@@ -14888,7 +14888,7 @@ bool SharedZoneReactionCandidate(
    return true;
 }
 
-bool AutoV20ZoneStructureIntact(int direction)
+bool AutoZoneStructureIntact(int direction)
 {
    if(direction==0)
       return false;
@@ -15052,17 +15052,17 @@ bool BrainV13FastWrongEntryCorrection(double momentum)
    return closed;
 }
 
-// Brain V20 AUTO Precision --------------------------------------------------
-// Scope contract: V20 runs ONLY when the website controlMode is AUTO and the
+// AUTO Core --------------------------------------------------
+// Scope contract: AUTO runs ONLY when the website controlMode is AUTO and the
 // isolated RACE engine is not active. Other modes continue through the exact
-// legacy V19/V18/V16 paths below this block.
-#define AUTO_V20_LIVE_COMMENT "SaaSAutoV20"
+// legacy non-AUTO paths below this block.
+#define AUTO_LIVE_COMMENT "SaaSAuto"
 #define MANUAL_LIVE_COMMENT "SaaSManual"
 #define LEGACY_BASKET_COMMENT "SaaSBasket"
 
-bool AutoV20Enabled()
+bool AutoEnabled()
 {
-   // Entry selection only: Vector Edge/V20 belongs to AUTO and AUTO alone.
+   // Entry selection only: Vector Edge/AUTO belongs to AUTO and AUTO alone.
    // Open-position ownership is determined from the broker comment so a later
    // settings change cannot hand an AUTO position to MANUAL/RACE/FLIP.
    if(g_engineMode != "AUTO") return false;
@@ -15077,7 +15077,7 @@ bool BasketHasAutoPosition()
       if(ticket==0 || !PositionSelectByTicket(ticket)) continue;
       if(PositionGetString(POSITION_SYMBOL)!=_Symbol ||
          PositionGetInteger(POSITION_MAGIC)!=InpMagic) continue;
-      if(StringFind(PositionGetString(POSITION_COMMENT),AUTO_V20_LIVE_COMMENT)>=0)
+      if(StringFind(PositionGetString(POSITION_COMMENT),AUTO_LIVE_COMMENT)>=0)
          return true;
    }
    return false;
@@ -15110,20 +15110,20 @@ bool BasketHasAutoFamilyPosition()
          PositionGetInteger(POSITION_MAGIC)!=InpMagic) continue;
 
       string comment=PositionGetString(POSITION_COMMENT);
-      if(StringFind(comment,AUTO_V20_LIVE_COMMENT)>=0 ||
+      if(StringFind(comment,AUTO_LIVE_COMMENT)>=0 ||
          StringFind(comment,"SaaSTactical")>=0)
          return true;
    }
    return false;
 }
 
-bool AutoV20OwnsOpenBasket()
+bool AutoOwnsOpenBasket()
 {
    return BasketPositionCount()>0 && BasketHasAutoPosition();
 }
 
-#include "include\\AutoVectorEdgeLiveV1.mqh"
-#include "include\\AutoSwingFilterV22.mqh"
+#include "include\\AutoVectorEdgeLive.mqh"
+#include "include\\AutoSwingFilter.mqh"
 #include "include\\FlipLockV1.mqh"
 
 // Per-mode risk/P&L ownership ------------------------------------------------
@@ -15131,7 +15131,7 @@ bool AutoV20OwnsOpenBasket()
 // website switches to another mode before that Basket is flat.
 string TradeModeFromComment(string comment)
 {
-   if(StringFind(comment,AUTO_V20_LIVE_COMMENT)>=0 ||
+   if(StringFind(comment,AUTO_LIVE_COMMENT)>=0 ||
       StringFind(comment,"SaaSTactical")>=0)
       return "AUTO";
    if(StringFind(comment,"SaaSCounter")>=0)
@@ -15270,12 +15270,12 @@ double DailyFloatingProfitForMode(string mode)
    return total;
 }
 
-double AutoV20Clamp(double value,double minimum,double maximum)
+double AutoClamp(double value,double minimum,double maximum)
 {
    return MathMax(minimum,MathMin(maximum,value));
 }
 
-void AutoV20ResetSide(AUTO_V20_SIDE &side,int direction)
+void AutoResetSide(AUTO_SIDE &side,int direction)
 {
    side.direction=direction;
    side.confidence=0.0;
@@ -15309,27 +15309,27 @@ void AutoV20ResetSide(AUTO_V20_SIDE &side,int direction)
    side.reversal=false;
 }
 
-void AutoV21ResetExitCandidate()
+void AutoResetExitCandidate()
 {
-   g_autoV20ExitCandidateSince=0;
-   g_autoV20ExitCandidatePeakAdverse=0.0;
+   g_autoExitCandidateSince=0;
+   g_autoExitCandidatePeakAdverse=0.0;
 }
 
-void AutoV20ResetCycle()
+void AutoResetCycle()
 {
-   g_autoV20BasketStopPrice=0.0;
-   g_autoV20BasketTargetPrice=0.0;
-   g_autoV20BasketStartedAt=0;
-   g_autoV20LastFillAt=0;
-   g_autoV20LotCeiling=0.0;
-   g_autoV20PeakProfit=0.0;
-   g_autoV20AggregateRiskMoney=0.0;
-   g_autoV20AddReason="NONE";
-   AutoV22ResetRiskState();
-   AutoV21ResetExitCandidate();
+   g_autoBasketStopPrice=0.0;
+   g_autoBasketTargetPrice=0.0;
+   g_autoBasketStartedAt=0;
+   g_autoLastFillAt=0;
+   g_autoLotCeiling=0.0;
+   g_autoPeakProfit=0.0;
+   g_autoAggregateRiskMoney=0.0;
+   g_autoAddReason="NONE";
+   AutoResetRiskState();
+   AutoResetExitCandidate();
 }
 
-void AutoV20ScanM5Levels(AUTO_V20_LEVELS &levels)
+void AutoScanM5Levels(AUTO_LEVELS &levels)
 {
    levels.nearestSupport=0.0;
    levels.nearestResistance=0.0;
@@ -15388,7 +15388,7 @@ void AutoV20ScanM5Levels(AUTO_V20_LEVELS &levels)
             touches++;
       }
       double recency=MathMax(0.0,20.0-(double)i*0.18);
-      double strength=AutoV20Clamp(18.0+touches*5.0+recency,0.0,100.0);
+      double strength=AutoClamp(18.0+touches*5.0+recency,0.0,100.0);
 
       if(pivotLow && level<=price)
       {
@@ -15446,7 +15446,7 @@ void AutoV20ScanM5Levels(AUTO_V20_LEVELS &levels)
       levels.majorResistanceDistanceAtr=(levels.majorResistance-price)/atrPrice;
 }
 
-void AutoV20EvaluatePullback(int direction,double momentum,AUTO_V20_PULLBACK &pb)
+void AutoEvaluatePullback(int direction,double momentum,AUTO_PULLBACK &pb)
 {
    pb.direction=direction;
    pb.swingStart=0.0;
@@ -15488,14 +15488,14 @@ void AutoV20EvaluatePullback(int direction,double momentum,AUTO_V20_PULLBACK &pb
       pb.swingStart=low;
       pb.swingExtreme=high;
       pb.sequenceValid=lowIndex>highIndex;
-      pb.retracement=AutoV20Clamp((high-current)/range,0.0,1.5);
+      pb.retracement=AutoClamp((high-current)/range,0.0,1.5);
    }
    else
    {
       pb.swingStart=high;
       pb.swingExtreme=low;
       pb.sequenceValid=highIndex>lowIndex;
-      pb.retracement=AutoV20Clamp((current-low)/range,0.0,1.5);
+      pb.retracement=AutoClamp((current-low)/range,0.0,1.5);
    }
 
    pb.started=pb.sequenceValid && pb.retracement>=0.12;
@@ -15539,7 +15539,7 @@ void AutoV20EvaluatePullback(int direction,double momentum,AUTO_V20_PULLBACK &pb
    }
 }
 
-void AutoV20UpdateTrendPhase(double momentum)
+void AutoUpdateTrendPhase(double momentum)
 {
    int macroScore=g_trendH1*3+g_trendM30*2+g_trendM15*2;
    int macro=macroScore>=3 ? 1 : macroScore<=-3 ? -1 : 0;
@@ -15548,8 +15548,8 @@ void AutoV20UpdateTrendPhase(double momentum)
 
    if(macro!=0)
    {
-      AUTO_V20_PULLBACK pb;
-      AutoV20EvaluatePullback(macro,momentum,pb);
+      AUTO_PULLBACK pb;
+      AutoEvaluatePullback(macro,momentum,pb);
       double directionalMomentum=(double)macro*momentum;
       bool accelerating=
          directionalMomentum>=threshold*0.75 &&
@@ -15579,26 +15579,26 @@ void AutoV20UpdateTrendPhase(double momentum)
 
    // Two consecutive evaluations are required for an ordinary phase change.
    // This hysteresis stops a single momentum tick from flipping market phase.
-   if(candidate==g_autoV20PhaseCandidate)
-      g_autoV20PhaseCandidateTicks++;
+   if(candidate==g_autoPhaseCandidate)
+      g_autoPhaseCandidateTicks++;
    else
    {
-      g_autoV20PhaseCandidate=candidate;
-      g_autoV20PhaseCandidateTicks=1;
+      g_autoPhaseCandidate=candidate;
+      g_autoPhaseCandidateTicks=1;
    }
 
-   if(g_autoV20Phase=="INITIALIZING" ||
-      g_autoV20PhaseCandidateTicks>=2)
+   if(g_autoPhase=="INITIALIZING" ||
+      g_autoPhaseCandidateTicks>=2)
    {
-      if(g_autoV20Phase!=candidate)
+      if(g_autoPhase!=candidate)
       {
-         g_autoV20Phase=candidate;
-         g_autoV20PhaseSince=TimeCurrent();
+         g_autoPhase=candidate;
+         g_autoPhaseSince=TimeCurrent();
       }
    }
 }
 
-double AutoV20ProfitForMove(int direction,double volume,double openPrice,double closePrice)
+double AutoProfitForMove(int direction,double volume,double openPrice,double closePrice)
 {
    double result=0.0;
    ENUM_ORDER_TYPE type=direction>0 ? ORDER_TYPE_BUY : ORDER_TYPE_SELL;
@@ -15607,7 +15607,7 @@ double AutoV20ProfitForMove(int direction,double volume,double openPrice,double 
    return result;
 }
 
-double AutoV20ReferenceStopMoneyAccountUnits()
+double AutoReferenceStopMoneyAccountUnits()
 {
    string currency=AccountInfoString(ACCOUNT_CURRENCY);
    StringToUpper(currency);
@@ -15615,13 +15615,13 @@ double AutoV20ReferenceStopMoneyAccountUnits()
    // Broker-native Cent accounts report money in cents. USD 10 therefore means
    // 1,000 account-currency units there. Standard USD accounts use 10 directly.
    if(currency=="USD")
-      return AUTO_V20_REFERENCE_SL_USD;
+      return AUTO_REFERENCE_SL_USD;
    if(currency=="USC" || StringFind(currency,"CENT")>=0)
-      return AUTO_V20_REFERENCE_SL_USD*100.0;
+      return AUTO_REFERENCE_SL_USD*100.0;
    return 0.0;
 }
 
-double AutoV20ReferenceMoneyStopDistance(int direction,double entryPrice)
+double AutoReferenceMoneyStopDistance(int direction,double entryPrice)
 {
    if(direction==0 || entryPrice<=0.0)
       return 0.0;
@@ -15634,7 +15634,7 @@ double AutoV20ReferenceMoneyStopDistance(int direction,double entryPrice)
    if(!xauFamily)
       return 0.0;
 
-   double targetMoney=AutoV20ReferenceStopMoneyAccountUnits();
+   double targetMoney=AutoReferenceStopMoneyAccountUnits();
    if(targetMoney<=0.0)
       return 0.0;
 
@@ -15647,9 +15647,9 @@ double AutoV20ReferenceMoneyStopDistance(int direction,double entryPrice)
    double probePrice=direction>0
       ? entryPrice-tickSize
       : entryPrice+tickSize;
-   double oneTickLoss=MathAbs(AutoV20ProfitForMove(
+   double oneTickLoss=MathAbs(AutoProfitForMove(
       direction,
-      AUTO_V20_REFERENCE_SL_LOT,
+      AUTO_REFERENCE_SL_LOT,
       entryPrice,
       probePrice
    ));
@@ -15663,14 +15663,14 @@ double AutoV20ReferenceMoneyStopDistance(int direction,double entryPrice)
 // Net RR remains execution telemetry and a ranking input. It is deliberately
 // not an entry gate: AUTO must evaluate and execute valid market opportunities
 // rather than wait indefinitely for a fixed reward/risk number.
-double AutoV20NetRewardRisk(double grossReward,double grossRisk,double cost)
+double AutoNetRewardRisk(double grossReward,double grossRisk,double cost)
 {
    if(grossReward<=0.0 || grossRisk<=0.0 || grossReward<=cost)
       return 0.0;
    return (grossReward-cost)/(grossRisk+cost);
 }
 
-void AutoV20PlanPrices(AUTO_V20_SIDE &side,AUTO_V20_LEVELS &levels)
+void AutoPlanPrices(AUTO_SIDE &side,AUTO_LEVELS &levels)
 {
    MqlTick tick;
    if(!SymbolInfoTick(_Symbol,tick))
@@ -15683,14 +15683,14 @@ void AutoV20PlanPrices(AUTO_V20_SIDE &side,AUTO_V20_LEVELS &levels)
    // fixed stop and not a minimum. ATR + live structure choose the actual stop
    // inside an approximately USD 8-12 reference band. Balance/equity and the
    // customer's actual Lot never change the SL price distance.
-   double referenceMoneyStop=AutoV20ReferenceMoneyStopDistance(
+   double referenceMoneyStop=AutoReferenceMoneyStopDistance(
       side.direction,side.entryPrice
    );
-   double atrFallback=atrPrice*AUTO_V20_STOP_ATR_FLOOR;
+   double atrFallback=atrPrice*AUTO_STOP_ATR_FLOOR;
    double spreadPoints=CurrentSpreadPoints();
    double spreadFloorPrice=
       (spreadPoints>0.0 && spreadPoints<999999.0)
-      ? spreadPoints*_Point*AUTO_V20_STOP_SPREAD_MULTIPLIER
+      ? spreadPoints*_Point*AUTO_STOP_SPREAD_MULTIPLIER
       : 0.0;
    double brokerFloorPoints=MathMax(
       (double)SymbolInfoInteger(_Symbol,SYMBOL_TRADE_STOPS_LEVEL),
@@ -15707,9 +15707,9 @@ void AutoV20PlanPrices(AUTO_V20_SIDE &side,AUTO_V20_LEVELS &levels)
       // Dynamic XAU stop centered near USD 10 @ 0.01 lot.
       // Example on a standard XAU contract: roughly USD 8-12 loss equivalent.
       double referenceMin=
-         referenceMoneyStop*AUTO_V20_REFERENCE_SL_MIN_RATIO;
+         referenceMoneyStop*AUTO_REFERENCE_SL_MIN_RATIO;
       double referenceMax=
-         referenceMoneyStop*AUTO_V20_REFERENCE_SL_MAX_RATIO;
+         referenceMoneyStop*AUTO_REFERENCE_SL_MAX_RATIO;
 
       // Spread and broker rules are hard mechanical floors. If either exceeds
       // the normal band, obey the broker rather than submit an invalid stop.
@@ -15721,7 +15721,7 @@ void AutoV20PlanPrices(AUTO_V20_SIDE &side,AUTO_V20_LEVELS &levels)
 
       // ATR decides where we start INSIDE the band; it no longer forces every
       // XAU trade to exactly the USD 10 reference distance.
-      stopDistance=AutoV20Clamp(
+      stopDistance=AutoClamp(
          atrFallback,
          standardStopFloor,
          structureStopCap
@@ -15736,7 +15736,7 @@ void AutoV20PlanPrices(AUTO_V20_SIDE &side,AUTO_V20_LEVELS &levels)
       );
       structureStopCap=MathMax(
          standardStopFloor,
-         atrPrice*AUTO_V20_STOP_ATR_CAP
+         atrPrice*AUTO_STOP_ATR_CAP
       );
       stopDistance=standardStopFloor;
    }
@@ -15796,7 +15796,7 @@ void AutoV20PlanPrices(AUTO_V20_SIDE &side,AUTO_V20_LEVELS &levels)
    if(configuredStop>standardStopFloor)
       maximumStop=MathMin(maximumStop,configuredStop);
    maximumStop=MathMax(maximumStop,standardStopFloor);
-   stopDistance=AutoV20Clamp(
+   stopDistance=AutoClamp(
       stopDistance,
       standardStopFloor,
       maximumStop
@@ -15832,7 +15832,7 @@ void AutoV20PlanPrices(AUTO_V20_SIDE &side,AUTO_V20_LEVELS &levels)
    // Do not let the old 1.35 ATR cap silently destroy the planned RR after
    // widening the standard SL. Nearby opposing structure may still shorten TP.
    double targetDistanceCap=MathMax(atrPrice*1.35,stopDistance*1.80);
-   targetDistance=AutoV20Clamp(targetDistance,atrPrice*0.30,targetDistanceCap);
+   targetDistance=AutoClamp(targetDistance,atrPrice*0.30,targetDistanceCap);
 
    side.slPrice=side.direction>0
       ? side.entryPrice-stopDistance
@@ -15841,12 +15841,12 @@ void AutoV20PlanPrices(AUTO_V20_SIDE &side,AUTO_V20_LEVELS &levels)
       ? side.entryPrice+targetDistance
       : side.entryPrice-targetDistance;
 
-   double grossProfitPerLot=MathAbs(AutoV20ProfitForMove(
+   double grossProfitPerLot=MathAbs(AutoProfitForMove(
       side.direction,1.0,side.entryPrice,side.tpPrice));
-   double grossLossPerLot=MathAbs(AutoV20ProfitForMove(
+   double grossLossPerLot=MathAbs(AutoProfitForMove(
       side.direction,1.0,side.entryPrice,side.slPrice));
    double costPerLot=CurrentSpreadCost(1.0);
-   side.rr=AutoV20NetRewardRisk(grossProfitPerLot,grossLossPerLot,costPerLot);
+   side.rr=AutoNetRewardRisk(grossProfitPerLot,grossLossPerLot,costPerLot);
 
    // AUTO Lot is customer-owned and fixed. Intelligence decides whether/when
    // to enter, but never scales 50%/75% behind the value shown on the website.
@@ -15856,7 +15856,7 @@ void AutoV20PlanPrices(AUTO_V20_SIDE &side,AUTO_V20_LEVELS &levels)
    side.expectedLossMoney=grossLossPerLot*side.plannedLot+side.knownCostMoney;
 }
 
-double AutoV20AggregateRiskAtStop(int direction,double stopPrice,double newLot)
+double AutoAggregateRiskAtStop(int direction,double stopPrice,double newLot)
 {
    if(stopPrice<=0.0)
       return 0.0;
@@ -15871,7 +15871,7 @@ double AutoV20AggregateRiskAtStop(int direction,double stopPrice,double newLot)
       long type=PositionGetInteger(POSITION_TYPE);
       int posDirection=type==POSITION_TYPE_BUY ? 1 : -1;
       if(posDirection!=direction) continue;
-      double p=AutoV20ProfitForMove(
+      double p=AutoProfitForMove(
          direction,
          PositionGetDouble(POSITION_VOLUME),
          PositionGetDouble(POSITION_PRICE_OPEN),
@@ -15886,14 +15886,14 @@ double AutoV20AggregateRiskAtStop(int direction,double stopPrice,double newLot)
       if(SymbolInfoTick(_Symbol,tick))
       {
          double entry=direction>0 ? tick.ask : tick.bid;
-         double p=AutoV20ProfitForMove(direction,newLot,entry,stopPrice);
+         double p=AutoProfitForMove(direction,newLot,entry,stopPrice);
          if(p<0.0) risk+=-p;
       }
    }
    return risk;
 }
 
-void AutoV20AttachHistory(AUTO_V20_SIDE &side)
+void AutoAttachHistory(AUTO_SIDE &side)
 {
    bool setupMatch=
       g_setupWinSamples>0 &&
@@ -15924,19 +15924,19 @@ void AutoV20AttachHistory(AUTO_V20_SIDE &side)
    if(side.winSamples>=20)
    {
       double reliability=MathMin(1.0,(double)side.winSamples/60.0);
-      side.rankScore+=AutoV20Clamp(
+      side.rankScore+=AutoClamp(
          (side.winProbability-50.0)*0.10*reliability,-4.0,4.0);
    }
 }
 
-void AutoV20EvaluateSide(
+void AutoEvaluateSide(
    int direction,
    double momentum,
-   AUTO_V20_LEVELS &levels,
-   AUTO_V20_SIDE &side
+   AUTO_LEVELS &levels,
+   AUTO_SIDE &side
 )
 {
-   AutoV20ResetSide(side,direction);
+   AutoResetSide(side,direction);
    MqlTick tick;
    if(!SymbolInfoTick(_Symbol,tick))
    {
@@ -15946,7 +15946,7 @@ void AutoV20EvaluateSide(
 
    double threshold=MathMax(2.0,g_adaptiveMomentumThreshold);
    double directionalNow=(double)direction*momentum;
-   double directionalPrevious=(double)direction*g_autoV20PreviousMomentum;
+   double directionalPrevious=(double)direction*g_autoPreviousMomentum;
    side.momentumWithPoints=MathMax(0.0,directionalNow);
    side.momentumAgainstPoints=MathMax(0.0,-directionalNow);
 
@@ -15966,7 +15966,7 @@ void AutoV20EvaluateSide(
    if(g_emaTrendM15==-direction) emaMacroAgainst++;
    if(emaMacroVotes>=2) macro+=4.0;
    else if(emaMacroAgainst>=2) macro-=4.0;
-   side.macroScore=AutoV20Clamp(macro,-24.0,24.0);
+   side.macroScore=AutoClamp(macro,-24.0,24.0);
 
    // Execution timing is M5/M1. EMA M5 is one corroborating vote, not another
    // complete trend stack.
@@ -15976,8 +15976,8 @@ void AutoV20EvaluateSide(
    if(g_emaTrendM5==direction) execution+=4.0;
    else if(g_emaTrendM5==-direction) execution-=4.0;
    double pa=direction>0 ? g_priceActionBuyScore : g_priceActionSellScore;
-   execution+=AutoV20Clamp(pa/5.0,0.0,7.0);
-   side.executionScore=AutoV20Clamp(execution,-24.0,24.0);
+   execution+=AutoClamp(pa/5.0,0.0,7.0);
+   side.executionScore=AutoClamp(execution,-24.0,24.0);
 
    // Momentum is strictly directional. Opposing momentum is a penalty, never
    // converted to positive Confidence through MathAbs(). Reversal setups use
@@ -15999,10 +15999,10 @@ void AutoV20EvaluateSide(
       else if(deceleratingAgainst) momentumScore+=7.0;
       else momentumScore-=8.0;
    }
-   side.momentumScore=AutoV20Clamp(momentumScore,-20.0,20.0);
+   side.momentumScore=AutoClamp(momentumScore,-20.0,20.0);
 
-   AUTO_V20_PULLBACK pb;
-   AutoV20EvaluatePullback(direction,momentum,pb);
+   AUTO_PULLBACK pb;
+   AutoEvaluatePullback(direction,momentum,pb);
    side.pullbackScore=pb.score;
    side.pullbackSwingStart=pb.swingStart;
    side.pullbackSwingExtreme=pb.swingExtreme;
@@ -16016,7 +16016,7 @@ void AutoV20EvaluateSide(
          location+=MathMin(10.0,levels.nearestSupportStrength*0.10);
       if(levels.nearestResistanceDistanceAtr<=0.24)
          location-=12.0;
-      location+=AutoV20Clamp((g_demandZoneScore-50.0)*0.10,-4.0,6.0);
+      location+=AutoClamp((g_demandZoneScore-50.0)*0.10,-4.0,6.0);
       location-=MathMax(0.0,(g_supplyZoneScore-65.0)*0.08);
       if(levels.roleFlipState=="RESISTANCE_TO_SUPPORT") location+=5.0;
    }
@@ -16026,11 +16026,11 @@ void AutoV20EvaluateSide(
          location+=MathMin(10.0,levels.nearestResistanceStrength*0.10);
       if(levels.nearestSupportDistanceAtr<=0.24)
          location-=12.0;
-      location+=AutoV20Clamp((g_supplyZoneScore-50.0)*0.10,-4.0,6.0);
+      location+=AutoClamp((g_supplyZoneScore-50.0)*0.10,-4.0,6.0);
       location-=MathMax(0.0,(g_demandZoneScore-65.0)*0.08);
       if(levels.roleFlipState=="SUPPORT_TO_RESISTANCE") location+=5.0;
    }
-   side.locationScore=AutoV20Clamp(location,-18.0,18.0);
+   side.locationScore=AutoClamp(location,-18.0,18.0);
 
    double confidence=50.0+
       side.macroScore*0.55+
@@ -16040,14 +16040,14 @@ void AutoV20EvaluateSide(
       (side.pullbackScore-50.0)*0.18;
 
    bool phaseSupports=
-      (direction>0 && (StringFind(g_autoV20Phase,"UP_")==0 || g_autoV20Phase=="LOCAL_UP")) ||
-      (direction<0 && (StringFind(g_autoV20Phase,"DOWN_")==0 || g_autoV20Phase=="LOCAL_DOWN"));
-   bool phaseWeakening=StringFind(g_autoV20Phase,"WEAKENING")>=0;
+      (direction>0 && (StringFind(g_autoPhase,"UP_")==0 || g_autoPhase=="LOCAL_UP")) ||
+      (direction<0 && (StringFind(g_autoPhase,"DOWN_")==0 || g_autoPhase=="LOCAL_DOWN"));
+   bool phaseWeakening=StringFind(g_autoPhase,"WEAKENING")>=0;
    if(phaseSupports && !phaseWeakening) confidence+=4.0;
    if(side.reversal && phaseWeakening) confidence+=5.0;
    if(side.reversal && !phaseWeakening && g_trendM5==-direction) confidence-=7.0;
 
-   side.confidence=AutoV20Clamp(confidence,0.0,100.0);
+   side.confidence=AutoClamp(confidence,0.0,100.0);
 
    if(side.reversal)
    {
@@ -16076,20 +16076,20 @@ void AutoV20EvaluateSide(
       side.reason="LOCAL_EXECUTION_LOCATION";
    }
 
-   AutoV20PlanPrices(side,levels);
+   AutoPlanPrices(side,levels);
    side.rankScore=side.confidence;
    if(side.rr>=1.55) side.rankScore+=5.0;
    else if(side.rr>=1.20) side.rankScore+=2.0;
    else if(side.rr<1.00) side.rankScore-=10.0;
    else if(side.rr<1.10) side.rankScore-=5.0;
-   AutoV20AttachHistory(side);
-   side.rankScore=AutoV20Clamp(side.rankScore,0.0,100.0);
+   AutoAttachHistory(side);
+   side.rankScore=AutoClamp(side.rankScore,0.0,100.0);
 }
 
-void AutoV20PublishSelected(AUTO_V20_SIDE &side)
+void AutoPublishSelected(AUTO_SIDE &side)
 {
    g_entryModel=side.model;
-   g_entryTrigger=side.direction>0 ? "AUTO_V20_BUY" : "AUTO_V20_SELL";
+   g_entryTrigger=side.direction>0 ? "AUTO_BUY" : "AUTO_SELL";
    g_entryBias=side.direction>0 ? "BUY" : "SELL";
    g_entryQualityScore=side.rankScore;
    g_entryQuality=side.rankScore>=78.0 ? "A" : side.rankScore>=68.0 ? "B" : "C";
@@ -16098,41 +16098,41 @@ void AutoV20PublishSelected(AUTO_V20_SIDE &side)
    g_historicalWinProbability=side.winProbability;
    g_historicalWinSamples=side.winSamples;
    g_confidenceSource="MODEL_SEPARATE_FROM_HISTORY";
-   g_autoV20Confidence=side.confidence;
-   g_autoV20WinProbability=side.winProbability;
-   g_autoV20WinSamples=side.winSamples;
-   g_autoV20AverageNet=side.averageNet;
+   g_autoConfidence=side.confidence;
+   g_autoWinProbability=side.winProbability;
+   g_autoWinSamples=side.winSamples;
+   g_autoAverageNet=side.averageNet;
    g_adaptiveLot=side.plannedLot;
    g_adaptiveMaxPositions=g_maxPositions;
    g_adaptiveEntrySpacingMs=g_minOrderIntervalMs;
    g_effectiveConfidenceThreshold=0.0;
 }
 
-int AutoV20PrecisionDirection(double momentum)
+int AutoPrecisionDirection(double momentum)
 {
-   g_autoV20DecisionId++;
-   g_autoV20DecisionKind=BasketPositionCount()>0 ? "ADD" : "FIRST";
-   g_autoV20DecisionReason="NONE";
-   g_autoV20RejectReason="NONE";
-   g_autoV20DirectionChangeReason="NONE";
-   g_autoV20AddReason="NONE";
+   g_autoDecisionId++;
+   g_autoDecisionKind=BasketPositionCount()>0 ? "ADD" : "FIRST";
+   g_autoDecisionReason="NONE";
+   g_autoRejectReason="NONE";
+   g_autoDirectionChangeReason="NONE";
+   g_autoAddReason="NONE";
 
-   g_autoV20PreviousMomentum=g_autoV20LastMomentum;
-   AutoV20UpdateTrendPhase(momentum);
-   AutoV20ScanM5Levels(g_autoV20Levels);
-   AutoV20EvaluateSide(1,momentum,g_autoV20Levels,g_autoV20Buy);
-   AutoV20EvaluateSide(-1,momentum,g_autoV20Levels,g_autoV20Sell);
-   g_autoV20LastMomentum=momentum;
+   g_autoPreviousMomentum=g_autoLastMomentum;
+   AutoUpdateTrendPhase(momentum);
+   AutoScanM5Levels(g_autoLevels);
+   AutoEvaluateSide(1,momentum,g_autoLevels,g_autoBuy);
+   AutoEvaluateSide(-1,momentum,g_autoLevels,g_autoSell);
+   g_autoLastMomentum=momentum;
 
    int count=BasketPositionCount();
    bool relaxedFirstFour=count<4;
    int basketDirection=count>0 ? BasketDirection() : 0;
    int preliminary=
-      g_autoV20Buy.confidence>g_autoV20Sell.confidence ? 1 :
-      g_autoV20Sell.confidence>g_autoV20Buy.confidence ? -1 : 0;
+      g_autoBuy.confidence>g_autoSell.confidence ? 1 :
+      g_autoSell.confidence>g_autoBuy.confidence ? -1 : 0;
 
-   AUTO_V20_SIDE selected;
-   AutoV20ResetSide(selected,0);
+   AUTO_SIDE selected;
+   AutoResetSide(selected,0);
    int direction=0;
    bool sharedZoneFirst=false;
 
@@ -16140,12 +16140,12 @@ int AutoV20PrecisionDirection(double momentum)
    {
       if(basketDirection==0)
       {
-         g_autoV20RejectReason="MIXED_AUTO_BASKET";
-         g_adaptiveBlockReason="AUTO_V20_MIXED_BASKET";
+         g_autoRejectReason="MIXED_AUTO_BASKET";
+         g_adaptiveBlockReason="AUTO_MIXED_BASKET";
          return 0;
       }
       direction=basketDirection;
-      selected=direction>0 ? g_autoV20Buy : g_autoV20Sell;
+      selected=direction>0 ? g_autoBuy : g_autoSell;
    }
    else
    {
@@ -16153,12 +16153,12 @@ int AutoV20PrecisionDirection(double momentum)
       sharedZoneFirst=StringFind(g_entryModel,"ZONE_FIRST_")==0;
       if(direction==0)
       {
-         g_autoV20RejectReason="SHARED_BRAIN_WAIT";
+         g_autoRejectReason="SHARED_BRAIN_WAIT";
          if(g_adaptiveBlockReason=="")
             g_adaptiveBlockReason="WAITING_ZONE_REACTION";
          return 0;
       }
-      selected=direction>0 ? g_autoV20Buy : g_autoV20Sell;
+      selected=direction>0 ? g_autoBuy : g_autoSell;
    }
 
    // Positions 2-4 rely mainly on winner-only progress + swing
@@ -16177,8 +16177,8 @@ int AutoV20PrecisionDirection(double momentum)
 
       if(selected.confidence<minimumConfidence || selected.rankScore<minimumRank)
       {
-         g_autoV20RejectReason="CENTRAL_SCORE_NOT_READY";
-         g_adaptiveBlockReason="AUTO_V20_WAIT_QUALITY";
+         g_autoRejectReason="CENTRAL_SCORE_NOT_READY";
+         g_adaptiveBlockReason="AUTO_WAIT_QUALITY";
          return 0;
       }
    }
@@ -16212,27 +16212,27 @@ int AutoV20PrecisionDirection(double momentum)
       if(selected.confidence<firstMinimumConfidence ||
          selected.rankScore<firstMinimumRank)
       {
-         g_autoV20RejectReason="AUTO_V22_FIRST_QUALITY_NOT_READY";
-         g_adaptiveBlockReason=g_autoV20RejectReason;
+         g_autoRejectReason="AUTO_FIRST_QUALITY_NOT_READY";
+         g_adaptiveBlockReason=g_autoRejectReason;
          return 0;
       }
    }
 
-   // AUTO V22 first-entry contract:
+   // AUTO first-entry contract:
    // H4 anchors direction, H1 must not oppose it, price must be at a real
    // pullback/value/retest location, and M5/M1 must confirm execution.
    // Major USD news pauses new AUTO entries only; open positions keep their
    // normal local risk/profit management.
    if(count<=0)
    {
-      AUTO_V20_PULLBACK firstPb;
-      AutoV20EvaluatePullback(direction,momentum,firstPb);
+      AUTO_PULLBACK firstPb;
+      AutoEvaluatePullback(direction,momentum,firstPb);
       string swingReason="NONE";
-      if(!AutoV22SwingEntryAllowed(
+      if(!AutoSwingEntryAllowed(
             direction,false,sharedZoneFirst,firstPb,
-            g_autoV20Levels,momentum,swingReason))
+            g_autoLevels,momentum,swingReason))
       {
-         g_autoV20RejectReason=swingReason;
+         g_autoRejectReason=swingReason;
          g_adaptiveBlockReason=swingReason;
          return 0;
       }
@@ -16240,21 +16240,21 @@ int AutoV20PrecisionDirection(double momentum)
       // Genuine NO-TRADE state: when both AUTO sides are nearly tied and no
       // high-quality zone reaction breaks the tie, wait instead of forcing a
       // fallback BUY/SELL from old chart context.
-      double confidenceEdge=MathAbs(g_autoV20Buy.confidence-g_autoV20Sell.confidence);
-      double rankEdge=MathAbs(g_autoV20Buy.rankScore-g_autoV20Sell.rankScore);
+      double confidenceEdge=MathAbs(g_autoBuy.confidence-g_autoSell.confidence);
+      double rankEdge=MathAbs(g_autoBuy.rankScore-g_autoSell.rankScore);
       if(!sharedZoneFirst && g_macroTrendDirection==0 &&
          confidenceEdge<2.5 && rankEdge<3.0)
       {
-         g_autoV20RejectReason="AUTO_FIRST_DIRECTION_AMBIGUOUS";
-         g_adaptiveBlockReason=g_autoV20RejectReason;
+         g_autoRejectReason="AUTO_FIRST_DIRECTION_AMBIGUOUS";
+         g_adaptiveBlockReason=g_autoRejectReason;
          return 0;
       }
 
       // RR is now a real first-entry gate, not just a ranking adjustment.
       if(selected.rr<AUTO_FIRST_ENTRY_MIN_NET_RR)
       {
-         g_autoV20RejectReason="AUTO_FIRST_RR_TOO_LOW";
-         g_adaptiveBlockReason=g_autoV20RejectReason;
+         g_autoRejectReason="AUTO_FIRST_RR_TOO_LOW";
+         g_adaptiveBlockReason=g_autoRejectReason;
          return 0;
       }
 
@@ -16269,8 +16269,8 @@ int AutoV20PrecisionDirection(double momentum)
 
       if(firstNow-g_autoFirstEntryRunStartedAt<AUTO_FIRST_ENTRY_START_WARMUP_SECONDS)
       {
-         g_autoV20RejectReason="AUTO_FIRST_FRESH_WARMUP";
-         g_adaptiveBlockReason=g_autoV20RejectReason;
+         g_autoRejectReason="AUTO_FIRST_FRESH_WARMUP";
+         g_adaptiveBlockReason=g_autoRejectReason;
          return 0;
       }
 
@@ -16284,16 +16284,16 @@ int AutoV20PrecisionDirection(double momentum)
          g_autoFirstEntryCandidateDirection=direction;
          g_autoFirstEntryCandidateSince=firstNow;
          g_autoFirstEntryCandidateLastSeenAt=firstNow;
-         g_autoV20RejectReason="AUTO_FIRST_FRESH_CONFIRM_ARMED";
-         g_adaptiveBlockReason=g_autoV20RejectReason;
+         g_autoRejectReason="AUTO_FIRST_FRESH_CONFIRM_ARMED";
+         g_adaptiveBlockReason=g_autoRejectReason;
          return 0;
       }
 
       g_autoFirstEntryCandidateLastSeenAt=firstNow;
       if(firstNow-g_autoFirstEntryCandidateSince<AUTO_FIRST_ENTRY_STABLE_CONFIRM_SECONDS)
       {
-         g_autoV20RejectReason="AUTO_FIRST_FRESH_CONFIRM_WAIT";
-         g_adaptiveBlockReason=g_autoV20RejectReason;
+         g_autoRejectReason="AUTO_FIRST_FRESH_CONFIRM_WAIT";
+         g_adaptiveBlockReason=g_autoRejectReason;
          return 0;
       }
    }
@@ -16302,41 +16302,41 @@ int AutoV20PrecisionDirection(double momentum)
    {
       // Never increase AUTO exposure while a wrong-direction exit candidate is
       // armed. The existing basket must recover or exit before another add.
-      if(g_autoV20ExitCandidateSince>0)
+      if(g_autoExitCandidateSince>0)
       {
-         g_autoV20RejectReason="EXIT_CANDIDATE_NO_ADD";
-         g_autoV20AddReason="WAIT_WRONG_DIRECTION_RESOLUTION";
-         g_adaptiveBlockReason="AUTO_V21_EXIT_CANDIDATE";
+         g_autoRejectReason="EXIT_CANDIDATE_NO_ADD";
+         g_autoAddReason="WAIT_WRONG_DIRECTION_RESOLUTION";
+         g_adaptiveBlockReason="AUTO_EXIT_CANDIDATE";
          return 0;
       }
 
-      AutoV21ApplyNoIncreaseLotCap(selected);
-      if(direction>0) g_autoV20Buy=selected; else g_autoV20Sell=selected;
+      AutoApplyNoIncreaseLotCap(selected);
+      if(direction>0) g_autoBuy=selected; else g_autoSell=selected;
 
       double atrPoints=MathMax(10.0,
          AverageTrueRangePoints(PERIOD_M5,g_atrPeriod));
       double progress=BasketFavorableProgressPoints(direction);
-      AUTO_V20_PULLBACK pb;
-      AutoV20EvaluatePullback(direction,momentum,pb);
+      AUTO_PULLBACK pb;
+      AutoEvaluatePullback(direction,momentum,pb);
       double addProgressFactor=relaxedFirstFour ? 0.05 : 0.08;
       double required=MathMax(2.0,atrPoints*addProgressFactor);
-      required=MathMax(required,AutoV22AddRequiredProgressPoints(atrPoints));
+      required=MathMax(required,AutoAddRequiredProgressPoints(atrPoints));
 
       string addSwingReason="NONE";
-      if(!AutoV22SwingEntryAllowed(
-            direction,true,false,pb,g_autoV20Levels,momentum,addSwingReason))
+      if(!AutoSwingEntryAllowed(
+            direction,true,false,pb,g_autoLevels,momentum,addSwingReason))
       {
-         g_autoV20RejectReason=addSwingReason;
-         g_autoV20AddReason="WAIT_SWING_QUALITY";
+         g_autoRejectReason=addSwingReason;
+         g_autoAddReason="WAIT_SWING_QUALITY";
          g_adaptiveBlockReason=addSwingReason;
          return 0;
       }
 
-      if(relaxedFirstFour && !AutoV20ZoneStructureIntact(direction))
+      if(relaxedFirstFour && !AutoZoneStructureIntact(direction))
       {
-         g_autoV20RejectReason="ACTIVE_ZONE_STRUCTURE_BROKEN";
-         g_autoV20AddReason="WAIT_ZONE_STRUCTURE";
-         g_adaptiveBlockReason="AUTO_V20_WAIT_ZONE_STRUCTURE";
+         g_autoRejectReason="ACTIVE_ZONE_STRUCTURE_BROKEN";
+         g_autoAddReason="WAIT_ZONE_STRUCTURE";
+         g_adaptiveBlockReason="AUTO_WAIT_ZONE_STRUCTURE";
          return 0;
       }
 
@@ -16344,47 +16344,47 @@ int AutoV20PrecisionDirection(double momentum)
       // 0.05 ATR hurdle to preserve trade activity. Position 5+ keeps 0.08 ATR.
       if(progress<0.0 || (progress<required && !pb.resumed))
       {
-         g_autoV20RejectReason="ADD_NEEDS_FAVORABLE_PROGRESS";
-         g_autoV20AddReason="WAIT_PROGRESS_OR_PULLBACK_RESUME";
-         g_adaptiveBlockReason="AUTO_V20_WAIT_ADD";
+         g_autoRejectReason="ADD_NEEDS_FAVORABLE_PROGRESS";
+         g_autoAddReason="WAIT_PROGRESS_OR_PULLBACK_RESUME";
+         g_adaptiveBlockReason="AUTO_WAIT_ADD";
          return 0;
       }
-      g_autoV20AddReason=relaxedFirstFour
+      g_autoAddReason=relaxedFirstFour
          ? (progress>=required ? "EARLY_WINNER_PROGRESS" : "EARLY_PULLBACK_RESUME")
          : (progress>=required ? "FAVORABLE_PROGRESS" : "UNIFIED_PULLBACK_RESUME");
 
-      selected.aggregateRiskMoney=AutoV20AggregateRiskAtStop(
+      selected.aggregateRiskMoney=AutoAggregateRiskAtStop(
          direction,
-         g_autoV20BasketStopPrice>0.0 ? g_autoV20BasketStopPrice : selected.slPrice,
+         g_autoBasketStopPrice>0.0 ? g_autoBasketStopPrice : selected.slPrice,
          selected.plannedLot
       )+selected.knownCostMoney;
-      g_autoV20AggregateRiskMoney=selected.aggregateRiskMoney;
+      g_autoAggregateRiskMoney=selected.aggregateRiskMoney;
    }
    else
    {
-      AutoV21ApplyNoIncreaseLotCap(selected);
-      if(direction>0) g_autoV20Buy=selected; else g_autoV20Sell=selected;
-      g_autoV20AggregateRiskMoney=selected.expectedLossMoney;
+      AutoApplyNoIncreaseLotCap(selected);
+      if(direction>0) g_autoBuy=selected; else g_autoSell=selected;
+      g_autoAggregateRiskMoney=selected.expectedLossMoney;
    }
 
    string riskReason="NONE";
-   if(!AutoV21RiskBudgetAllows(selected,count,riskReason))
+   if(!AutoRiskBudgetAllows(selected,count,riskReason))
    {
-      g_autoV20RejectReason=riskReason;
-      g_adaptiveBlockReason="AUTO_V21_RISK_BUDGET";
+      g_autoRejectReason=riskReason;
+      g_adaptiveBlockReason="AUTO_RISK_BUDGET";
       return 0;
    }
 
    if(preliminary!=0 && preliminary!=direction)
-      g_autoV20DirectionChangeReason="FINAL_RR_LOCATION_HISTORY_CHANGED_SIDE";
+      g_autoDirectionChangeReason="FINAL_RR_LOCATION_HISTORY_CHANGED_SIDE";
 
    string vectorLiveReason="NONE";
    bool vectorLiveAllowed=AutoVectorEdgeLiveAllow(direction,vectorLiveReason);
    if(!vectorLiveAllowed && count<=0)
    {
-      // AUTO V22: the first order is the most selective order. Once Vector
+      // AUTO: the first order is the most selective order. Once Vector
       // Edge has enough history to reject the side, do not bypass that veto.
-      g_autoV20RejectReason=vectorLiveReason;
+      g_autoRejectReason=vectorLiveReason;
       g_adaptiveBlockReason="AUTO_VECTOR_EDGE_FIRST_WAIT";
       g_cachedAdaptiveDirection=0;
       g_cachedAdaptiveBlockReason=g_adaptiveBlockReason;
@@ -16393,7 +16393,7 @@ int AutoV20PrecisionDirection(double momentum)
    if(!vectorLiveAllowed && !relaxedFirstFour)
    {
       // Position 5+ keeps the existing strict Vector Edge guard.
-      g_autoV20RejectReason=vectorLiveReason;
+      g_autoRejectReason=vectorLiveReason;
       g_adaptiveBlockReason="AUTO_VECTOR_EDGE_WAIT";
       g_cachedAdaptiveDirection=0;
       g_cachedAdaptiveBlockReason=g_adaptiveBlockReason;
@@ -16405,36 +16405,36 @@ int AutoV20PrecisionDirection(double momentum)
    {
       // Positions 2-4 remain less strict than late adds, but confirmed negative
       // expectancy or an opposite Vector direction is still a hard AUTO veto.
-      g_autoV20RejectReason=vectorLiveReason;
+      g_autoRejectReason=vectorLiveReason;
       g_adaptiveBlockReason="AUTO_VECTOR_EDGE_SAFETY_WAIT";
       g_cachedAdaptiveDirection=0;
       g_cachedAdaptiveBlockReason=g_adaptiveBlockReason;
       return 0;
    }
 
-   g_autoV20DecisionReason=selected.reason;
-   g_autoV20RejectReason="NONE";
+   g_autoDecisionReason=selected.reason;
+   g_autoRejectReason="NONE";
    g_adaptiveBlockReason="";
-   AutoV20PublishSelected(selected);
+   AutoPublishSelected(selected);
    g_cachedAdaptiveDirection=direction;
    g_cachedAdaptiveBlockReason="";
 
-   Print("AUTO V20 decision id=",g_autoV20DecisionId,
-         " kind=",g_autoV20DecisionKind,
+   Print("AUTO decision id=",g_autoDecisionId,
+         " kind=",g_autoDecisionKind,
          " side=",direction>0 ? "BUY" : "SELL",
-         " buy=",DoubleToString(g_autoV20Buy.rankScore,1),
-         " sell=",DoubleToString(g_autoV20Sell.rankScore,1),
+         " buy=",DoubleToString(g_autoBuy.rankScore,1),
+         " sell=",DoubleToString(g_autoSell.rankScore,1),
          " confidence=",DoubleToString(selected.confidence,1),
          " winProb=",DoubleToString(selected.winProbability,1),
          " samples=",selected.winSamples,
          " rr=",DoubleToString(selected.rr,2),
          " reason=",selected.reason,
-         " addReason=",g_autoV20AddReason,
-         " change=",g_autoV20DirectionChangeReason);
+         " addReason=",g_autoAddReason,
+         " change=",g_autoDirectionChangeReason);
    return direction;
 }
 
-double AutoV21ExistingLotCeiling()
+double AutoExistingLotCeiling()
 {
    double ceiling=0.0;
    for(int i=PositionsTotal()-1;i>=0;i--)
@@ -16443,14 +16443,14 @@ double AutoV21ExistingLotCeiling()
       if(ticket==0 || !PositionSelectByTicket(ticket)) continue;
       if(PositionGetString(POSITION_SYMBOL)!=_Symbol ||
          PositionGetInteger(POSITION_MAGIC)!=InpMagic) continue;
-      if(StringFind(PositionGetString(POSITION_COMMENT),AUTO_V20_LIVE_COMMENT)<0) continue;
+      if(StringFind(PositionGetString(POSITION_COMMENT),AUTO_LIVE_COMMENT)<0) continue;
       double volume=PositionGetDouble(POSITION_VOLUME);
       if(volume>0.0 && (ceiling<=0.0 || volume<ceiling)) ceiling=volume;
    }
    return ceiling;
 }
 
-double AutoV21WeightedEntryPrice(int direction)
+double AutoWeightedEntryPrice(int direction)
 {
    double weighted=0.0,total=0.0;
    for(int i=PositionsTotal()-1;i>=0;i--)
@@ -16459,7 +16459,7 @@ double AutoV21WeightedEntryPrice(int direction)
       if(ticket==0 || !PositionSelectByTicket(ticket)) continue;
       if(PositionGetString(POSITION_SYMBOL)!=_Symbol ||
          PositionGetInteger(POSITION_MAGIC)!=InpMagic) continue;
-      if(StringFind(PositionGetString(POSITION_COMMENT),AUTO_V20_LIVE_COMMENT)<0) continue;
+      if(StringFind(PositionGetString(POSITION_COMMENT),AUTO_LIVE_COMMENT)<0) continue;
       long type=PositionGetInteger(POSITION_TYPE);
       int posDirection=type==POSITION_TYPE_BUY ? 1 : -1;
       if(posDirection!=direction) continue;
@@ -16471,7 +16471,7 @@ double AutoV21WeightedEntryPrice(int direction)
    return total>0.0 ? weighted/total : 0.0;
 }
 
-void AutoV21RecoverCanonicalProtection(int direction)
+void AutoRecoverCanonicalProtection(int direction)
 {
    if(direction==0) return;
    double stop=0.0,target=0.0,lotCeiling=0.0;
@@ -16482,7 +16482,7 @@ void AutoV21RecoverCanonicalProtection(int direction)
       if(ticket==0 || !PositionSelectByTicket(ticket)) continue;
       if(PositionGetString(POSITION_SYMBOL)!=_Symbol ||
          PositionGetInteger(POSITION_MAGIC)!=InpMagic) continue;
-      if(StringFind(PositionGetString(POSITION_COMMENT),AUTO_V20_LIVE_COMMENT)<0) continue;
+      if(StringFind(PositionGetString(POSITION_COMMENT),AUTO_LIVE_COMMENT)<0) continue;
       long type=PositionGetInteger(POSITION_TYPE);
       int posDirection=type==POSITION_TYPE_BUY ? 1 : -1;
       if(posDirection!=direction) continue;
@@ -16492,7 +16492,7 @@ void AutoV21RecoverCanonicalProtection(int direction)
       long openedAt=(long)PositionGetInteger(POSITION_TIME_MSC);
       if(sl>0.0) stop=stop<=0.0 ? sl : (direction>0 ? MathMax(stop,sl) : MathMin(stop,sl));
       // Upgrade/restart migration: the oldest AUTO position owns the original
-      // V20 Basket TP. Never recover a later add's historical rewritten TP.
+      // AUTO Basket TP. Never recover a later add's historical rewritten TP.
       if(tp>0.0 && (targetOpenedAt==0 || openedAt<targetOpenedAt))
       {
          target=tp;
@@ -16500,25 +16500,25 @@ void AutoV21RecoverCanonicalProtection(int direction)
       }
       if(volume>0.0 && (lotCeiling<=0.0 || volume<lotCeiling)) lotCeiling=volume;
    }
-   if(g_autoV20BasketStopPrice<=0.0) g_autoV20BasketStopPrice=stop;
-   if(g_autoV20BasketTargetPrice<=0.0) g_autoV20BasketTargetPrice=target;
-   if(g_autoV20LotCeiling<=0.0) g_autoV20LotCeiling=lotCeiling;
+   if(g_autoBasketStopPrice<=0.0) g_autoBasketStopPrice=stop;
+   if(g_autoBasketTargetPrice<=0.0) g_autoBasketTargetPrice=target;
+   if(g_autoLotCeiling<=0.0) g_autoLotCeiling=lotCeiling;
 }
 
-void AutoV21ApplyNoIncreaseLotCap(AUTO_V20_SIDE &side)
+void AutoApplyNoIncreaseLotCap(AUTO_SIDE &side)
 {
    // Fixed-Lot contract: every new AUTO order uses the configured AUTO Lot.
    // Existing/legacy positions are never allowed to silently cap a new order.
    side.plannedLot=NormalizeTradeVolume(g_lot);
 }
 
-double AutoV21PerOrderRiskBudgetMoney()
+double AutoPerOrderRiskBudgetMoney()
 {
    double equity=MathMax(1.0,AccountInfoDouble(ACCOUNT_EQUITY));
    return equity*MathMax(0.01,MathMin(5.0,g_riskPerOrderPercent))/100.0;
 }
 
-bool AutoV21RiskBudgetAllows(AUTO_V20_SIDE &side,int existingCount,string &reasonOut)
+bool AutoRiskBudgetAllows(AUTO_SIDE &side,int existingCount,string &reasonOut)
 {
    reasonOut="NONE";
 
@@ -16537,10 +16537,10 @@ bool AutoV21RiskBudgetAllows(AUTO_V20_SIDE &side,int existingCount,string &reaso
       return true;
    }
 
-   double perOrderBudget=AutoV21PerOrderRiskBudgetMoney();
+   double perOrderBudget=AutoPerOrderRiskBudgetMoney();
    if(side.expectedLossMoney>perOrderBudget+0.0000001)
    {
-      reasonOut="AUTO_V21_ORDER_RISK_BUDGET";
+      reasonOut="AUTO_ORDER_RISK_BUDGET";
       return false;
    }
    if(existingCount>0)
@@ -16548,34 +16548,34 @@ bool AutoV21RiskBudgetAllows(AUTO_V20_SIDE &side,int existingCount,string &reaso
       double aggregateBudget=perOrderBudget*(existingCount+1);
       if(side.aggregateRiskMoney>aggregateBudget+0.0000001)
       {
-         reasonOut="AUTO_V21_AGGREGATE_RISK_BUDGET";
+         reasonOut="AUTO_AGGREGATE_RISK_BUDGET";
          return false;
       }
    }
    return true;
 }
 
-bool AutoV21WrongDirectionConfirmed(int direction,double momentum,string &reasonOut)
+bool AutoWrongDirectionConfirmed(int direction,double momentum,string &reasonOut)
 {
    reasonOut="NONE";
    if(direction==0) return false;
    datetime now=TimeCurrent();
-   bool candidateActive=g_autoV20ExitCandidateSince>0;
+   bool candidateActive=g_autoExitCandidateSince>0;
 
-   if(g_autoV20BasketStartedAt<=0 ||
-      now-g_autoV20BasketStartedAt<AUTO_V21_EXIT_CYCLE_GRACE_SECONDS ||
-      g_autoV20LastFillAt<=0 ||
-      now-g_autoV20LastFillAt<AUTO_V21_EXIT_LAST_FILL_GRACE_SECONDS)
+   if(g_autoBasketStartedAt<=0 ||
+      now-g_autoBasketStartedAt<AUTO_EXIT_CYCLE_GRACE_SECONDS ||
+      g_autoLastFillAt<=0 ||
+      now-g_autoLastFillAt<AUTO_EXIT_LAST_FILL_GRACE_SECONDS)
    {
-      AutoV21ResetExitCandidate();
+      AutoResetExitCandidate();
       return false;
    }
 
-   double entry=AutoV21WeightedEntryPrice(direction);
+   double entry=AutoWeightedEntryPrice(direction);
    MqlTick tick;
    if(entry<=0.0 || !SymbolInfoTick(_Symbol,tick))
    {
-      AutoV21ResetExitCandidate();
+      AutoResetExitCandidate();
       return false;
    }
    double marketPrice=direction>0 ? tick.bid : tick.ask;
@@ -16583,7 +16583,7 @@ bool AutoV21WrongDirectionConfirmed(int direction,double momentum,string &reason
    double adversePoints=-progressPoints;
    if(adversePoints<=0.0)
    {
-      AutoV21ResetExitCandidate();
+      AutoResetExitCandidate();
       return false;
    }
 
@@ -16592,13 +16592,13 @@ bool AutoV21WrongDirectionConfirmed(int direction,double momentum,string &reason
    double spread=CurrentSpreadPoints();
    if(atrM1<=0.0 || atrM5<=0.0 || spread<=0.0 || spread>=999999.0)
    {
-      AutoV21ResetExitCandidate();
+      AutoResetExitCandidate();
       return false;
    }
 
    double normalFloor=MathMax(spread*3.50,MathMax(atrM1*0.65,atrM5*0.32));
    double severeFloor=MathMax(spread*6.00,MathMax(atrM1*1.10,atrM5*0.60));
-   double initialRiskPoints=AutoV22InitialRisk();
+   double initialRiskPoints=AutoInitialRisk();
    if(initialRiskPoints>0.0)
    {
       normalFloor=MathMax(normalFloor,initialRiskPoints*AUTO_WRONG_DIRECTION_MIN_R);
@@ -16633,67 +16633,67 @@ bool AutoV21WrongDirectionConfirmed(int direction,double momentum,string &reason
       confirmations>=3;
    if(!structureConfirmed && !severe)
    {
-      AutoV21ResetExitCandidate();
+      AutoResetExitCandidate();
       return false;
    }
 
    if(!candidateActive)
    {
-      g_autoV20ExitCandidateSince=now;
-      g_autoV20ExitCandidatePeakAdverse=adversePoints;
+      g_autoExitCandidateSince=now;
+      g_autoExitCandidatePeakAdverse=adversePoints;
       return false;
    }
 
-   if(adversePoints>g_autoV20ExitCandidatePeakAdverse)
-      g_autoV20ExitCandidatePeakAdverse=adversePoints;
+   if(adversePoints>g_autoExitCandidatePeakAdverse)
+      g_autoExitCandidatePeakAdverse=adversePoints;
    bool rebound=
-      adversePoints<=g_autoV20ExitCandidatePeakAdverse*0.70 ||
+      adversePoints<=g_autoExitCandidatePeakAdverse*0.70 ||
       adversePoints<normalFloor*0.75;
    if(rebound)
    {
-      AutoV21ResetExitCandidate();
+      AutoResetExitCandidate();
       return false;
    }
 
-   int requiredSeconds=severe ? AUTO_V21_EXIT_SEVERE_CONFIRM_SECONDS : AUTO_V21_EXIT_CONFIRM_SECONDS;
-   if((int)(now-g_autoV20ExitCandidateSince)<requiredSeconds) return false;
-   reasonOut=severe ? "AUTO_V21_BALANCED_WRONG_SEVERE" : "AUTO_V21_BALANCED_WRONG_CONFIRMED";
+   int requiredSeconds=severe ? AUTO_EXIT_SEVERE_CONFIRM_SECONDS : AUTO_EXIT_CONFIRM_SECONDS;
+   if((int)(now-g_autoExitCandidateSince)<requiredSeconds) return false;
+   reasonOut=severe ? "AUTO_BALANCED_WRONG_SEVERE" : "AUTO_BALANCED_WRONG_CONFIRMED";
    return true;
 }
 
-void AutoV20OnOrderSent(int direction)
+void AutoOnOrderSent(int direction)
 {
-   AUTO_V20_SIDE selected=direction>0 ? g_autoV20Buy : g_autoV20Sell;
+   AUTO_SIDE selected=direction>0 ? g_autoBuy : g_autoSell;
    datetime now=TimeCurrent();
    g_autoFirstEntryCandidateSince=0;
    g_autoFirstEntryCandidateLastSeenAt=0;
    g_autoFirstEntryCandidateDirection=0;
-   if(g_autoV20BasketStartedAt<=0)
+   if(g_autoBasketStartedAt<=0)
    {
-      g_autoV20BasketStartedAt=now;
-      g_autoV20BasketStopPrice=selected.slPrice;
-      g_autoV20BasketTargetPrice=g_basketProfitTarget>0.0 ? 0.0 : selected.tpPrice;
-      g_autoV20LotCeiling=selected.plannedLot;
-      g_autoV20PeakProfit=0.0;
-      // AUTO V22 freezes the first protected risk distance as 1R for the
+      g_autoBasketStartedAt=now;
+      g_autoBasketStopPrice=selected.slPrice;
+      g_autoBasketTargetPrice=g_basketProfitTarget>0.0 ? 0.0 : selected.tpPrice;
+      g_autoLotCeiling=selected.plannedLot;
+      g_autoPeakProfit=0.0;
+      // AUTO freezes the first protected risk distance as 1R for the
       // entire AUTO cycle. Later SL tightening must never redefine 1R.
-      AutoV22SetInitialRisk(selected.entryPrice,selected.slPrice);
+      AutoSetInitialRisk(selected.entryPrice,selected.slPrice);
    }
    else
    {
       if(direction>0 && selected.slPrice>0.0)
-         g_autoV20BasketStopPrice=MathMax(g_autoV20BasketStopPrice,selected.slPrice);
+         g_autoBasketStopPrice=MathMax(g_autoBasketStopPrice,selected.slPrice);
       else if(direction<0 && selected.slPrice>0.0)
-         g_autoV20BasketStopPrice=g_autoV20BasketStopPrice<=0.0 ? selected.slPrice : MathMin(g_autoV20BasketStopPrice,selected.slPrice);
-      g_autoV20LotCeiling=g_autoV20LotCeiling<=0.0 ? selected.plannedLot : MathMin(g_autoV20LotCeiling,selected.plannedLot);
+         g_autoBasketStopPrice=g_autoBasketStopPrice<=0.0 ? selected.slPrice : MathMin(g_autoBasketStopPrice,selected.slPrice);
+      g_autoLotCeiling=g_autoLotCeiling<=0.0 ? selected.plannedLot : MathMin(g_autoLotCeiling,selected.plannedLot);
    }
-   g_autoV20LastFillAt=now;
-   AutoV21ResetExitCandidate();
+   g_autoLastFillAt=now;
+   AutoResetExitCandidate();
 }
 
-bool AutoV20FastPriceExit()
+bool AutoFastPriceExit()
 {
-   if(!AutoV20OwnsOpenBasket() || BasketHasRacePosition() || BasketHasFlipLockPosition())
+   if(!AutoOwnsOpenBasket() || BasketHasRacePosition() || BasketHasFlipLockPosition())
       return false;
    int direction=BasketDirection();
    if(direction==0)
@@ -16704,52 +16704,52 @@ bool AutoV20FastPriceExit()
       return false;
    double exitPrice=direction>0 ? tick.bid : tick.ask;
 
-   if(g_autoV20BasketStopPrice>0.0)
+   if(g_autoBasketStopPrice>0.0)
    {
       bool stopHit=direction>0
-         ? exitPrice<=g_autoV20BasketStopPrice
-         : exitPrice>=g_autoV20BasketStopPrice;
+         ? exitPrice<=g_autoBasketStopPrice
+         : exitPrice>=g_autoBasketStopPrice;
       if(stopHit)
       {
-         bool closed=CloseAllBasket("AUTO_V20_STRUCTURE_STOP");
-         if(closed) AutoV20ResetCycle();
-         g_executionStatus="AUTO_V20_STRUCTURE_STOP";
+         bool closed=CloseAllBasket("AUTO_STRUCTURE_STOP");
+         if(closed) AutoResetCycle();
+         g_executionStatus="AUTO_STRUCTURE_STOP";
          return true;
       }
    }
 
-   if(g_basketProfitTarget<=0.0 && g_autoV20BasketTargetPrice>0.0)
+   if(g_basketProfitTarget<=0.0 && g_autoBasketTargetPrice>0.0)
    {
       bool targetHit=direction>0
-         ? exitPrice>=g_autoV20BasketTargetPrice
-         : exitPrice<=g_autoV20BasketTargetPrice;
+         ? exitPrice>=g_autoBasketTargetPrice
+         : exitPrice<=g_autoBasketTargetPrice;
       if(targetHit)
       {
-         bool closed=CloseAllBasket("AUTO_V20_MODERATE_TARGET");
-         if(closed) AutoV20ResetCycle();
-         g_executionStatus="AUTO_V20_MODERATE_TARGET";
+         bool closed=CloseAllBasket("AUTO_MODERATE_TARGET");
+         if(closed) AutoResetCycle();
+         g_executionStatus="AUTO_MODERATE_TARGET";
          return true;
       }
    }
    return false;
 }
 
-bool AutoV20ManageOpenBasket(double momentum)
+bool AutoManageOpenBasket(double momentum)
 {
-   if(!AutoV20OwnsOpenBasket() || BasketHasRacePosition() || BasketHasFlipLockPosition()) return false;
+   if(!AutoOwnsOpenBasket() || BasketHasRacePosition() || BasketHasFlipLockPosition()) return false;
    int direction=BasketDirection();
    if(direction==0) return false;
 
-   if(AutoV20FastPriceExit()) return true;
+   if(AutoFastPriceExit()) return true;
 
-   if(g_autoV20BasketStartedAt<=0)
+   if(g_autoBasketStartedAt<=0)
    {
-      g_autoV20BasketStartedAt=TimeCurrent();
-      g_autoV20LastFillAt=g_autoV20BasketStartedAt;
+      g_autoBasketStartedAt=TimeCurrent();
+      g_autoLastFillAt=g_autoBasketStartedAt;
    }
-   AutoV21RecoverCanonicalProtection(direction);
-   AutoV22RecoverInitialRisk(direction);
-   if(g_autoV20LastFillAt<=0) g_autoV20LastFillAt=TimeCurrent();
+   AutoRecoverCanonicalProtection(direction);
+   AutoRecoverInitialRisk(direction);
+   if(g_autoLastFillAt<=0) g_autoLastFillAt=TimeCurrent();
 
    double cycleProfit=BasketCycleProfit();
    double floatingProfit=BasketProfit();
@@ -16757,7 +16757,7 @@ bool AutoV20ManageOpenBasket(double momentum)
    if(hardLoss>0.0 && cycleProfit<=-hardLoss)
    {
       bool closed=CloseAllBasket("MAX_BASKET_LOSS");
-      if(closed) AutoV20ResetCycle();
+      if(closed) AutoResetCycle();
       g_executionStatus="MAX_BASKET_LOSS";
       return true;
    }
@@ -16765,22 +16765,22 @@ bool AutoV20ManageOpenBasket(double momentum)
    string wrongReason="NONE";
    if(cycleProfit<0.0 && floatingProfit<0.0)
    {
-      if(AutoV21WrongDirectionConfirmed(direction,momentum,wrongReason))
+      if(AutoWrongDirectionConfirmed(direction,momentum,wrongReason))
       {
          bool closed=CloseAllBasket(wrongReason);
-         if(closed) AutoV20ResetCycle();
+         if(closed) AutoResetCycle();
          g_executionStatus=wrongReason;
          return true;
       }
-      if(g_autoV20ExitCandidateSince>0)
+      if(g_autoExitCandidateSince>0)
       {
-         g_executionStatus="AUTO_V21_EXIT_CANDIDATE";
+         g_executionStatus="AUTO_EXIT_CANDIDATE";
          return true;
       }
    }
-   else AutoV21ResetExitCandidate();
+   else AutoResetExitCandidate();
 
-   if(cycleProfit>g_autoV20PeakProfit) g_autoV20PeakProfit=cycleProfit;
+   if(cycleProfit>g_autoPeakProfit) g_autoPeakProfit=cycleProfit;
 
    // When the user configured a hard money target, no smart profit rule may
    // close a winner early or wait for giveback. Profit exits are owned solely
@@ -16791,35 +16791,35 @@ bool AutoV20ManageOpenBasket(double momentum)
       string profitReason="NONE";
       if(SmartProfitReversalDetected(direction,cycleProfit,profitReason))
       {
-         bool closed=CloseAllBasket("AUTO_V21_EARLY_PROFIT_REVERSAL");
-         if(closed) AutoV20ResetCycle();
-         g_executionStatus="AUTO_V21_EARLY_PROFIT_REVERSAL";
+         bool closed=CloseAllBasket("AUTO_EARLY_PROFIT_REVERSAL");
+         if(closed) AutoResetCycle();
+         g_executionStatus="AUTO_EARLY_PROFIT_REVERSAL";
          g_adaptiveBlockReason=profitReason;
          return true;
       }
       if(AutoProfitGivebackDetected(direction,cycleProfit))
       {
-         bool closed=CloseAllBasket("AUTO_V21_EARLY_PROFIT_GIVEBACK");
-         if(closed) AutoV20ResetCycle();
-         g_executionStatus="AUTO_V21_EARLY_PROFIT_GIVEBACK";
+         bool closed=CloseAllBasket("AUTO_EARLY_PROFIT_GIVEBACK");
+         if(closed) AutoResetCycle();
+         g_executionStatus="AUTO_EARLY_PROFIT_GIVEBACK";
          return true;
       }
    }
 
-   long ageSeconds=(long)MathMax(0,TimeCurrent()-g_autoV20BasketStartedAt);
+   long ageSeconds=(long)MathMax(0,TimeCurrent()-g_autoBasketStartedAt);
    bool flowStillValid=g_trendM5==direction || MomentumSupportsDirection(direction,momentum,0.20);
    if(ageSeconds>=12*60 && cycleProfit>0.0 && !hardMoneyProfitTarget && !flowStillValid)
    {
-      bool closed=CloseAllBasket("AUTO_V21_TIME_BANK_PROFIT");
-      if(closed) AutoV20ResetCycle();
-      g_executionStatus="AUTO_V21_TIME_BANK_PROFIT";
+      bool closed=CloseAllBasket("AUTO_TIME_BANK_PROFIT");
+      if(closed) AutoResetCycle();
+      g_executionStatus="AUTO_TIME_BANK_PROFIT";
       return true;
    }
    if(ageSeconds>=25*60 && cycleProfit<=0.0)
    {
-      bool closed=CloseAllBasket("AUTO_V21_TIME_STOP");
-      if(closed) AutoV20ResetCycle();
-      g_executionStatus="AUTO_V21_TIME_STOP";
+      bool closed=CloseAllBasket("AUTO_TIME_STOP");
+      if(closed) AutoResetCycle();
+      g_executionStatus="AUTO_TIME_STOP";
       return true;
    }
    return false;
@@ -16915,9 +16915,9 @@ int AdaptiveEntryDirection(double momentum)
    // Brain V12: take the real market direction directly. Setup intelligence is
    // preferred, but no price-location or pullback policy is allowed to turn a
    // valid BUY/SELL direction back into zero.
-   if(AutoV20Enabled())
+   if(AutoEnabled())
    {
-      int autoDirection=AutoV20PrecisionDirection(momentum);
+      int autoDirection=AutoPrecisionDirection(momentum);
       g_marketRegimeDetail=DetailedMarketRegime(momentum,autoDirection);
       if(autoDirection==0)
       {
@@ -20558,7 +20558,7 @@ void ManageDynamicProtection()
       double currentTP = PositionGetDouble(POSITION_TP);
       string positionComment=PositionGetString(POSITION_COMMENT);
       bool tacticalPosition=StringFind(positionComment,"SaaSTactical")>=0;
-      bool autoPosition=StringFind(positionComment,AUTO_V20_LIVE_COMMENT)>=0;
+      bool autoPosition=StringFind(positionComment,AUTO_LIVE_COMMENT)>=0;
       bool manualPosition=
          StringFind(positionComment,MANUAL_LIVE_COMMENT)>=0 ||
          StringFind(positionComment,LEGACY_BASKET_COMMENT)>=0;
@@ -20584,23 +20584,23 @@ void ManageDynamicProtection()
          g_basketProfitTarget>0.0;
 
       double desiredSL = currentSL;
-      if(autoPosition && g_autoV20BasketStopPrice>0.0)
+      if(autoPosition && g_autoBasketStopPrice>0.0)
          desiredSL=direction>0
-            ? (currentSL<=0.0 ? g_autoV20BasketStopPrice : MathMax(currentSL,g_autoV20BasketStopPrice))
-            : (currentSL<=0.0 ? g_autoV20BasketStopPrice : MathMin(currentSL,g_autoV20BasketStopPrice));
+            ? (currentSL<=0.0 ? g_autoBasketStopPrice : MathMax(currentSL,g_autoBasketStopPrice))
+            : (currentSL<=0.0 ? g_autoBasketStopPrice : MathMin(currentSL,g_autoBasketStopPrice));
 
       if(autoPosition)
       {
-         // AUTO V22 profit protection is based on the original 1R, not on a
+         // AUTO profit protection is based on the original 1R, not on a
          // moving ATR threshold. +1R => BE+cost buffer; each additional 0.5R
          // locks another 0.5R. From +2R onward EMA structure may tighten the
          // stop further, but can never widen the step lock.
-         AutoV22RecoverInitialRisk(direction);
-         desiredSL=AutoV22StepProtectedStop(
+         AutoRecoverInitialRisk(direction);
+         desiredSL=AutoStepProtectedStop(
             direction,openPrice,marketPrice,desiredSL
          );
 
-         double initialRisk=AutoV22InitialRisk();
+         double initialRisk=AutoInitialRisk();
          double autoR=initialRisk>0.0
             ? profitPoints/initialRisk
             : 0.0;
@@ -20676,9 +20676,9 @@ void ManageDynamicProtection()
       // target selected by the user and Off leaves profit exits disabled.
       double desiredTP = currentTP;
       bool positionUsesAutoProtection=autoFamilyPosition;
-      if(autoPosition && g_autoV20BasketTargetPrice>0.0)
+      if(autoPosition && g_autoBasketTargetPrice>0.0)
       {
-         desiredTP=NormalizeTargetPriceToTick(g_autoV20BasketTargetPrice,direction);
+         desiredTP=NormalizeTargetPriceToTick(g_autoBasketTargetPrice,direction);
       }
       else if(tacticalPosition &&
               count == 1 &&
@@ -20738,31 +20738,31 @@ bool SendMarketOrder(int direction) /* V9_RETRY */
 
    MqlTradeRequest request = {};
    MqlTradeResult result = {};
-   bool autoV20=AutoV20Enabled() && !g_tacticalCountertrendActive;
+   bool auto=AutoEnabled() && !g_tacticalCountertrendActive;
    bool raceOrder = RaceModeEnabled() || BasketHasRacePosition();
    bool flipLockOrder = FlipLockModeEnabled();
    bool manualOrder = EffectiveExecutionMode()=="MANUAL";
-   AUTO_V20_SIDE autoPlan;
-   if(autoV20)
-      autoPlan=direction>0 ? g_autoV20Buy : g_autoV20Sell;
+   AUTO_SIDE autoPlan;
+   if(auto)
+      autoPlan=direction>0 ? g_autoBuy : g_autoSell;
 
    request.action = TRADE_ACTION_DEAL;
    request.magic = InpMagic;
    request.symbol = _Symbol;
    request.volume = flipLockOrder
       ? NormalizeTradeVolume(g_lot)
-      : (autoV20
+      : (auto
          ? autoPlan.plannedLot
          : (g_adaptiveEngine ? g_adaptiveLot : NormalizeTradeVolume(g_lot)));
    if(request.volume<=0.0)
    {
-      g_executionStatus="AUTO_V20_RISK_VOLUME_ZERO";
+      g_executionStatus="AUTO_RISK_VOLUME_ZERO";
       return false;
    }
    request.deviation = DynamicDeviationPoints();
    request.type_filling = AllowedFillingMode();
-   request.comment = autoV20
-      ? AUTO_V20_LIVE_COMMENT
+   request.comment = auto
+      ? AUTO_LIVE_COMMENT
       : (raceOrder
       ? "SaaSRace"
       : (flipLockOrder
@@ -20783,7 +20783,7 @@ bool SendMarketOrder(int direction) /* V9_RETRY */
    }
 
    double entryPrice = request.price;
-   if(autoV20)
+   if(auto)
    {
       double atrPrice=MathMax(_Point*12.0,
          AverageTrueRangePoints(PERIOD_M5,g_atrPeriod)*_Point);
@@ -20797,30 +20797,30 @@ bool SendMarketOrder(int direction) /* V9_RETRY */
          // Do one bounded AUTO-only re-plan at the live quote. This keeps the
          // Broker SL/TP tied to the current price instead of discarding a valid
          // Demand/Supply opportunity just because the quote moved quickly.
-         g_executionStatus="AUTO_V20_PRICE_MOVED_REEVALUATE";
-         AutoV20PlanPrices(autoPlan,g_autoV20Levels);
-         AutoV21ApplyNoIncreaseLotCap(autoPlan);
+         g_executionStatus="AUTO_PRICE_MOVED_REEVALUATE";
+         AutoPlanPrices(autoPlan,g_autoLevels);
+         AutoApplyNoIncreaseLotCap(autoPlan);
          if(positionsBefore>0)
          {
-            autoPlan.aggregateRiskMoney=AutoV20AggregateRiskAtStop(
+            autoPlan.aggregateRiskMoney=AutoAggregateRiskAtStop(
                direction,
-               g_autoV20BasketStopPrice>0.0
-                  ? g_autoV20BasketStopPrice
+               g_autoBasketStopPrice>0.0
+                  ? g_autoBasketStopPrice
                   : autoPlan.slPrice,
                autoPlan.plannedLot
             )+autoPlan.knownCostMoney;
          }
 
          string replanRiskReason="NONE";
-         if(!AutoV21RiskBudgetAllows(autoPlan,positionsBefore,replanRiskReason))
+         if(!AutoRiskBudgetAllows(autoPlan,positionsBefore,replanRiskReason))
          {
-            g_autoV20RejectReason=replanRiskReason;
-            g_adaptiveBlockReason="AUTO_V21_RISK_BUDGET";
+            g_autoRejectReason=replanRiskReason;
+            g_adaptiveBlockReason="AUTO_RISK_BUDGET";
             return false;
          }
 
-         if(direction>0) g_autoV20Buy=autoPlan;
-         else g_autoV20Sell=autoPlan;
+         if(direction>0) g_autoBuy=autoPlan;
+         else g_autoSell=autoPlan;
          request.volume=autoPlan.plannedLot;
       }
 
@@ -20828,10 +20828,10 @@ bool SendMarketOrder(int direction) /* V9_RETRY */
       request.tp=hardMoneyProfitTarget ? 0.0 : autoPlan.tpPrice;
       if(positionsBefore>0)
       {
-         if(g_autoV20BasketStopPrice>0.0)
-            request.sl=direction>0 ? MathMax(g_autoV20BasketStopPrice,request.sl) : MathMin(g_autoV20BasketStopPrice,request.sl);
-         if(!hardMoneyProfitTarget && g_autoV20BasketTargetPrice>0.0)
-            request.tp=g_autoV20BasketTargetPrice;
+         if(g_autoBasketStopPrice>0.0)
+            request.sl=direction>0 ? MathMax(g_autoBasketStopPrice,request.sl) : MathMin(g_autoBasketStopPrice,request.sl);
+         if(!hardMoneyProfitTarget && g_autoBasketTargetPrice>0.0)
+            request.tp=g_autoBasketTargetPrice;
       }
       double minimumStopDistance=(double)SymbolInfoInteger(
          _Symbol,SYMBOL_TRADE_STOPS_LEVEL
@@ -20843,7 +20843,7 @@ bool SendMarketOrder(int direction) /* V9_RETRY */
            (hardMoneyProfitTarget || request.tp<tick.ask-minimumStopDistance);
       if(!protectedOrder)
       {
-         g_executionStatus="AUTO_V20_BROKER_PROTECTION_INVALID";
+         g_executionStatus="AUTO_BROKER_PROTECTION_INVALID";
          return false;
       }
    }
@@ -20903,10 +20903,10 @@ bool SendMarketOrder(int direction) /* V9_RETRY */
    g_adaptiveLot = request.volume;
 
    ResetLastError();
-   // A V20 plan binds price, SL and TP together. Retrying only the price would
-   // detach those protections from the approved risk calculation, so V20
+   // An AUTO plan binds price, SL and TP together. Retrying only the price would
+   // detach those protections from the approved risk calculation, so AUTO
    // declines and re-evaluates on the next tick instead.
-   bool sent=autoV20
+   bool sent=auto
       ? OrderSend(request,result)
       : OrderSendWithPriceRetry(request,result);
    if(!sent)
@@ -21154,7 +21154,7 @@ void ResetForceFlatRuntime()
    ResetRescueState();
    FlipLockResetTracking(true);
    ResetLegacyBurstStateForIsolatedMode();
-   AutoV20ResetCycle();
+   AutoResetCycle();
    ResetPrecisionWait();
    ResetTrail();
    ResetBasketCycleState();

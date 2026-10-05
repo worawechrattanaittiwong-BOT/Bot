@@ -51,6 +51,16 @@ function textValue(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function readAutoMetric(metrics: Record<string, unknown>, suffix: string): unknown {
+  const currentKey = "auto" + suffix;
+  if (metrics[currentKey] !== undefined) return metrics[currentKey];
+
+  const legacyKey = Object.keys(metrics).find(key =>
+    key !== currentKey && key.startsWith("auto") && key.endsWith(suffix)
+  );
+  return legacyKey ? metrics[legacyKey] : undefined;
+}
+
 function meaningfulCode(value: unknown): string {
   const text = textValue(value);
   return ["", "NONE", "UNKNOWN", "N/A"].includes(text.toUpperCase()) ? "" : text;
@@ -103,8 +113,8 @@ export function EaDecisionCenter(props: Props) {
   const execution = textValue(metrics.executionStatus).toUpperCase();
   const bias = textValue(metrics.entryBias).toUpperCase();
   const autoActive = mode === "AUTO" && (
-    metrics.autoV20Active === true ||
-    textValue(metrics.autoV20Active).toLowerCase() === "true"
+    readAutoMetric(metrics, "Active") === true ||
+    textValue(readAutoMetric(metrics, "Active")).toLowerCase() === "true"
   );
   const explicitlyWaiting = /WAIT|BLOCK|COOLDOWN|INITIALIZ|DATA_NOT_READY|NO_SIGNAL/.test(execution);
   const platformReady = liveStatus.tradeReady === true && metrics.tradeReady !== false;
@@ -125,11 +135,11 @@ export function EaDecisionCenter(props: Props) {
     : signal === "MANUAL" ? "ใช้การควบคุมตามโหมด Manual"
     : signal === "BUY" || signal === "SELL" ? "ทิศทางที่ EA รายงานล่าสุด"
     : "EA กำลังติดตามจังหวะเข้า";
-  const autoPublishedConfidence = numberValue(metrics.autoV20Confidence);
-  const autoBuyConfidence = numberValue(metrics.autoV20BuyConfidence);
-  const autoSellConfidence = numberValue(metrics.autoV20SellConfidence);
-  const autoBuyScore = numberValue(metrics.autoV20BuyScore);
-  const autoSellScore = numberValue(metrics.autoV20SellScore);
+  const autoPublishedConfidence = numberValue(readAutoMetric(metrics, "Confidence"));
+  const autoBuyConfidence = numberValue(readAutoMetric(metrics, "BuyConfidence"));
+  const autoSellConfidence = numberValue(readAutoMetric(metrics, "SellConfidence"));
+  const autoBuyScore = numberValue(readAutoMetric(metrics, "BuyScore"));
+  const autoSellScore = numberValue(readAutoMetric(metrics, "SellScore"));
   const autoCandidateSide = autoActive
     ? (autoBuyScore !== null && autoSellScore !== null && autoBuyScore !== autoSellScore
         ? (autoBuyScore > autoSellScore ? "BUY" : "SELL")
@@ -167,15 +177,15 @@ export function EaDecisionCenter(props: Props) {
     const parsed = online ? numberValue(value) : null;
     return parsed !== null && parsed > 0 ? parsed.toFixed(props.digits) : "—";
   };
-  const hasAutoPlan = analyzing && autoActive && (numberValue(metrics.autoV20PlannedEntry) ?? 0) > 0;
-  const rr = hasAutoPlan ? numberValue(metrics.autoV20RR) : null;
+  const hasAutoPlan = analyzing && autoActive && (numberValue(readAutoMetric(metrics, "PlannedEntry")) ?? 0) > 0;
+  const rr = hasAutoPlan ? numberValue(readAutoMetric(metrics, "RR")) : null;
   const configuredLot = numberValue(metrics.configuredLot) ?? numberValue(props.lot);
   const lotLabel = configuredLot !== null && configuredLot > 0
     ? configuredLot.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 4 }) + " Lot" : "—";
   const planRows = [
-    { label: "Entry", value: hasAutoPlan ? price(metrics.autoV20PlannedEntry) : "—", tone: "muted" },
-    { label: "Stop Loss", value: hasAutoPlan ? price(metrics.autoV20SlPrice) : "—", tone: "bad" },
-    { label: "Take Profit", value: hasAutoPlan ? price(metrics.autoV20TpPrice) : "—", tone: "good" },
+    { label: "Entry", value: hasAutoPlan ? price(readAutoMetric(metrics, "PlannedEntry")) : "—", tone: "muted" },
+    { label: "Stop Loss", value: hasAutoPlan ? price(readAutoMetric(metrics, "SlPrice")) : "—", tone: "bad" },
+    { label: "Take Profit", value: hasAutoPlan ? price(readAutoMetric(metrics, "TpPrice")) : "—", tone: "good" },
     { label: "Net RR", hint: "หลังหัก Spread · ค่าจาก EA", value: rr !== null && rr > 0 ? "1 : " + rr.toFixed(2) : "—", tone: "muted" },
     { label: "Position Size", hint: "Lot ที่ตั้งไว้", value: lotLabel, tone: "muted" }
   ];
@@ -183,7 +193,7 @@ export function EaDecisionCenter(props: Props) {
   const entryReason = meaningfulCode(metrics.lastEntryReason);
   const blockReason = meaningfulCode(metrics.adaptiveBlockReason);
   const autoReason = autoActive
-    ? meaningfulCode(metrics.autoV20RejectReason) || meaningfulCode(metrics.autoV20DecisionReason) : "";
+    ? meaningfulCode(readAutoMetric(metrics, "RejectReason")) || meaningfulCode(readAutoMetric(metrics, "DecisionReason")) : "";
   const decisionReason = autoReason
     || (entryReason || blockReason ? props.decisionLabel : "")
     || liveStatus.detail

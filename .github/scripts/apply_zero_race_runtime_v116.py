@@ -354,8 +354,8 @@ for required in [
 ]:
     if required not in ea:
         raise SystemExit(f"required runtime marker missing: {required}")
-if 'bool AutoV20ManageOpenBasket(double momentum)' not in ea:
-    raise SystemExit('AUTO V20 runtime unexpectedly missing')
+if 'bool AutoManageOpenBasket(double momentum)' not in ea:
+    raise SystemExit('AUTO runtime unexpectedly missing')
 
 write(ea_path, ea)
 

@@ -23,7 +23,7 @@ $api=Read-Text 'apps/api/src/bot.controller.ts'
 $web=Read-Text 'apps/web/app/dashboard/page.tsx'
 
 $zero=Block $ea 'double ZeroGridRequiredCloseNet()' 'double ZeroGridTickSize()'
-$autoManage=Block $ea 'bool AutoV20ManageOpenBasket(' 'int AdaptiveEntryDirection('
+$autoManage=Block $ea 'bool AutoManageOpenBasket(' 'int AdaptiveEntryDirection('
 $send=Block $ea 'bool SendMarketOrder(int direction)' 'bool ClosePositionByTicket('
 $dynamic=Block $ea 'void ManageDynamicProtection()' 'string ProfitControlModeName()'
 $onTick=Block $ea 'void OnTick()' 'void OnTimer()'

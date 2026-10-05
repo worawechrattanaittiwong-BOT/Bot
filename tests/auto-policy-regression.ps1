@@ -3,23 +3,23 @@ $ErrorActionPreference = 'Stop'
 $sourcePath = Join-Path $PSScriptRoot '..\mt5\FastBasketBot.mq5'
 $source = Get-Content $sourcePath -Raw
 foreach($requiredPolicy in @(
-  'double AutoV20NetRewardRisk\(',
-  'AUTO_V20_BROKER_PROTECTION_INVALID',
-  'AUTO_V20_PRICE_MOVED_REEVALUATE'
+  'double AutoNetRewardRisk\(',
+  'AUTO_BROKER_PROTECTION_INVALID',
+  'AUTO_PRICE_MOVED_REEVALUATE'
 )) {
   if($source -notmatch $requiredPolicy) {
-    throw "AUTO V20 source policy missing: $requiredPolicy"
+    throw "AUTO source policy missing: $requiredPolicy"
   }
 }
-foreach($requiredV21 in @(
-  'AUTO_V21_BALANCED_EXIT_V1',
-  'AUTO_V21_ORDER_RISK_BUDGET',
-  'AUTO_V21_AGGREGATE_RISK_BUDGET',
-  'AutoV21ApplyNoIncreaseLotCap',
-  'AutoV21WrongDirectionConfirmed'
+foreach($requiredAuto in @(
+  'AUTO_BALANCED_EXIT',
+  'AUTO_ORDER_RISK_BUDGET',
+  'AUTO_AGGREGATE_RISK_BUDGET',
+  'AutoApplyNoIncreaseLotCap',
+  'AutoWrongDirectionConfirmed'
 )) {
-  if($source -notmatch [regex]::Escape($requiredV21)) {
-    throw "AUTO V21 safety policy missing: $requiredV21"
+  if($source -notmatch [regex]::Escape($requiredAuto)) {
+    throw "AUTO safety policy missing: $requiredAuto"
   }
 }
 if($source -match 'MIN_LOT_EXCEEDS_AUTO_RISK|EXCEEDS_AUTO_RISK_BUDGET') {
@@ -85,7 +85,7 @@ function LegacyDecision($r) {
   if($buy -gt $sell+1){return 1}; if($sell -gt $buy+1){return -1}
   if($r.mom -gt 0){return 1}; if($r.mom -lt 0){return -1}; if($macro -ne 0){return $macro}; return $r.m5
 }
-function V20Side($r,[int]$d) {
+function AutoSide($r,[int]$d) {
   [double]$macro=0
   foreach($p in @(@('h1',12),@('m30',9),@('m15',7))){$v=$r.($p[0]);$w=[double]$p[1];if($v -eq $d){$macro+=$w}elseif($v -eq -$d){$macro-=$w}}
   [double]$exe=0
@@ -102,8 +102,8 @@ function V20Side($r,[int]$d) {
   $bonus=if($rr -ge 1.55){5}elseif($rr -ge 1.2){2}elseif($rr -lt 1){-10}elseif($rr -lt 1.1){-5}else{0}
   [pscustomobject]@{direction=$d;confidence=$conf;rank=[Math]::Max(0,[Math]::Min(100,$conf+$bonus));rr=$rr}
 }
-function V20Decision($r) {
-  $b=V20Side $r 1; $s=V20Side $r -1; $edge=$b.rank-$s.rank
+function AutoDecision($r) {
+  $b=AutoSide $r 1; $s=AutoSide $r -1; $edge=$b.rank-$s.rank
   if([Math]::Abs($edge) -lt 5){return [pscustomobject]@{direction=0;reason='CONFLICT'}}
   $sel=if($edge -gt 0){$b}else{$s}
   if($sel.confidence -lt 60 -or $sel.rank -lt 64){return [pscustomobject]@{direction=0;reason='QUALITY'}}
@@ -112,7 +112,7 @@ function V20Decision($r) {
 function Evaluate([string]$engine) {
   $equity=0.0;$peak=0.0;$maxDd=0.0;$orders=0;$rejects=@{};$byScenario=@{};$sum=0.0
   foreach($r in $cases){
-    if($engine -eq 'Legacy'){$d=LegacyDecision $r;$reason='TRADE'}else{$v=V20Decision $r;$d=$v.direction;$reason=$v.reason}
+    if($engine -eq 'Legacy'){$d=LegacyDecision $r;$reason='TRADE'}else{$v=AutoDecision $r;$d=$v.direction;$reason=$v.reason}
     $pnl=if($d -eq 1){$r.outBuy}elseif($d -eq -1){$r.outSell}else{0.0}
     if($d -ne 0){$orders++;$equity+=$pnl;$sum+=$pnl;$peak=[Math]::Max($peak,$equity);$maxDd=[Math]::Max($maxDd,$peak-$equity)}else{$rejects[$reason]=1+($rejects[$reason]??0)}
     if(-not $byScenario.ContainsKey($r.scenario)){$byScenario[$r.scenario]=0.0};$byScenario[$r.scenario]+=$pnl
@@ -120,21 +120,21 @@ function Evaluate([string]$engine) {
   [pscustomobject]@{engine=$engine;netProfit=[Math]::Round($sum,2);maxDrawdown=[Math]::Round($maxDd,2);averagePerBasket=[Math]::Round($(if($orders){$sum/$orders}else{0}),3);orders=$orders;rejections=$rejects;byScenario=$byScenario}
 }
 
-$legacy=Evaluate 'Legacy'; $v20=Evaluate 'V20'
+$legacy=Evaluate 'Legacy'; $auto=Evaluate 'AUTO'
 $report=[pscustomobject]@{
   testType='DETERMINISTIC_POLICY_REGRESSION_NOT_MT5_HISTORY_BACKTEST'
   sameDataset=$true
   scenarios=@('STRONG_DOWN_BOUNCE','STRONG_UP_PULLBACK','SIDEWAY','FALSE_BREAKOUT')
   legacy=$legacy
-  v20=$v20
-  orderRetention=[Math]::Round($v20.orders/[Math]::Max(1,$legacy.orders),3)
+  auto=$auto
+  orderRetention=[Math]::Round($auto.orders/[Math]::Max(1,$legacy.orders),3)
 }
 $report | ConvertTo-Json -Depth 8
 
-if($v20.orders -lt 8){throw "AUTO V20 trade starvation: only $($v20.orders) orders"}
-if($v20.orders -lt [Math]::Ceiling($legacy.orders*0.5)){throw 'AUTO V20 reduced orders below 50% of legacy fixture'}
-if($v20.netProfit -le $legacy.netProfit){throw 'AUTO V20 canonical net profit did not improve'}
-if($v20.maxDrawdown -ge $legacy.maxDrawdown){throw 'AUTO V20 canonical drawdown did not improve'}
-if($v20.averagePerBasket -le $legacy.averagePerBasket){throw 'AUTO V20 average Basket result did not improve'}
-if(($v20.rejections.Keys | Measure-Object).Count -eq 0){throw 'AUTO V20 produced no explicit rejection reasons'}
-Write-Host 'AUTO V20 deterministic policy regression PASS'
+if($auto.orders -lt 8){throw "AUTO trade starvation: only $($auto.orders) orders"}
+if($auto.orders -lt [Math]::Ceiling($legacy.orders*0.5)){throw 'AUTO reduced orders below 50% of legacy fixture'}
+if($auto.netProfit -le $legacy.netProfit){throw 'AUTO canonical net profit did not improve'}
+if($auto.maxDrawdown -ge $legacy.maxDrawdown){throw 'AUTO canonical drawdown did not improve'}
+if($auto.averagePerBasket -le $legacy.averagePerBasket){throw 'AUTO average Basket result did not improve'}
+if(($auto.rejections.Keys | Measure-Object).Count -eq 0){throw 'AUTO produced no explicit rejection reasons'}
+Write-Host 'AUTO deterministic policy regression PASS'

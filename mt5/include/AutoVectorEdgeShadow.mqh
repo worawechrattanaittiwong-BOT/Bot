@@ -1,11 +1,11 @@
-#ifndef SCENOVA_AUTO_VECTOR_EDGE_SHADOW_V1_MQH
-#define SCENOVA_AUTO_VECTOR_EDGE_SHADOW_V1_MQH
+#ifndef SCENOVA_AUTO_VECTOR_EDGE_SHADOW_MQH
+#define SCENOVA_AUTO_VECTOR_EDGE_SHADOW_MQH
 
 // Phase 2 shadow adapter.
-// IMPORTANT: reads existing AUTO V20 diagnostics only. It must never send,
+// IMPORTANT: reads existing AUTO diagnostics only. It must never send,
 // modify, cancel, close, resize, or gate any order.
 
-#define VECTOR_EDGE_SHADOW_V1_VERSION "1.3.0"
+#define VECTOR_EDGE_SHADOW_BUILD "1.3.0"
 #define VECTOR_EDGE_SHADOW_SAMPLE_MS 1000
 #define VECTOR_EDGE_SHADOW_LOG_MS 5000
 
@@ -23,7 +23,7 @@ double VectorShadowClampSigned(const double value)
    return value;
 }
 
-double VectorShadowSideProbability(const AUTO_V20_SIDE &side,
+double VectorShadowSideProbability(const AUTO_SIDE &side,
                                    string &source)
 {
    if(side.winSamples >= 20)
@@ -44,10 +44,10 @@ double VectorShadowSideProbability(const AUTO_V20_SIDE &side,
 
 double VectorShadowPersistence()
 {
-   if(g_autoV20PhaseSince <= 0)
+   if(g_autoPhaseSince <= 0)
       return 0.0;
 
-   long ageSeconds = (long)MathMax(0,TimeCurrent() - g_autoV20PhaseSince);
+   long ageSeconds = (long)MathMax(0,TimeCurrent() - g_autoPhaseSince);
    return VectorClamp01((double)ageSeconds / 30.0);
 }
 
@@ -76,12 +76,12 @@ double VectorShadowVolatilityNoise()
    return MathMin(1.0,MathAbs(g_atrRatio - 1.0));
 }
 
-double VectorShadowGrossProfitMoney(const AUTO_V20_SIDE &side)
+double VectorShadowGrossProfitMoney(const AUTO_SIDE &side)
 {
    if(side.direction != 0 && side.plannedLot > 0.0 && side.entryPrice > 0.0 &&
       side.tpPrice > 0.0)
    {
-      double gross = MathAbs(AutoV20ProfitForMove(
+      double gross = MathAbs(AutoProfitForMove(
          side.direction,side.plannedLot,side.entryPrice,side.tpPrice
       ));
       if(gross > 0.0)
@@ -94,12 +94,12 @@ double VectorShadowGrossProfitMoney(const AUTO_V20_SIDE &side)
    return side.expectedProfitMoney + MathMax(0.0,side.knownCostMoney);
 }
 
-double VectorShadowGrossLossMoney(const AUTO_V20_SIDE &side)
+double VectorShadowGrossLossMoney(const AUTO_SIDE &side)
 {
    if(side.direction != 0 && side.plannedLot > 0.0 && side.entryPrice > 0.0 &&
       side.slPrice > 0.0)
    {
-      double gross = MathAbs(AutoV20ProfitForMove(
+      double gross = MathAbs(AutoProfitForMove(
          side.direction,side.plannedLot,side.entryPrice,side.slPrice
       ));
       if(gross > 0.0)
@@ -113,8 +113,8 @@ double VectorShadowGrossLossMoney(const AUTO_V20_SIDE &side)
 
 bool AutoVectorEdgeShadowBuildInput(VECTOR_EDGE_INPUT &input)
 {
-   // Hard scope boundary: AUTO V20 only.
-   if(!AutoV20Enabled())
+   // Hard scope boundary: AUTO only.
+   if(!AutoEnabled())
       return false;
 
    if(!MQLInfoInteger(MQL_TESTER) && !g_settingsSynchronized)
@@ -122,8 +122,8 @@ bool AutoVectorEdgeShadowBuildInput(VECTOR_EDGE_INPUT &input)
 
    string buySource = "NONE";
    string sellSource = "NONE";
-   input.buyProbability = VectorShadowSideProbability(g_autoV20Buy,buySource);
-   input.sellProbability = VectorShadowSideProbability(g_autoV20Sell,sellSource);
+   input.buyProbability = VectorShadowSideProbability(g_autoBuy,buySource);
+   input.sellProbability = VectorShadowSideProbability(g_autoSell,sellSource);
 
    g_vectorEdgeShadowProbabilitySource = buySource == sellSource
       ? buySource
@@ -133,25 +133,25 @@ bool AutoVectorEdgeShadowBuildInput(VECTOR_EDGE_INPUT &input)
    // expectedProfitMoney is already net of cost and expectedLossMoney already
    // includes cost, so feeding them directly into a second cost-aware EV would
    // double-count execution cost.
-   input.buyKnownCostMoney = MathMax(0.0,g_autoV20Buy.knownCostMoney);
-   input.buyExpectedWinMoney = VectorShadowGrossProfitMoney(g_autoV20Buy);
-   input.buyExpectedLossMoney = VectorShadowGrossLossMoney(g_autoV20Buy);
+   input.buyKnownCostMoney = MathMax(0.0,g_autoBuy.knownCostMoney);
+   input.buyExpectedWinMoney = VectorShadowGrossProfitMoney(g_autoBuy);
+   input.buyExpectedLossMoney = VectorShadowGrossLossMoney(g_autoBuy);
 
-   input.sellKnownCostMoney = MathMax(0.0,g_autoV20Sell.knownCostMoney);
-   input.sellExpectedWinMoney = VectorShadowGrossProfitMoney(g_autoV20Sell);
-   input.sellExpectedLossMoney = VectorShadowGrossLossMoney(g_autoV20Sell);
+   input.sellKnownCostMoney = MathMax(0.0,g_autoSell.knownCostMoney);
+   input.sellExpectedWinMoney = VectorShadowGrossProfitMoney(g_autoSell);
+   input.sellExpectedLossMoney = VectorShadowGrossLossMoney(g_autoSell);
 
    input.volatilityNoise = VectorShadowVolatilityNoise();
    input.spreadPenalty = VectorShadowSpreadPenalty();
 
-   double bestConfidence = MathMax(g_autoV20Buy.confidence,g_autoV20Sell.confidence);
+   double bestConfidence = MathMax(g_autoBuy.confidence,g_autoSell.confidence);
    input.modelUncertainty = 1.0 - VectorClamp01(bestConfidence / 100.0);
    input.persistence = VectorShadowPersistence();
 
    double motionScale = MathMax(1.0,InpStrongFlowPoints);
-   input.velocity = VectorShadowClampSigned(g_autoV20LastMomentum / motionScale);
+   input.velocity = VectorShadowClampSigned(g_autoLastMomentum / motionScale);
    input.acceleration = VectorShadowClampSigned(
-      (g_autoV20LastMomentum - g_autoV20PreviousMomentum) / motionScale
+      (g_autoLastMomentum - g_autoPreviousMomentum) / motionScale
    );
 
    return true;
@@ -164,7 +164,7 @@ string AutoVectorEdgeShadowTelemetryJson()
 
    return StringFormat(
       "{\"vectorEdgeShadowActive\":true,\"version\":\"%s\",\"samples\":%I64d,\"probabilitySource\":\"%s\",\"preferredDirection\":%d,\"entropy\":%.4f,\"directionalAgreement\":%.4f,\"buyEV\":%.4f,\"sellEV\":%.4f,\"edgeRatio\":%.2f,\"fractionalKelly\":%.4f,\"riskMultiplier\":%.4f,\"positiveExpectancy\":%s,\"exitEdgeLost\":%s,\"reason\":\"%s\"}",
-      VECTOR_EDGE_V1_VERSION,
+      VECTOR_EDGE_BUILD,
       g_vectorEdgeShadowSamples,
       g_vectorEdgeShadowProbabilitySource,
       g_vectorEdgeShadowOutput.preferredDirection,
@@ -183,10 +183,10 @@ string AutoVectorEdgeShadowTelemetryJson()
 
 void AutoVectorEdgeShadowObserve()
 {
-   if(!AutoV20Enabled())
+   if(!AutoEnabled())
    {
       g_vectorEdgeShadowActive = false;
-      g_vectorEdgeShadowProbabilitySource = "OUTSIDE_AUTO_V20";
+      g_vectorEdgeShadowProbabilitySource = "OUTSIDE_AUTO";
       return;
    }
 
@@ -216,4 +216,4 @@ void AutoVectorEdgeShadowObserve()
    }
 }
 
-#endif // SCENOVA_AUTO_VECTOR_EDGE_SHADOW_V1_MQH
+#endif // SCENOVA_AUTO_VECTOR_EDGE_SHADOW_MQH

@@ -79,12 +79,12 @@ Replace-Ea @'
    side.entryPrice=0.0;
 '@ 'reset pullback audit snapshot'
 Replace-Ea @'
-   AutoV20EvaluatePullback(direction,momentum,pb);
+   AutoEvaluatePullback(direction,momentum,pb);
    side.pullbackScore=pb.score;
 
    double location=0.0;
 '@ @'
-   AutoV20EvaluatePullback(direction,momentum,pb);
+   AutoEvaluatePullback(direction,momentum,pb);
    side.pullbackScore=pb.score;
    side.pullbackSwingStart=pb.swingStart;
    side.pullbackSwingExtreme=pb.swingExtreme;
@@ -158,40 +158,40 @@ $autoDiag = @'
       if(StringLen(payload) >= 2)
       {
          int auditDirection=g_cachedAdaptiveDirection;
-         AUTO_V20_SIDE auditSide;
-         AutoV20ResetSide(auditSide,auditDirection);
-         if(auditDirection>0) auditSide=g_autoV20Buy;
-         else if(auditDirection<0) auditSide=g_autoV20Sell;
-         string autoV20Diagnostics=StringFormat(
-            ",\"controlMode\":\"%s\",\"autoV20Active\":%s,\"autoV20DecisionId\":%I64d,\"autoV20DecisionKind\":\"%s\",\"autoV20DecisionReason\":\"%s\",\"autoV20RejectReason\":\"%s\",\"autoV20DirectionChangeReason\":\"%s\",\"autoV20AddReason\":\"%s\",\"autoV20Phase\":\"%s\",\"autoV20BuyScore\":%.2f,\"autoV20SellScore\":%.2f,\"autoV20BuyConfidence\":%.2f,\"autoV20SellConfidence\":%.2f,\"autoV20Confidence\":%.2f,\"autoV20WinProbability\":%.2f,\"autoV20WinSamples\":%d,\"autoV20AverageNet\":%.2f,\"autoV20MomentumWithPoints\":%.2f,\"autoV20MomentumAgainstPoints\":%.2f,\"autoV20NearestSupport\":%s,\"autoV20NearestResistance\":%s,\"autoV20MajorSupport\":%s,\"autoV20MajorResistance\":%s,\"autoV20SupportDistanceAtr\":%.4f,\"autoV20ResistanceDistanceAtr\":%.4f,\"autoV20FormingBase\":%s,\"autoV20FormingCeiling\":%s,\"autoV20RoleFlipState\":\"%s\",\"autoV20SwingStart\":%s,\"autoV20SwingExtreme\":%s,\"autoV20PullbackRetracement\":%.4f,\"autoV20PullbackState\":\"%s\",\"autoV20PlannedEntry\":%s,\"autoV20TpPrice\":%s,\"autoV20SlPrice\":%s,\"autoV20RR\":%.3f,\"autoV20ExpectedProfitMoney\":%.2f,\"autoV20ExpectedLossMoney\":%.2f,\"autoV20KnownCostMoney\":%.2f,\"autoV20AggregateRiskMoney\":%.2f}}",
+         AUTO_SIDE auditSide;
+         AutoResetSide(auditSide,auditDirection);
+         if(auditDirection>0) auditSide=g_autoBuy;
+         else if(auditDirection<0) auditSide=g_autoSell;
+         string autoDiagnostics=StringFormat(
+            ",\"controlMode\":\"%s\",\"autoActive\":%s,\"autoDecisionId\":%I64d,\"autoDecisionKind\":\"%s\",\"autoDecisionReason\":\"%s\",\"autoRejectReason\":\"%s\",\"autoDirectionChangeReason\":\"%s\",\"autoAddReason\":\"%s\",\"autoPhase\":\"%s\",\"autoBuyScore\":%.2f,\"autoSellScore\":%.2f,\"autoBuyConfidence\":%.2f,\"autoSellConfidence\":%.2f,\"autoConfidence\":%.2f,\"autoWinProbability\":%.2f,\"autoWinSamples\":%d,\"autoAverageNet\":%.2f,\"autoMomentumWithPoints\":%.2f,\"autoMomentumAgainstPoints\":%.2f,\"autoNearestSupport\":%s,\"autoNearestResistance\":%s,\"autoMajorSupport\":%s,\"autoMajorResistance\":%s,\"autoSupportDistanceAtr\":%.4f,\"autoResistanceDistanceAtr\":%.4f,\"autoFormingBase\":%s,\"autoFormingCeiling\":%s,\"autoRoleFlipState\":\"%s\",\"autoSwingStart\":%s,\"autoSwingExtreme\":%s,\"autoPullbackRetracement\":%.4f,\"autoPullbackState\":\"%s\",\"autoPlannedEntry\":%s,\"autoTpPrice\":%s,\"autoSlPrice\":%s,\"autoRR\":%.3f,\"autoExpectedProfitMoney\":%.2f,\"autoExpectedLossMoney\":%.2f,\"autoKnownCostMoney\":%.2f,\"autoAggregateRiskMoney\":%.2f}}",
             g_controlMode,
-            AutoV20Enabled() ? "true" : "false",
-            g_autoV20DecisionId,
-            g_autoV20DecisionKind,
-            g_autoV20DecisionReason,
-            g_autoV20RejectReason,
-            g_autoV20DirectionChangeReason,
-            g_autoV20AddReason,
-            g_autoV20Phase,
-            g_autoV20Buy.rankScore,
-            g_autoV20Sell.rankScore,
-            g_autoV20Buy.confidence,
-            g_autoV20Sell.confidence,
-            g_autoV20Confidence,
-            g_autoV20WinProbability,
-            g_autoV20WinSamples,
-            g_autoV20AverageNet,
+            AutoEnabled() ? "true" : "false",
+            g_autoDecisionId,
+            g_autoDecisionKind,
+            g_autoDecisionReason,
+            g_autoRejectReason,
+            g_autoDirectionChangeReason,
+            g_autoAddReason,
+            g_autoPhase,
+            g_autoBuy.rankScore,
+            g_autoSell.rankScore,
+            g_autoBuy.confidence,
+            g_autoSell.confidence,
+            g_autoConfidence,
+            g_autoWinProbability,
+            g_autoWinSamples,
+            g_autoAverageNet,
             auditSide.momentumWithPoints,
             auditSide.momentumAgainstPoints,
-            DoubleToString(g_autoV20Levels.nearestSupport,SymbolDigitsNow()),
-            DoubleToString(g_autoV20Levels.nearestResistance,SymbolDigitsNow()),
-            DoubleToString(g_autoV20Levels.majorSupport,SymbolDigitsNow()),
-            DoubleToString(g_autoV20Levels.majorResistance,SymbolDigitsNow()),
-            g_autoV20Levels.nearestSupportDistanceAtr,
-            g_autoV20Levels.nearestResistanceDistanceAtr,
-            DoubleToString(g_autoV20Levels.formingBase,SymbolDigitsNow()),
-            DoubleToString(g_autoV20Levels.formingCeiling,SymbolDigitsNow()),
-            g_autoV20Levels.roleFlipState,
+            DoubleToString(g_autoLevels.nearestSupport,SymbolDigitsNow()),
+            DoubleToString(g_autoLevels.nearestResistance,SymbolDigitsNow()),
+            DoubleToString(g_autoLevels.majorSupport,SymbolDigitsNow()),
+            DoubleToString(g_autoLevels.majorResistance,SymbolDigitsNow()),
+            g_autoLevels.nearestSupportDistanceAtr,
+            g_autoLevels.nearestResistanceDistanceAtr,
+            DoubleToString(g_autoLevels.formingBase,SymbolDigitsNow()),
+            DoubleToString(g_autoLevels.formingCeiling,SymbolDigitsNow()),
+            g_autoLevels.roleFlipState,
             DoubleToString(auditSide.pullbackSwingStart,SymbolDigitsNow()),
             DoubleToString(auditSide.pullbackSwingExtreme,SymbolDigitsNow()),
             auditSide.pullbackRetracement,
@@ -203,37 +203,37 @@ $autoDiag = @'
             auditSide.expectedProfitMoney,
             auditSide.expectedLossMoney,
             auditSide.knownCostMoney,
-            g_autoV20AggregateRiskMoney
+            g_autoAggregateRiskMoney
          );
-         payload=StringSubstr(payload,0,StringLen(payload)-2)+autoV20Diagnostics;
+         payload=StringSubstr(payload,0,StringLen(payload)-2)+autoDiagnostics;
       }
 '@
-Insert-EaBefore '   string response = "";`r`n   string heartbeatUrl = InpApiBase + "/api/ea/heartbeat";' $autoDiag 'autoV20Diagnostics=StringFormat' 'append AUTO V20 heartbeat audit telemetry'
+Insert-EaBefore '   string response = "";`r`n   string heartbeatUrl = InpApiBase + "/api/ea/heartbeat";' $autoDiag 'autoDiagnostics=StringFormat' 'append AUTO heartbeat audit telemetry'
 
 $entryAudit = @'
-   if(!isExit && AutoV20Enabled() && StringLen(payload)>=1)
+   if(!isExit && AutoEnabled() && StringLen(payload)>=1)
    {
-      AUTO_V20_SIDE auditSide;
-      AutoV20ResetSide(auditSide,positionDirection);
-      if(positionDirection>0) auditSide=g_autoV20Buy;
-      else auditSide=g_autoV20Sell;
+      AUTO_SIDE auditSide;
+      AutoResetSide(auditSide,positionDirection);
+      if(positionDirection>0) auditSide=g_autoBuy;
+      else auditSide=g_autoSell;
       string audit=StringFormat(
          ",\"autoDecisionId\":%I64d,\"autoDecisionKind\":\"%s\",\"autoDecisionReason\":\"%s\",\"autoDirectionChangeReason\":\"%s\",\"autoAddReason\":\"%s\",\"autoBuyScore\":%.2f,\"autoSellScore\":%.2f,\"autoMomentumWithPoints\":%.2f,\"autoMomentumAgainstPoints\":%.2f,\"autoNearestSupport\":%s,\"autoNearestResistance\":%s,\"autoSupportDistanceAtr\":%.4f,\"autoResistanceDistanceAtr\":%.4f,\"autoSwingStart\":%s,\"autoSwingExtreme\":%s,\"autoPullbackRetracement\":%.4f,\"autoPullbackState\":\"%s\",\"autoTpPrice\":%s,\"autoSlPrice\":%s,\"autoRR\":%.3f,\"autoKnownCostMoney\":%.2f,\"autoExpectedProfitMoney\":%.2f,\"autoExpectedLossMoney\":%.2f,\"autoAggregateRiskMoney\":%.2f,\"modelConfidence\":%.2f,\"winProbability\":%.2f,\"winSamples\":%d,\"averageNet\":%.2f}",
-         g_autoV20DecisionId,g_autoV20DecisionKind,g_autoV20DecisionReason,
-         g_autoV20DirectionChangeReason,g_autoV20AddReason,
-         g_autoV20Buy.rankScore,g_autoV20Sell.rankScore,
+         g_autoDecisionId,g_autoDecisionKind,g_autoDecisionReason,
+         g_autoDirectionChangeReason,g_autoAddReason,
+         g_autoBuy.rankScore,g_autoSell.rankScore,
          auditSide.momentumWithPoints,auditSide.momentumAgainstPoints,
-         DoubleToString(g_autoV20Levels.nearestSupport,SymbolDigitsNow()),
-         DoubleToString(g_autoV20Levels.nearestResistance,SymbolDigitsNow()),
-         g_autoV20Levels.nearestSupportDistanceAtr,
-         g_autoV20Levels.nearestResistanceDistanceAtr,
+         DoubleToString(g_autoLevels.nearestSupport,SymbolDigitsNow()),
+         DoubleToString(g_autoLevels.nearestResistance,SymbolDigitsNow()),
+         g_autoLevels.nearestSupportDistanceAtr,
+         g_autoLevels.nearestResistanceDistanceAtr,
          DoubleToString(auditSide.pullbackSwingStart,SymbolDigitsNow()),
          DoubleToString(auditSide.pullbackSwingExtreme,SymbolDigitsNow()),
          auditSide.pullbackRetracement,auditSide.pullbackState,
          DoubleToString(auditSide.tpPrice,SymbolDigitsNow()),
          DoubleToString(auditSide.slPrice,SymbolDigitsNow()),
          auditSide.rr,auditSide.knownCostMoney,auditSide.expectedProfitMoney,
-         auditSide.expectedLossMoney,g_autoV20AggregateRiskMoney,
+         auditSide.expectedLossMoney,g_autoAggregateRiskMoney,
          auditSide.confidence,auditSide.winProbability,auditSide.winSamples,auditSide.averageNet
       );
       payload=StringSubstr(payload,0,StringLen(payload)-1)+audit;
@@ -260,7 +260,7 @@ Replace-Ea @'
    }
 '@ @'
       g_basketJournalPremiumDiscountState = g_premiumDiscountState;
-      g_basketJournalAutoDecisionId = AutoV20Enabled() ? g_autoV20DecisionId : 0;
+      g_basketJournalAutoDecisionId = AutoEnabled() ? g_autoDecisionId : 0;
    }
 '@ 'capture first AUTO decision id on Basket'
 Replace-Ea @'
@@ -434,7 +434,7 @@ Replace-Api @'
     winSamples?: number;
     averageNet?: number;
   }) {
-'@ 'accept AUTO V20 journal audit fields'
+'@ 'accept AUTO journal audit fields'
 Replace-Api @'
           levelFlipState: text(body.levelFlipState, 48),
           premiumDiscountState: text(body.premiumDiscountState, 32)
@@ -469,17 +469,17 @@ Replace-Api @'
           winProbability: Math.max(0, Math.min(100, n(body.winProbability))),
           winSamples: Math.max(0, Math.trunc(n(body.winSamples))),
           averageNet: n(body.averageNet)
-'@ 'persist AUTO V20 journal audit metadata'
+'@ 'persist AUTO journal audit metadata'
 
 # Web: make the two concepts unmistakably separate and expose core AUTO audit.
 Replace-Web '<InsightRow label="Confidence" value={Number(metrics.signalConfidence||0).toFixed(0)+"%"} tone={Number(metrics.signalConfidence||0)>=70?"good":"neutral"}/>' @'
 <InsightRow label="Confidence (สูตร)" value={Number(metrics.signalConfidence||0).toFixed(0)+"%"} tone={Number(metrics.signalConfidence||0)>=70?"good":"neutral"}/>
-                      {Boolean(metrics.autoV20Active) ? <>
-                        <InsightRow label="Win Probability (Basket จริง)" value={Number(metrics.autoV20WinProbability||0).toFixed(1)+"% · "+Number(metrics.autoV20WinSamples||0)+" รอบ"}/>
-                        <InsightRow label="กำไรเฉลี่ยสุทธิ / Basket" value={Number(metrics.autoV20AverageNet||0).toFixed(2)}/>
-                        <InsightRow label="AUTO BUY / SELL" value={Number(metrics.autoV20BuyScore||0).toFixed(0)+" / "+Number(metrics.autoV20SellScore||0).toFixed(0)}/>
-                        <InsightRow label="R:R แผนเข้า" value={Number(metrics.autoV20RR||0).toFixed(2)+" · Cost "+Number(metrics.autoV20KnownCostMoney||0).toFixed(2)}/>
-                        <InsightRow label="AUTO Phase" value={String(metrics.autoV20Phase||"INITIALIZING")}/>
+                      {Boolean(metrics.autoActive) ? <>
+                        <InsightRow label="Win Probability (Basket จริง)" value={Number(metrics.autoWinProbability||0).toFixed(1)+"% · "+Number(metrics.autoWinSamples||0)+" รอบ"}/>
+                        <InsightRow label="กำไรเฉลี่ยสุทธิ / Basket" value={Number(metrics.autoAverageNet||0).toFixed(2)}/>
+                        <InsightRow label="AUTO BUY / SELL" value={Number(metrics.autoBuyScore||0).toFixed(0)+" / "+Number(metrics.autoSellScore||0).toFixed(0)}/>
+                        <InsightRow label="R:R แผนเข้า" value={Number(metrics.autoRR||0).toFixed(2)+" · Cost "+Number(metrics.autoKnownCostMoney||0).toFixed(2)}/>
+                        <InsightRow label="AUTO Phase" value={String(metrics.autoPhase||"INITIALIZING")}/>
                       </> : null}
 '@ 'show Formula Confidence separately from real Win Probability'
 
@@ -487,37 +487,37 @@ Replace-Web @'
     WAIT_FRESH_EXECUTION_EVENT: "รอ EMA reclaim / Price Action / Momentum / Zone reaction ใหม่ก่อนเข้าอีกครั้ง"
 '@ @'
     WAIT_FRESH_EXECUTION_EVENT: "รอ EMA reclaim / Price Action / Momentum / Zone reaction ใหม่ก่อนเข้าอีกครั้ง",
-    AUTO_V20_WAIT_CONFLICT: "AUTO รอ · คะแนน BUY/SELL ยังใกล้กันเกินไป",
-    AUTO_V20_WAIT_QUALITY: "AUTO รอ · คุณภาพ Setup กลางยังไม่ถึงเกณฑ์",
-    AUTO_V20_WAIT_RR: "AUTO รอ · TP/SL จริงยังไม่คุ้มความเสี่ยง",
-    AUTO_V20_WAIT_ADD: "AUTO รอเพิ่มไม้ · ต้องเดินถูกทางหรือ Pullback กลับไปต่อก่อน",
-    AUTO_V20_RISK_LIMIT: "AUTO ไม่เพิ่มไม้ · ความเสี่ยงรวมถึงขอบเขตที่ตั้งไว้"
-'@ 'human labels for AUTO V20 waits'
+    AUTO_WAIT_CONFLICT: "AUTO รอ · คะแนน BUY/SELL ยังใกล้กันเกินไป",
+    AUTO_WAIT_QUALITY: "AUTO รอ · คุณภาพ Setup กลางยังไม่ถึงเกณฑ์",
+    AUTO_WAIT_RR: "AUTO รอ · TP/SL จริงยังไม่คุ้มความเสี่ยง",
+    AUTO_WAIT_ADD: "AUTO รอเพิ่มไม้ · ต้องเดินถูกทางหรือ Pullback กลับไปต่อก่อน",
+    AUTO_RISK_LIMIT: "AUTO ไม่เพิ่มไม้ · ความเสี่ยงรวมถึงขอบเขตที่ตั้งไว้"
+'@ 'human labels for AUTO waits'
 Replace-Web @'
     REMOTE_CLOSE_ALL: "ปิด Basket · ผู้ใช้สั่งปิดทั้งหมด"
 '@ @'
     REMOTE_CLOSE_ALL: "ปิด Basket · ผู้ใช้สั่งปิดทั้งหมด",
-    AUTO_V20_STRUCTURE_STOP: "AUTO ปิด · ราคาเสียโครงสร้างที่วางไว้",
-    AUTO_V20_CONFIRMED_WRONG: "AUTO ปิด · M5/M1/Momentum ยืนยันว่าเข้าไม่ถูกทาง",
-    AUTO_V20_MODERATE_TARGET: "AUTO ปิด · ถึงเป้ากำไรพอประมาณ",
-    AUTO_V20_PROFIT_GIVEBACK: "AUTO ปิด · กำไรย่อจาก Peak 25%",
-    AUTO_V20_TIME_BANK_PROFIT: "AUTO ปิด · ถือครบช่วงประเมินและแรงเริ่มหมด",
-    AUTO_V20_TIME_STOP: "AUTO ปิด · ถือเกินกรอบเวลาโดยยังไม่ฟื้น"
-'@ 'human labels for AUTO V20 exits'
+    AUTO_STRUCTURE_STOP: "AUTO ปิด · ราคาเสียโครงสร้างที่วางไว้",
+    AUTO_CONFIRMED_WRONG: "AUTO ปิด · M5/M1/Momentum ยืนยันว่าเข้าไม่ถูกทาง",
+    AUTO_MODERATE_TARGET: "AUTO ปิด · ถึงเป้ากำไรพอประมาณ",
+    AUTO_PROFIT_GIVEBACK: "AUTO ปิด · กำไรย่อจาก Peak 25%",
+    AUTO_TIME_BANK_PROFIT: "AUTO ปิด · ถือครบช่วงประเมินและแรงเริ่มหมด",
+    AUTO_TIME_STOP: "AUTO ปิด · ถือเกินกรอบเวลาโดยยังไม่ฟื้น"
+'@ 'human labels for AUTO exits'
 
 foreach($s in @(
   '#property version   "1.060"',
   'string g_controlMode = "LEGACY";',
   'g_setupAverageNet',
-  'autoV20Diagnostics=StringFormat',
+  'autoDiagnostics=StringFormat',
   'autoDecisionId',
   'g_basketJournalAutoDecisionId',
   'g_pendingBasketAutoDecisionId'
 )){ if(-not $ea.Contains($s)){ throw "EA final sentinel missing: $s" } }
 foreach($s in @('buyAverageNet','setupAverageNet','autoDecisionReason','modelConfidence','averageNet')){ if(-not $api.Contains($s)){ throw "API final sentinel missing: $s" } }
-foreach($s in @('Confidence (สูตร)','Win Probability (Basket จริง)','AUTO_V20_WAIT_RR','AUTO_V20_MODERATE_TARGET')){ if(-not $web.Contains($s)){ throw "Web final sentinel missing: $s" } }
+foreach($s in @('Confidence (สูตร)','Win Probability (Basket จริง)','AUTO_WAIT_RR','AUTO_MODERATE_TARGET')){ if(-not $web.Contains($s)){ throw "Web final sentinel missing: $s" } }
 
 [System.IO.File]::WriteAllText((Resolve-Path $EaPath),$ea,[System.Text.UTF8Encoding]::new($false))
 [System.IO.File]::WriteAllText((Resolve-Path $ApiPath),$api,[System.Text.UTF8Encoding]::new($false))
 [System.IO.File]::WriteAllText((Resolve-Path $WebPath),$web,[System.Text.UTF8Encoding]::new($false))
-Write-Host "AUTO V20 observability/statistics patch complete"
+Write-Host "AUTO observability/statistics patch complete"

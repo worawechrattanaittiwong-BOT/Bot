@@ -42,7 +42,7 @@ $criticalSentinels=@(
   'return g_engineMode == "RACE";',
   'ManageRaceBasket(momentum);',
   'StartRaceCycle(momentum);',
-  'bool AutoV20ManageOpenBasket(double momentum)',
+  'bool AutoManageOpenBasket(double momentum)',
   'bool AdaptiveBasketAddAllowed(int direction)',
   'bool BrainV16RearmExistingBasket()'
 )
