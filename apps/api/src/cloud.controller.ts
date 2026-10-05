@@ -802,15 +802,21 @@ export class CloudCustomerController {
       // EasySlip may be configured but temporarily unavailable/expired.
       // Fall back to the already-configured Omise/Opn PromptPay rail instead
       // of leaving a PENDING order with qr_url=NULL.
-      if (omiseMode() === "UNCONFIGURED") {
+      const fallbackMode = omiseMode();
+      const fallbackAllowed =
+        fallbackMode === "LIVE" ||
+        (fallbackMode === "TEST" && String(process.env.NODE_ENV || "").toLowerCase() !== "production");
+      if (!fallbackAllowed) {
         await this.db.query(
           "UPDATE cloud_orders SET status='REVIEW',expires_at=now() WHERE id=$1 AND status='CREATING'",
           [order.id]
         );
+        const fallbackDetail = fallbackMode === "TEST"
+          ? "Opn / Omise ยังเป็น TEST mode จึงห้ามใช้รับเงินจริงบน Production"
+          : "ยังไม่มี Opn / Omise Live สำรอง";
         throw new ConflictException(
-          easySlipError
-            ? "EasySlip สร้าง QR ไม่สำเร็จ: " + easySlipError
-            : "สร้าง QR ผ่าน EasySlip ไม่สำเร็จ และยังไม่มี Opn / Omise สำรอง กรุณาติดต่อผู้ดูแล"
+          (easySlipError ? "EasySlip สร้าง QR ไม่สำเร็จ: " + easySlipError + " · " : "") +
+          fallbackDetail
         );
       }
     }
