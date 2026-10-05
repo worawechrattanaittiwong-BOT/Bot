@@ -143,14 +143,19 @@ export class EasySlipPaymentService implements OnApplicationBootstrap {
       const image = String(result?.data?.image || "");
       const mime = String(result?.data?.mime || "image/png");
       const qrPayload = String(result?.data?.payload || "");
-      if (!image || !qrPayload) return null;
+      if (!image || !qrPayload) {
+        throw new ConflictException("EasySlip ไม่ส่งข้อมูลรูป QR กลับมา");
+      }
       return {
         dataUrl: `data:${mime};base64,${image}`,
         payload: qrPayload,
         type
       };
-    } catch {
-      return null;
+    } catch (error: any) {
+      if (error instanceof ConflictException) throw error;
+      throw new ConflictException(
+        String(error?.message || "EasySlip ไม่สามารถสร้าง QR ได้").slice(0, 240)
+      );
     }
   }
 

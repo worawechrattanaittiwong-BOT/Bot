@@ -69,6 +69,7 @@ type CloudOrder = {
   discount_amount?:number|null;
   promotion_code?:string|null;
   status:string;
+  charge_id?:string|null;
   qr_url?:string|null;
   expires_at?:string|null;
   created_at:string;
@@ -1701,6 +1702,9 @@ export default function DashboardPage() {
     primaryCloudRemaining > 0
   );
   const vpsPaymentOrder = cloudOrders.find(order=>order.id===vpsPaymentOrderId) || null;
+  const vpsPaymentUsesEasySlip = Boolean(vpsPaymentOrder) &&
+    String(cloudCatalog?.paymentMode || "").toUpperCase() === "EASYSLIP" &&
+    !String(vpsPaymentOrder?.charge_id || "").trim();
   const vpsPaymentAccount = cloudCatalog?.paymentAccounts?.[0] || null;
   const vpsPackages = (cloudCatalog?.addonPackages || [])
     .filter(pack=>pack.enabled && Number(pack.price_usd_cents) > 0)
@@ -5360,7 +5364,7 @@ export default function DashboardPage() {
                 <div className="vps-slot-checkout-steps" aria-label="ขั้นตอนชำระเงิน">
                   <span className="done"><b>01</b> ยืนยัน Slot</span>
                   <i/>
-                  <span className="active"><b>02</b> สแกน + แนบสลิป</span>
+                  <span className="active"><b>02</b> {vpsPaymentUsesEasySlip ? "สแกน + แนบสลิป" : "สแกน QR"}</span>
                 </div>
 
                 <article className="vps-slot-payment-card">
@@ -5382,7 +5386,7 @@ export default function DashboardPage() {
                     <span>สแกนด้วย Mobile Banking</span>
                     <b>฿{formatThbSatang(vpsPaymentOrder.amount)} THB</b>
 
-                    {vpsPaymentAccount && (
+                    {vpsPaymentUsesEasySlip && vpsPaymentAccount && (
                       <div className="vps-slot-payment-recipient-mini">
                         <small>ชื่อผู้รับที่ต้องตรวจสอบ</small>
                         <strong>{vpsPaymentAccount.nameTh || vpsPaymentAccount.nameEn || "SCENOVA"}</strong>
@@ -5416,7 +5420,7 @@ export default function DashboardPage() {
                         : "USD —"}
                     </h3>
 
-                    {String(cloudCatalog?.paymentMode || "").toUpperCase() === "EASYSLIP" ? (
+                    {vpsPaymentUsesEasySlip ? (
                       <>
                         <p>
                           สแกน QR ตามยอดจริง <b>฿{formatThbSatang(vpsPaymentOrder.amount)} THB</b> แล้วแนบสลิปด้านล่าง

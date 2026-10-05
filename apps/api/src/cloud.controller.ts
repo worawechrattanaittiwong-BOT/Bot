@@ -446,7 +446,7 @@ export class CloudCustomerController {
   }
 
   @Get("orders") async orders(@Req() req: any) {
-    return (await this.db.query(`SELECT o.id,o.months,o.amount,o.original_amount,o.discount_amount,o.promotion_code,o.status,o.qr_url,o.expires_at,o.created_at,o.paid_at,o.slot_id,o.purchase_type,
+    return (await this.db.query(`SELECT o.id,o.months,o.amount,o.original_amount,o.discount_amount,o.promotion_code,o.status,o.charge_id,o.qr_url,o.expires_at,o.created_at,o.paid_at,o.slot_id,o.purchase_type,
       o.list_price_usd_cents,o.final_price_usd_cents,o.fx_rate_usd_thb,o.fx_source,o.fx_quoted_at,
       s.expires_at subscription_expires_at,b.actual_state,b.last_seen_at,a.account_number,ls.slot_type
       FROM cloud_orders o
@@ -782,27 +782,56 @@ export class CloudCustomerController {
     });
     if (Number(order.amount) === 0) return this.cloud.activateFreeOrder(order.id);
     if (paymentMode() === "EASYSLIP") {
-      const qr = await this.easyslip.createPaymentQr({
-        orderId:String(order.id),
-        amountSatang:Number(order.amount)
-      });
-      await this.db.query(
-        "UPDATE cloud_orders SET status='PENDING',qr_url=$2,expires_at=now()+interval '24 hours' WHERE id=$1 AND status='CREATING'",
-        [order.id, qr?.dataUrl || null]
-      );
-      return { id: order.id, paymentMode: "EASYSLIP", qrAvailable:Boolean(qr?.dataUrl) };
+      let qr: any = null;
+      let easySlipError = "";
+      try {
+        qr = await this.easyslip.createPaymentQr({
+          orderId:String(order.id),
+          amountSatang:Number(order.amount)
+        });
+      } catch (error: any) {
+        easySlipError = String(error?.message || "").slice(0, 240);
+      }
+      if (qr?.dataUrl) {
+        await this.db.query(
+          "UPDATE cloud_orders SET status='PENDING',qr_url=$2,expires_at=now()+interval '24 hours' WHERE id=$1 AND status='CREATING'",
+          [order.id, qr.dataUrl]
+        );
+        return { id: order.id, paymentMode: "EASYSLIP", qrAvailable:true };
+      }
+      // EasySlip may be configured but temporarily unavailable/expired.
+      // Fall back to the already-configured Omise/Opn PromptPay rail instead
+      // of leaving a PENDING order with qr_url=NULL.
+      if (omiseMode() === "UNCONFIGURED") {
+        await this.db.query(
+          "UPDATE cloud_orders SET status='REVIEW',expires_at=now() WHERE id=$1 AND status='CREATING'",
+          [order.id]
+        );
+        throw new ConflictException(
+          easySlipError
+            ? "EasySlip สร้าง QR ไม่สำเร็จ: " + easySlipError
+            : "สร้าง QR ผ่าน EasySlip ไม่สำเร็จ และยังไม่มี Opn / Omise สำรอง กรุณาติดต่อผู้ดูแล"
+        );
+      }
     }
     try {
       const charge = await this.cloud.gateway("/charges", new URLSearchParams({ amount: String(order.amount), currency: "thb",
         "source[type]": "promptpay", "metadata[order_id]": order.id, "metadata[purchase_type]": "CLOUD", description: "SCENOVA Cloud " + order.months + " months",
         expires_at: new Date(Date.now()+15*60000).toISOString() }));
       validateCharge(charge, order);
+      const qrUrl = String(charge.source?.scannable_code?.image?.download_uri || "").trim();
+      if (!qrUrl) {
+        throw new ConflictException("Opn / Omise ไม่ส่ง PromptPay QR กลับมา");
+      }
       await this.db.query("UPDATE cloud_orders SET charge_id=$2,qr_url=$3,expires_at=$4,status=CASE WHEN status='CREATING' THEN 'PENDING' ELSE status END WHERE id=$1",
-        [order.id,charge.id,charge.source?.scannable_code?.image?.download_uri || null,charge.expires_at || null]);
-      return { id: order.id };
-    } catch {
+        [order.id,charge.id,qrUrl,charge.expires_at || null]);
+      return { id: order.id, paymentMode: paymentMode() === "EASYSLIP" ? "OMISE_FALLBACK" : omiseMode() };
+    } catch (error: any) {
       await this.db.query("UPDATE cloud_orders SET status='REVIEW' WHERE id=$1 AND status='CREATING'", [order.id]);
-      throw new ConflictException("กำลังตรวจสอบการสร้าง QR กรุณาติดต่อผู้ดูแลพร้อมเลขรายการ " + order.id);
+      const detail = String(error?.message || "").trim();
+      throw new ConflictException(
+        detail || ("กำลังตรวจสอบการสร้าง QR กรุณาติดต่อผู้ดูแลพร้อมเลขรายการ " + order.id)
+      );
     }
   }
 }

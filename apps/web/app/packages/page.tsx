@@ -93,6 +93,7 @@ type Order = {
   months: number;
   amount: number;
   status: string;
+  charge_id?: string | null;
   qr_url: string | null;
   expires_at: string | null;
   created_at: string;
@@ -618,6 +619,9 @@ export default function PackagesPage() {
   const checkoutOrder = checkoutOrderId
     ? activeOrders.find(order => order.id === checkoutOrderId) || null
     : null;
+  const checkoutUsesEasySlip = Boolean(checkoutOrder) &&
+    String(activeCatalog?.paymentMode || "").toUpperCase() === "EASYSLIP" &&
+    !String(checkoutOrder?.charge_id || "").trim();
   const partnerDiscountPercent = brokerBenefit?.partner?.verified
     ? Math.max(0, Math.min(50, Number(brokerBenefit.partner.benefit?.discountPercent || 0)))
     : 0;
@@ -1029,7 +1033,7 @@ export default function PackagesPage() {
               <div>
                 <span className={styles.eyebrow}>SCENOVA CHECKOUT</span>
                 <h2 id="checkout-title">{checkoutOrder ? "ชำระเงินแพ็กเกจ" : "แพ็กเกจที่คุณเลือก"}</h2>
-                <p>{checkoutOrder ? "สแกน QR และแนบสลิปได้ในหน้าต่างนี้" : "ตรวจสอบรายละเอียด แล้วดำเนินการชำระเงิน"}</p>
+                <p>{checkoutOrder ? (checkoutUsesEasySlip ? "สแกน QR และแนบสลิปได้ในหน้าต่างนี้" : "สแกน QR แล้วรอระบบยืนยันการชำระเงิน") : "ตรวจสอบรายละเอียด แล้วดำเนินการชำระเงิน"}</p>
               </div>
               <button
                 type="button"
@@ -1048,7 +1052,7 @@ export default function PackagesPage() {
               </span>
               <i aria-hidden="true"/>
               <span aria-current={checkoutOrder ? "step" : undefined} className={checkoutOrder ? styles.checkoutStepActive : ""}>
-                <b>02</b> สแกน + แนบสลิป
+                <b>02</b> {checkoutOrder && !checkoutUsesEasySlip ? "สแกน QR" : "สแกน + แนบสลิป"}
               </span>
             </div>
 
@@ -1358,7 +1362,7 @@ function PaymentCard({
     return () => URL.revokeObjectURL(url);
   }, [slip]);
 
-  const easySlip = paymentMode === "EASYSLIP";
+  const easySlip = paymentMode === "EASYSLIP" && !String(order.charge_id || "").trim();
   const account = paymentAccounts[0] || null;
   const qrSrc = String(order.qr_url || "");
   const hasQr = order.status === "PENDING" && (
