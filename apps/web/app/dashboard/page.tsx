@@ -825,14 +825,18 @@ export default function DashboardPage() {
 
   const metrics = data?.instance?.metrics || {};
   const accountCurrency = normalizeAccountCurrency(metrics.currency);
-  const marketWatchSymbols = Array.isArray(metrics.marketWatchSymbols)
-    ? Array.from(new Map(
-        metrics.marketWatchSymbols
-          .map((item:any)=>String(item || "").trim())
-          .filter((item:string)=>item && TRADING_SYMBOL_PATTERN.test(item))
-          .map((item:string)=>[item.toUpperCase(),item])
-      ).values()) as string[]
+  const marketWatchSource = Array.isArray(metrics.marketWatchSymbols)
+    ? [...metrics.marketWatchSymbols]
     : [];
+  // The current EA chart symbol is broker-verified. Keep it in the picker even
+  // while heavy Market Watch telemetry is suppressed during live positions.
+  if (metrics.symbol) marketWatchSource.push(metrics.symbol);
+  const marketWatchSymbols = Array.from(new Map(
+    marketWatchSource
+      .map((item:any)=>String(item || "").trim())
+      .filter((item:string)=>item && TRADING_SYMBOL_PATTERN.test(item))
+      .map((item:string)=>[item.toUpperCase(),item])
+  ).values()) as string[];
   const desiredTradingSymbol = String(
     data?.settings?.startupSymbol ||
     metrics.requestedStartupSymbol ||

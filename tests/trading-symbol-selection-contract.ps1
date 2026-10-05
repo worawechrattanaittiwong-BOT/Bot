@@ -9,6 +9,7 @@ function Assert-Contains([string]$text,[string]$needle,[string]$label) {
 }
 
 $controller = Read-Text 'apps/api/src/trading-symbol.controller.ts'
+$eaApi = Read-Text 'apps/api/src/ea.controller.ts'
 $interceptor = Read-Text 'apps/api/src/trading-symbol.interceptor.ts'
 $actions = Read-Text 'apps/api/src/agent-action.controller.ts'
 $app = Read-Text 'apps/api/src/app.module.ts'
@@ -42,6 +43,7 @@ Assert-Contains $controller 'n !== 0 && n !== 3' 'disabled and close-only broker
 Assert-Contains $controller '@Controller("ea/trading-symbol")' 'Agent has authenticated symbol status endpoint'
 Assert-Contains $controller 'invalid trading symbol agent authentication' 'Agent symbol endpoint is authenticated'
 Assert-Contains $controller 'if (exact) return exact;' 'exact Market Watch symbol must win over broker suffix heuristics'
+Assert-Contains $controller 'const sourceWithActive = [...source, metrics?.symbol];' 'active EA symbol remains broker-verified when Market Watch telemetry is suppressed'
 Assert-Contains $controller "'symbolResolutionMode','EXACT'" 'customer-selected Market Watch symbol must persist as exact broker-native symbol'
 Assert-Contains $controller "'symbolSelectedBy','CUSTOMER'" 'customer symbol authority must be visible in settings'
 
@@ -77,7 +79,8 @@ Assert-Contains $dashboard 'applyTradingSymbol' 'bot confirms and applies select
 Assert-Contains $dashboard 'cc-symbol-picker' 'bot uses compact choose-and-confirm dialog'
 Assert-Contains $dashboard 'เลือก Symbol' 'bot renders the Symbol button'
 Assert-Contains $dashboard 'marketWatchSymbols' 'bot selector is populated from MT5 Market Watch telemetry'
-Assert-Contains $dashboard 'const tradingSymbolOptions = marketWatchSymbols;' 'bot selector contains only live MT5 Market Watch symbols'
+Assert-Contains $dashboard 'if (metrics.symbol) marketWatchSource.push(metrics.symbol);' 'bot selector retains the authenticated active EA symbol during telemetry suppression'
+Assert-Contains $dashboard 'const tradingSymbolOptions = marketWatchSymbols;' 'bot selector contains broker-verified MT5 symbols'
 Assert-Contains $dashboard 'symbolSelectedBy==="ADMIN"' 'customer Control Center must show when Admin selected the Symbol'
 Assert-Contains $dashboard 'รอ MT5/EA ยืนยัน' 'customer Control Center must show pending exact Symbol verification'
 Assert-Contains $dashboard 'cc-server-operation-terminal' 'server actions render a centered operation terminal'
@@ -90,6 +93,8 @@ Assert-Contains $controller 'Symbol นี้ไม่มีอยู่ใน M
 Assert-Contains $controller 'resolveBrokerTradingSymbol' 'Server resolves the requested Web symbol to the broker-native MT5 symbol'
 Assert-Contains $controller 'account_broker_server' 'Server symbol resolver receives the actual MT5 broker server'
 Assert-Contains $controller 'resolvedSymbol: symbol' 'symbol selection audit/response records the broker-native resolved symbol'
+Assert-Contains $eaApi 'const previousMarketWatchSymbols = Array.isArray(instance.metrics?.marketWatchSymbols)' 'heartbeat preserves the last verified Market Watch catalog during heavy telemetry suppression'
+Assert-Contains $eaApi 'metrics.marketWatchCapturedAt = instance.metrics.marketWatchCapturedAt;' 'heartbeat preserves Market Watch capture time during heavy telemetry suppression'
 Assert-Contains $dashboard 'ยืนยัน' 'bot selector has one confirmation action'
 if ($dashboard.Contains('/bot/mt5/manual-action') -and $dashboard.Contains('applyTradingSymbol')) {
   # Other dashboard features may use manual-action; Symbol flow itself must not

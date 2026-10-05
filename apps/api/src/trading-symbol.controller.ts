@@ -48,8 +48,12 @@ function marketWatchSymbols(metrics: any) {
   const source = Array.isArray(metrics?.marketWatchSymbols)
     ? metrics.marketWatchSymbols
     : [];
+  // metrics.symbol comes from the authenticated EA heartbeat and is therefore
+  // a broker-native verified symbol. Keep it selectable when the EA suppresses
+  // the heavier Market Watch catalog while live positions are open.
+  const sourceWithActive = [...source, metrics?.symbol];
   const unique = new Map<string, string>();
-  for (const raw of source) {
+  for (const raw of sourceWithActive) {
     const symbol = normalizeSymbol(raw);
     if (!symbol) continue;
     const key = symbol.toUpperCase();

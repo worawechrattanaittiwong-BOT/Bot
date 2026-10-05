@@ -508,6 +508,27 @@ export class EaController {
       metrics.runtimeContract = previousRuntimeContract;
     }
 
+    // Market Watch is also part of authoritative symbol selection. Heavy live
+    // execution heartbeats intentionally omit it, so preserve the last verified
+    // account catalog instead of erasing it while positions are open.
+    if (metrics.livePriceTelemetrySuppressed === true) {
+      const previousMarketWatchSymbols = Array.isArray(instance.metrics?.marketWatchSymbols)
+        ? instance.metrics.marketWatchSymbols
+        : [];
+      const incomingMarketWatchSymbols = Array.isArray(metrics.marketWatchSymbols)
+        ? metrics.marketWatchSymbols
+        : [];
+      if (incomingMarketWatchSymbols.length === 0 && previousMarketWatchSymbols.length > 0) {
+        metrics.marketWatchSymbols = previousMarketWatchSymbols;
+      }
+      if (
+        !metrics.marketWatchCapturedAt &&
+        instance.metrics?.marketWatchCapturedAt
+      ) {
+        metrics.marketWatchCapturedAt = instance.metrics.marketWatchCapturedAt;
+      }
+    }
+
     // Device/Agent metadata is not a trading permission. The authenticated
     // instance token, live MT5 identity and Server entitlement are authoritative.
     const reportedAccount = String(metrics.accountNumber || "").trim();
