@@ -39,7 +39,7 @@ $raceHashBefore=HashText $raceBefore
 
 $criticalSentinels=@(
   'bool RaceModeEnabled()',
-  'return g_engineMode == "RACE";',
+  'return EffectiveExecutionMode() == "RACE";',
   'ManageRaceBasket(momentum);',
   'StartRaceCycle(momentum);',
   'bool AutoManageOpenBasket(double momentum)',
