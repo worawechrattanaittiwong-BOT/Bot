@@ -7083,69 +7083,71 @@ function BotSettingsModal(props:any) {
               modeKey={modeGuideMode}
               isAdmin={Boolean(props.canManageGuideVideos)}
             />
-            <section className="cc-mode-guide-summary" aria-label="สรุปโหมด">
-              <header className="cc-mode-guide-section-title">
-                <span><ScenovaIcon name="status" size={17}/></span>
-                <b>สรุปโหมดนี้</b>
-              </header>
-              <div className="cc-mode-guide-summary-rows">
-                <div className="cc-mode-guide-summary-row">
-                  <span><ScenovaIcon name="settings" size={16}/></span>
-                  <small>ระบบ</small>
-                  <b>{activeModeGuide.systemType}</b>
+            <div className="cc-mode-guide-overview-grid">
+              <section className="cc-mode-guide-summary" aria-label="สรุปโหมด">
+                <header className="cc-mode-guide-section-title">
+                  <span><ScenovaIcon name="status" size={17}/></span>
+                  <b>สรุปโหมดนี้</b>
+                </header>
+                <div className="cc-mode-guide-summary-rows">
+                  <div className="cc-mode-guide-summary-row">
+                    <span><ScenovaIcon name="settings" size={16}/></span>
+                    <small>ระบบ</small>
+                    <b>{activeModeGuide.systemType}</b>
+                  </div>
+                  <div className="cc-mode-guide-summary-row">
+                    <span><ScenovaIcon name="layers" size={16}/></span>
+                    <small>Lot</small>
+                    <b>{activeModeGuide.sizing}</b>
+                  </div>
+                  <div className="cc-mode-guide-summary-row">
+                    <span><ScenovaIcon name="status" size={16}/></span>
+                    <small>ปิดกำไร</small>
+                    <b>{activeModeGuide.exitStyle}</b>
+                  </div>
+                  <div className="cc-mode-guide-summary-row">
+                    <span><ScenovaIcon name="close" size={16}/></span>
+                    <small>Martingale</small>
+                    <b className={"cc-mode-guide-status "+(activeModeGuide.martingale?"good":"bad")}>
+                      <ScenovaIcon name={activeModeGuide.martingale?"status":"close"} size={13}/>
+                      {activeModeGuide.martingale?"ใช้":"ไม่ใช้"}
+                    </b>
+                  </div>
+                  <div className="cc-mode-guide-summary-row">
+                    <span><ScenovaIcon name="trend" size={16}/></span>
+                    <small>Trailing</small>
+                    <b className={"cc-mode-guide-status "+(activeModeGuide.trailing?"good":"bad")}>
+                      <ScenovaIcon name={activeModeGuide.trailing?"status":"close"} size={13}/>
+                      {activeModeGuide.trailing?"ใช้":"ไม่ใช้"}
+                    </b>
+                  </div>
                 </div>
-                <div className="cc-mode-guide-summary-row">
-                  <span><ScenovaIcon name="layers" size={16}/></span>
-                  <small>Lot</small>
-                  <b>{activeModeGuide.sizing}</b>
-                </div>
-                <div className="cc-mode-guide-summary-row">
-                  <span><ScenovaIcon name="status" size={16}/></span>
-                  <small>ปิดกำไร</small>
-                  <b>{activeModeGuide.exitStyle}</b>
-                </div>
-                <div className="cc-mode-guide-summary-row">
-                  <span><ScenovaIcon name="close" size={16}/></span>
-                  <small>Martingale</small>
-                  <b className={"cc-mode-guide-status "+(activeModeGuide.martingale?"good":"bad")}>
-                    <ScenovaIcon name={activeModeGuide.martingale?"status":"close"} size={13}/>
-                    {activeModeGuide.martingale?"ใช้":"ไม่ใช้"}
-                  </b>
-                </div>
-                <div className="cc-mode-guide-summary-row">
-                  <span><ScenovaIcon name="trend" size={16}/></span>
-                  <small>Trailing</small>
-                  <b className={"cc-mode-guide-status "+(activeModeGuide.trailing?"good":"bad")}>
-                    <ScenovaIcon name={activeModeGuide.trailing?"status":"close"} size={13}/>
-                    {activeModeGuide.trailing?"ใช้":"ไม่ใช้"}
-                  </b>
-                </div>
-              </div>
-            </section>
+              </section>
 
-            <section className="cc-mode-guide-market" aria-label="สภาวะตลาด">
-              <header className="cc-mode-guide-section-title">
-                <span><ScenovaIcon name="trend" size={17}/></span>
-                <b>สภาวะตลาด</b>
-              </header>
-              <div className="cc-mode-guide-market-rows">
-                <div className="cc-mode-guide-market-row">
-                  <span><ScenovaIcon name="settings" size={16}/></span>
-                  <small>Entry Bias</small>
-                  <b>{activeModeGuide.workflow}</b>
+              <section className="cc-mode-guide-market" aria-label="สภาวะตลาด">
+                <header className="cc-mode-guide-section-title">
+                  <span><ScenovaIcon name="trend" size={17}/></span>
+                  <b>สภาวะตลาด</b>
+                </header>
+                <div className="cc-mode-guide-market-rows">
+                  <div className="cc-mode-guide-market-row">
+                    <span><ScenovaIcon name="settings" size={16}/></span>
+                    <small>Entry Bias</small>
+                    <b>{activeModeGuide.workflow}</b>
+                  </div>
+                  <div className="cc-mode-guide-market-row good">
+                    <span><ScenovaIcon name="trend" size={16}/></span>
+                    <small>เหมาะกับ</small>
+                    <b>{activeModeGuide.good}</b>
+                  </div>
+                  <div className="cc-mode-guide-market-row bad">
+                    <span><ScenovaIcon name="close" size={16}/></span>
+                    <small>ควรเลี่ยง</small>
+                    <b>{activeModeGuide.caution}</b>
+                  </div>
                 </div>
-                <div className="cc-mode-guide-market-row good">
-                  <span><ScenovaIcon name="trend" size={16}/></span>
-                  <small>เหมาะกับ</small>
-                  <b>{activeModeGuide.good}</b>
-                </div>
-                <div className="cc-mode-guide-market-row bad">
-                  <span><ScenovaIcon name="close" size={16}/></span>
-                  <small>ควรเลี่ยง</small>
-                  <b>{activeModeGuide.caution}</b>
-                </div>
-              </div>
-            </section>
+              </section>
+            </div>
 
             <section className="cc-mode-guide-capital" aria-label="ทุนแนะนำ">
               <header>
