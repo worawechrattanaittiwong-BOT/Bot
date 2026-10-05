@@ -393,7 +393,7 @@ bool AutoV22SwingEntryAllowed(
 
    int executionConfirmations=
       AutoV22ExecutionConfirmationCount(direction,momentum,pb);
-   int requiredExecutionConfirmations=isAdd ? 1 : 2;
+   int requiredExecutionConfirmations=1;
    if(executionConfirmations<requiredExecutionConfirmations)
    {
       reasonOut=isAdd

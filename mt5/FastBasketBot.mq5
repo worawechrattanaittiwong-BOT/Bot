@@ -188,10 +188,10 @@ input double          InpCounterPerPositionProfitMoney = 0.50;
 // First-entry quality gate. AUTO must observe a fresh, continuously valid
 // setup after RUNNING is authorized; historical chart context alone is not
 // enough to fire immediately on the first market tick.
-#define AUTO_FIRST_ENTRY_START_WARMUP_SECONDS 12
-#define AUTO_FIRST_ENTRY_STABLE_CONFIRM_SECONDS 5
+#define AUTO_FIRST_ENTRY_START_WARMUP_SECONDS 5
+#define AUTO_FIRST_ENTRY_STABLE_CONFIRM_SECONDS 2
 #define AUTO_FIRST_ENTRY_SIGNAL_GAP_SECONDS 2
-#define AUTO_FIRST_ENTRY_MIN_NET_RR 1.20
+#define AUTO_FIRST_ENTRY_MIN_NET_RR 1.10
 // A wrong-direction exit is an emergency quality correction, not a tiny-loss
 // scalper. Require a meaningful fraction of the original SL distance first.
 #define AUTO_WRONG_DIRECTION_MIN_R 0.25
@@ -15986,7 +15986,7 @@ int AutoV20PrecisionDirection(double momentum)
       double confidenceEdge=MathAbs(g_autoV20Buy.confidence-g_autoV20Sell.confidence);
       double rankEdge=MathAbs(g_autoV20Buy.rankScore-g_autoV20Sell.rankScore);
       if(!sharedZoneFirst && g_macroTrendDirection==0 &&
-         confidenceEdge<4.0 && rankEdge<5.0)
+         confidenceEdge<2.5 && rankEdge<3.0)
       {
          g_autoV20RejectReason="AUTO_FIRST_DIRECTION_AMBIGUOUS";
          g_adaptiveBlockReason=g_autoV20RejectReason;

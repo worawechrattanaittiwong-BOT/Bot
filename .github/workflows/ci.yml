@@ -121,6 +121,8 @@ jobs:
       - name: AUTO standard initial SL contract
         shell: pwsh
         run: ./tests/auto-standard-sl-contract.ps1
+      - name: AUTO first-entry quality and balanced-loss contract
+        run: node ./tests/auto-first-entry-quality-contract.mjs
       - name: Adaptive Rescue disabled contract
         shell: pwsh
         run: ./tests/rescue-disabled-contract.ps1
