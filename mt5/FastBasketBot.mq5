@@ -4267,10 +4267,11 @@ void CounterRegisterOrderRequest()
 
 int CounterSignalDirection()
 {
-   // Exactly one decision rule: visible Bid flow up => SELL, down => BUY.
+   // Exactly one decision rule: follow visible Bid flow.
+   // Price up => BUY, price down => SELL.
    int graphDirection=RaceLivePriceDirection();
-   if(graphDirection>0) return -1;
-   if(graphDirection<0) return 1;
+   if(graphDirection>0) return 1;
+   if(graphDirection<0) return -1;
    return 0;
 }
 
@@ -4375,22 +4376,23 @@ int CounterHarvestProfitablePositions()
       if(closeVolume<=0.0)
          continue;
 
-      // Closing is a broker request too. Pace it with the same COUNTER queue so
-      // many profitable tickets can never be dumped onto the trade server at once.
-      if(!CounterCanSendOrder())
-         return harvested;
-
+      // Profit close is a hard local MT5 target. Never delay a winning close
+      // behind COUNTER entry pacing: if this ticket has reached the configured
+      // target, send its close immediately from the EA on this tick.
       bool closed=ClosePositionVolumeByTicket(ticket,closeVolume,"SCNCounterProfit");
       CounterRegisterOrderRequest();
       if(closed)
       {
          harvested++;
-         g_executionStatus="COUNTER_PROFIT_CLOSE";
-         g_lastCloseReason="COUNTER_PROFIT_CLOSE";
+         g_executionStatus="COUNTER_HARD_PROFIT_CLOSE";
+         g_lastCloseReason="COUNTER_HARD_PROFIT_CLOSE";
       }
 
-      // One close request per pass, on both Hedging and Netting accounts.
-      break;
+      // Hedging accounts may have several independent tickets at target on the
+      // same tick; keep scanning and close all of them now. Netting exposes one
+      // aggregate position, so one configured-lot unit is realized per pass.
+      if(!hedging)
+         break;
    }
 
    return harvested;
@@ -5314,9 +5316,11 @@ bool ManageRaceBasket(double momentum)
       RaceResetExitCandidate();
    }
 
-   // BASKET mode treats the configured money target as a PROFIT ARM. Once the
-   // live MT5 Basket reaches it, RACE stops adding exposure and lets the M5
-   // structural thesis run. POSITION mode keeps its per-ticket target semantics.
+   // RACE Basket target is a hard local MT5 profit target.
+   // The EA running on the VPS owns the close decision directly: once the
+   // displayed open P&L reaches the configured money target, close every
+   // RACE-owned position immediately. Do not wait for Web/API, flow, trailing,
+   // giveback, or another structural confirmation.
    bool raceBasketProfitTarget =
       g_raceProfitTargetMode=="BASKET" &&
       g_raceCloseAllProfitMoney>0.0;
@@ -5326,50 +5330,13 @@ bool ManageRaceBasket(double momentum)
    bool raceStrictProfitTarget =
       raceBasketProfitTarget || racePerPositionProfitTarget;
 
-   if(!raceBasketProfitTarget)
-      g_raceTargetProfitArmed=false;
+   g_raceTargetProfitArmed=false;
 
    double displayedRoundProfit=RaceDisplayedOpenProfit();
    if(raceBasketProfitTarget &&
-      !g_raceTargetProfitArmed &&
       displayedRoundProfit>=g_raceCloseAllProfitMoney)
    {
-      g_raceTargetProfitArmed=true;
-      g_racePeakProfit=displayedRoundProfit;
-      g_raceState="PROFIT_ARMED";
-      g_executionStatus="RACE_PROFIT_ARMED";
-   }
-
-   if(raceBasketProfitTarget && g_raceTargetProfitArmed)
-   {
-      if(displayedRoundProfit>g_racePeakProfit)
-         g_racePeakProfit=displayedRoundProfit;
-
-      bool flowing=RaceFlowStillRunning(direction,momentum);
-      double giveback=RaceGivebackMoney(
-         g_racePeakProfit,
-         g_raceCloseAllProfitMoney
-      );
-      double protectedProfitFloor=MathMax(
-         g_raceCloseAllProfitMoney*RACE_PROFIT_ARM_MIN_LOCK_RATIO,
-         g_racePeakProfit-giveback
-      );
-
-      if(!flowing && displayedRoundProfit>0.0)
-      {
-         RaceCloseCycle("RACE_PROFIT_ARM_FLOW_END");
-         return true;
-      }
-
-      if(displayedRoundProfit<=protectedProfitFloor)
-      {
-         RaceCloseCycle("RACE_PROFIT_ARM_GIVEBACK");
-         return true;
-      }
-
-      RefreshMarketContext(false);
-      g_raceState="PROFIT_RUN";
-      g_executionStatus="RACE_PROFIT_RUN";
+      RaceCloseCycle("RACE_HARD_PROFIT_TARGET");
       return true;
    }
 
@@ -5513,9 +5480,9 @@ bool ManageRaceBasket(double momentum)
 
 bool FastProfitClosePriority()
 {
-   // CLOSE_FAST_PATH_V157: accelerate ZERO exits and retry an already-closing
-   // RACE Basket. A live RACE Basket target is now a profit ARM and must pass
-   // through ManageRaceBasket() so flow/giveback logic cannot be bypassed.
+   // CLOSE_FAST_PATH_V157: exact local profit ownership before any strategy
+   // analysis. ZERO and RACE Basket hard targets close from MT5 on the VPS
+   // itself; no Web/API round-trip or trailing/giveback confirmation is allowed.
    if(g_zeroGridClosing)
    {
       ZeroGridClosePositions();
@@ -5550,6 +5517,25 @@ bool FastProfitClosePriority()
    if(g_raceState=="CLOSING" && BasketHasRacePosition())
    {
       RaceClosePositionsBurst();
+      return true;
+   }
+
+   bool profitSettingsReady=MQLInfoInteger(MQL_TESTER) || g_settingsSynchronized;
+
+   if(profitSettingsReady && BasketHasCounterPosition())
+   {
+      int counterClosed=CounterHarvestProfitablePositions();
+      if(counterClosed>0)
+         return true;
+   }
+
+   if(profitSettingsReady &&
+      BasketHasRacePosition() &&
+      g_raceProfitTargetMode=="BASKET" &&
+      g_raceCloseAllProfitMoney>0.0 &&
+      RaceDisplayedOpenProfit()>=g_raceCloseAllProfitMoney)
+   {
+      RaceCloseCycle("RACE_HARD_PROFIT_TARGET");
       return true;
    }
 

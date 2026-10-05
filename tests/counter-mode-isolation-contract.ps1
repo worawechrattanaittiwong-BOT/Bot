@@ -38,10 +38,10 @@ $dynamic = Block $ea 'void ManageDynamicProtection()'
 $stopDistance = Block $ea 'double EffectiveStopLossDistancePoints()'
 $stopMode = Block $ea 'string StopLossModeName()'
 
-# Strategy contract: one rule only, inverse of the existing visible Bid flow.
+# Strategy contract: one rule only, follow the existing visible Bid flow.
 Need $signal 'int graphDirection=RaceLivePriceDirection();' 'COUNTER must read only the visible Bid price-flow direction'
-Need $signal 'if(graphDirection>0) return -1;' 'COUNTER graph-up must SELL'
-Need $signal 'if(graphDirection<0) return 1;' 'COUNTER graph-down must BUY'
+Need $signal 'if(graphDirection>0) return 1;' 'COUNTER graph-up must BUY'
+Need $signal 'if(graphDirection<0) return -1;' 'COUNTER graph-down must SELL'
 foreach($forbidden in @(
   'AverageTrueRangePoints','g_entryMode','g_trend','EMA','Structure','Volume',
   'Confidence','BasketDirection','RaceV2','Risk'
@@ -75,12 +75,17 @@ Forbid $fill 'EffectiveBasketLossLimit' 'Basket loss logic must not gate COUNTER
 Need $ea '#define COUNTER_FILL_INTERVAL_MS 1000' 'COUNTER one-second minimum fill interval missing'
 Need $ea '#define COUNTER_MAX_ORDERS_PER_MINUTE 30' 'COUNTER broker-request cap missing'
 Need $harvest 'g_counterPerPositionProfitMoney' 'COUNTER per-position profit target missing'
-Need $harvest 'CounterCanSendOrder()' 'COUNTER profit closes must also be paced'
-Need $harvest 'CounterRegisterOrderRequest()' 'COUNTER close requests must count toward pacing'
-Need $harvest 'One close request per pass' 'COUNTER must not burst-close many tickets in one pass'
+Need $harvest 'ClosePositionVolumeByTicket(ticket,closeVolume,"SCNCounterProfit")' 'COUNTER hard profit close must execute locally in MT5'
+Need $harvest 'COUNTER_HARD_PROFIT_CLOSE' 'COUNTER hard profit close telemetry missing'
+Need $harvest 'CounterRegisterOrderRequest()' 'COUNTER close requests must still count toward entry pacing after the close'
+Forbid $harvest 'CounterCanSendOrder()' 'COUNTER hard profit close must never wait behind entry pacing'
+Need $harvest 'if(!hedging)' 'COUNTER netting close must remain one configured-lot unit per pass'
+
 
 # Profit may close a ticket but may never select BUY/SELL.
 Need $manage 'CounterHarvestProfitablePositions();' 'COUNTER profit harvesting missing'
+Need $ea 'if(profitSettingsReady && BasketHasCounterPosition())' 'COUNTER hard profit close must run in the pre-analysis fast path'
+
 Need $manage 'int direction=CounterSignalDirection();' 'COUNTER direction must come only from its simple signal'
 Forbid $manage 'BasketProfit' 'Basket profit must not decide COUNTER direction'
 Forbid $manage 'EffectiveBasketLossLimit' 'Basket loss must not manage COUNTER'
@@ -127,7 +132,7 @@ foreach($forbidden in @('ทิศทาง','Stop Loss','Risk Controls','ATR','
   Forbid $counterUi $forbidden "COUNTER UI contains forbidden extra control/copy: $forbidden"
 }
 Need $web 'controlMode!=="ZERO_GRID"&&controlMode!=="COUNTER"&&(' 'COUNTER must not render generic Risk Controls'
-Need $web 'กราฟขึ้น → SELL · กราฟลง → BUY' 'COUNTER summary direction contract missing'
+Need $web 'กราฟขึ้น → BUY · กราฟลง → SELL' 'COUNTER summary direction contract missing'
 Need $web 'จำนวนไม้รวมแบ่งครึ่งเป็น BUY/SELL' 'COUNTER UI must explain the 50/50 BUY/SELL split'
 Need $web '★★ COUNTER' 'COUNTER must render as a two-star mode'
 Need $web 'counterMaxPositions: 20' 'COUNTER requested default must be 20 total positions'

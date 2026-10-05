@@ -36,16 +36,16 @@ Need $ea 'JsonNumber(json, "racePerPositionProfitMoney"' 'EA must receive RACE p
 Need $race 'raceBasketProfitTarget' 'RACE Basket target ownership is missing'
 Need $race 'racePerPositionProfitTarget' 'RACE per-position target ownership is missing'
 Need $race 'raceStrictProfitTarget' 'RACE configured target must block hidden profitable exits'
-Need $race 'displayedRoundProfit>=g_raceCloseAllProfitMoney' 'RACE Basket arm must use the live MT5 displayed Profit for the current round'
-Need $race 'RACE_PROFIT_ARMED' 'RACE Basket target must arm the profit runner instead of closing immediately'
-Need $race 'RACE_PROFIT_ARM_GIVEBACK' 'RACE armed Basket must bank profit on protected giveback'
-Need $race 'RACE_PROFIT_ARM_FLOW_END' 'RACE armed Basket must bank profit when the M5 structural flow ends'
-Need $race 'RaceGivebackMoney(' 'RACE Basket arm must use the profit giveback helper'
-Need $race 'g_raceCloseAllProfitMoney' 'RACE Basket arm must trail from the configured money target'
-Need $race 'protectedProfitFloor' 'RACE Basket arm must protect part of the configured target after arming'
-if($race.Contains('RaceCloseCycle("RACE_CLOSE_ALL_PROFIT_TARGET")')){throw 'RACE Basket target must not close immediately after arming'}
-if($race.Contains('cycleProfit >= g_raceCloseAllProfitMoney')){throw 'RACE Basket arm must not carry prior realized cycle P/L into the current round target'}
-if($fastClose.Contains('RaceDisplayedOpenProfit()>=g_raceCloseAllProfitMoney')){throw 'RACE fast path must not bypass the Basket profit-arm runner'}
+Need $race 'displayedRoundProfit>=g_raceCloseAllProfitMoney' 'RACE Basket hard target must use the live MT5 displayed Profit for the current round'
+Need $race 'RaceCloseCycle("RACE_HARD_PROFIT_TARGET")' 'RACE Basket target must close immediately when the target is reached'
+if($race.Contains('RACE_PROFIT_ARMED')){throw 'RACE Basket target must not arm a profit runner'}
+if($race.Contains('RACE_PROFIT_ARM_GIVEBACK')){throw 'RACE Basket target must not wait for giveback'}
+if($race.Contains('RACE_PROFIT_ARM_FLOW_END')){throw 'RACE Basket target must not wait for flow ending'}
+if($race.Contains('protectedProfitFloor')){throw 'RACE Basket hard target must not trail a protected profit floor'}
+if($race.Contains('cycleProfit >= g_raceCloseAllProfitMoney')){throw 'RACE Basket hard target must not carry prior realized cycle P/L into the current round target'}
+Need $fastClose 'profitSettingsReady' 'RACE fast target close must wait until Server settings are synchronized'
+Need $fastClose 'RaceDisplayedOpenProfit()>=g_raceCloseAllProfitMoney' 'RACE hard target must have a pre-analysis MT5 fast close path'
+Need $fastClose 'RaceCloseCycle("RACE_HARD_PROFIT_TARGET")' 'RACE fast path must close the whole Basket locally'
 if($fastClose.Contains('BasketCycleProfit()>=g_raceCloseAllProfitMoney')){throw 'RACE fast path must not use historical cycle P/L'}
 Need $race 'RACE_WAIT_PER_POSITION_TARGET' 'RACE must wait for configured per-position target'
 Need $race 'RACE_WAIT_BASKET_TARGET' 'RACE must wait for configured Basket target'
@@ -83,4 +83,4 @@ Need $web 'เป้ากำไรทั้งชุด' 'RACE Basket target in
 Need $db '"raceProfitTargetMode":"POSITION"' 'New accounts must default RACE target mode to per-position'
 Need $db '"racePerPositionProfitMoney":0.5' 'New accounts must default RACE per-position target'
 
-Write-Host 'RACE Basket profit-arm + per-position strict target contract: PASS'
+Write-Host 'RACE hard Basket target + per-position strict target contract: PASS'

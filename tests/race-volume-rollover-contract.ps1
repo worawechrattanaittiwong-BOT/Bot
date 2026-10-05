@@ -86,10 +86,10 @@ Need $fill 'g_entryModel = "RACE_M5_20_STRUCTURE";' 'RACE telemetry must identif
 Need $dual 'return false;' 'RACE must not accumulate simultaneous BUY/SELL structural inventory'
 Need $fill 'RACE_DIRECTION_LOCK' 'RACE one-way cycle direction lock must remain'
 
-# COUNTER is explicitly untouched and keeps its original inverse 2-second Bid signal.
+# COUNTER remains isolated from RACE and follows its dedicated 2-second Bid signal.
 Need $counter 'int graphDirection=RaceLivePriceDirection();' 'COUNTER two-second Bid signal changed unexpectedly'
-Need $counter 'if(graphDirection>0) return -1;' 'COUNTER graph-up SELL rule changed unexpectedly'
-Need $counter 'if(graphDirection<0) return 1;' 'COUNTER graph-down BUY rule changed unexpectedly'
+Need $counter 'if(graphDirection>0) return 1;' 'COUNTER graph-up BUY rule changed unexpectedly'
+Need $counter 'if(graphDirection<0) return -1;' 'COUNTER graph-down SELL rule changed unexpectedly'
 
 # Existing RACE Broker SL contract is preserved.
 Need $raceStop 'RaceV2StructureInvalidPrice(direction)' 'RACE structure-first Broker SL must remain'
