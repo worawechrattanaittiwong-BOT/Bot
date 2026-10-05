@@ -79,6 +79,7 @@
 }
 
 .card {
+  margin-bottom: 12px;
   padding: 18px;
   border: 1px solid rgba(154, 122, 255, .17);
   border-radius: 18px;
@@ -271,6 +272,307 @@
   color: #a3eac6;
 }
 
+.sectionHead,
+.clientsHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 13px;
+  border-bottom: 1px solid rgba(255,255,255,.06);
+}
+
+.sectionHead > div:first-child,
+.clientsHead > div:first-child {
+  display: grid;
+  gap: 2px;
+}
+
+.sectionHead small,
+.clientsHead small {
+  color: #a990ff;
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: .08em;
+}
+
+.sectionHead b,
+.clientsHead b {
+  color: #f2edf9;
+  font-size: 14px;
+}
+
+.sectionHead span,
+.clientsHead span {
+  color: #797281;
+  font-size: 11px;
+}
+
+.statusStrip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0,1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.statusStrip > div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  padding: 9px 11px;
+  border: 1px solid rgba(255,255,255,.06);
+  border-radius: 10px;
+  background: rgba(255,255,255,.022);
+}
+
+.statusStrip small {
+  color: #716a78;
+  font-size: 11px;
+}
+
+.statusStrip b {
+  overflow: hidden;
+  color: #d9d2e4;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.apiGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.25fr .55fr;
+  gap: 9px;
+  margin-top: 12px;
+}
+
+.apiGrid label {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.apiGrid label > span {
+  color: #9a92a6;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.apiGrid input,
+.search input,
+.clientAction select {
+  width: 100%;
+  height: 38px;
+  padding: 0 10px;
+  border: 1px solid rgba(255,255,255,.09);
+  border-radius: 9px;
+  outline: none;
+  background: #0b0910;
+  color: #eee8f6;
+  font: inherit;
+  font-size: 11px;
+}
+
+.apiGrid input:focus,
+.search input:focus,
+.clientAction select:focus {
+  border-color: rgba(143,108,255,.62);
+  box-shadow: 0 0 0 3px rgba(126,87,255,.08);
+}
+
+.apiActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255,255,255,.06);
+}
+
+.buttonRow {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.primaryButton,
+.secondaryButton,
+.search button,
+.clientAction button,
+.textButton {
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 9px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.primaryButton {
+  border: 1px solid #8060ff;
+  background: linear-gradient(135deg, #7657ff, #9676ff);
+  color: #fff;
+}
+
+.secondaryButton,
+.search button,
+.clientAction button {
+  border: 1px solid rgba(160,132,255,.25);
+  background: rgba(128,96,255,.09);
+  color: #cfc4f7;
+}
+
+.textButton {
+  display: inline-flex;
+  align-items: center;
+  color: #9188a0;
+}
+
+.primaryButton:disabled,
+.secondaryButton:disabled,
+.search button:disabled,
+.clientAction button:disabled {
+  opacity: .45;
+  cursor: wait;
+}
+
+.syncLine {
+  display: flex;
+  align-items: center;
+  gap: 8px 16px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  color: #716a78;
+  font-size: 11px;
+}
+
+.syncLine b {
+  color: #a9a1b4;
+  font-weight: 750;
+}
+
+.clientsHead {
+  align-items: end;
+}
+
+.search {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: min(330px, 100%);
+}
+
+.search input {
+  min-width: 0;
+  flex: 1;
+}
+
+.clientList {
+  display: grid;
+  margin-top: 4px;
+}
+
+.clientRow {
+  display: grid;
+  grid-template-columns: minmax(150px,1.25fr) minmax(105px,.7fr) minmax(125px,.8fr) minmax(165px,1fr);
+  gap: 12px;
+  align-items: center;
+  min-height: 58px;
+  padding: 9px 2px;
+  border-bottom: 1px solid rgba(255,255,255,.055);
+}
+
+.clientIdentity,
+.mt5Cell,
+.clientStatus {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.clientIdentity b,
+.mt5Cell b {
+  overflow: hidden;
+  color: #e3ddea;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.clientIdentity span,
+.mt5Cell small,
+.clientStatus small,
+.clientDate {
+  overflow: hidden;
+  color: #756e7d;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.verifiedBadge,
+.pendingBadge,
+.badBadge {
+  width: fit-content;
+  padding: 3px 7px;
+  border: 1px solid rgba(91,224,157,.2);
+  border-radius: 999px;
+  background: rgba(69,205,137,.06);
+  color: #9ae8bf;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.pendingBadge {
+  border-color: rgba(233,193,92,.2);
+  background: rgba(233,193,92,.05);
+  color: #e6cc7d;
+}
+
+.badBadge {
+  border-color: rgba(255,91,110,.2);
+  background: rgba(255,70,89,.05);
+  color: #ffadb7;
+}
+
+.clientAction {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.clientAction select {
+  width: 88px;
+  height: 34px;
+}
+
+.clientAction button {
+  min-height: 34px;
+  white-space: nowrap;
+}
+
+.clientFoot {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 10px;
+  color: #6e6776;
+  font-size: 11px;
+}
+
+.empty {
+  padding: 16px 10px;
+  color: #797281;
+  font-size: 11px;
+  text-align: center;
+}
+
 .loadingPage {
   min-height: 100vh;
   display: grid;
@@ -287,6 +589,22 @@
   font-size: 12px;
 }
 
+@media (max-width: 980px) {
+  .apiGrid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .clientRow {
+    grid-template-columns: minmax(150px,1fr) minmax(100px,.65fr) minmax(120px,.75fr);
+  }
+
+  .clientAction {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+    padding-bottom: 2px;
+  }
+}
+
 @media (max-width: 720px) {
   .shell {
     width: min(100% - 24px, 620px);
@@ -295,14 +613,36 @@
 
   .header,
   .topRow,
-  .footer {
+  .footer,
+  .sectionHead,
+  .clientsHead,
+  .apiActions,
+  .clientFoot {
     align-items: stretch;
     flex-direction: column;
   }
 
   .grid,
-  .preview {
+  .preview,
+  .apiGrid,
+  .statusStrip {
     grid-template-columns: 1fr;
+  }
+
+  .search {
+    width: 100%;
+  }
+
+  .buttonRow {
+    justify-content: flex-start;
+  }
+
+  .clientRow {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .clientAction {
+    grid-column: 1 / -1;
   }
 
   .full {
