@@ -19,7 +19,7 @@ The build stays unsigned until the signing service is configured and `SCENOVA_WI
 3. Create a public-trust Code Signing certificate profile.
 4. Create an Entra ID App Registration / Service Principal for GitHub Actions.
 5. Add a Federated Credential for this repository and branch:
-   - Repository: `worawechrattanaitthiwong-creator/Bot`
+   - Repository: `worawechrattanaittiwong-BOT/Bot`
    - Branch: `main`
 6. Grant the service principal the **Artifact Signing Certificate Profile Signer** role on the signing account/profile.
 

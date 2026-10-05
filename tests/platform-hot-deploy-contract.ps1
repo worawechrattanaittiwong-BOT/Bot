@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 $deploy = [System.IO.File]::ReadAllText((Resolve-Path 'scripts/auto-deploy-vps.sh'))
 
 foreach ($required in @(
-  'REPO_FULL_NAME="${REPO_FULL_NAME:-SCENOVA-SNV/Bot}"',
+  'REPO_FULL_NAME="${REPO_FULL_NAME:-worawechrattanaittiwong-BOT/Bot}"',
   '[SCENOVA] unified CI pipeline passed',
   '"build: publish EA v"*" [skip ea build]"',
   '"[customer-admin-only] build: publish SCENOVA Windows installer v"*',
