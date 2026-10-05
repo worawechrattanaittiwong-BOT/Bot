@@ -7122,7 +7122,7 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
 }
 .cc-slot-switcher-copy small{
   color:#776f8e;
-  font-size:8px;
+  font-size:var(--ui-type-caption);
   font-weight:850;
   letter-spacing:.1em;
 }
@@ -7140,7 +7140,7 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
   overflow:hidden;
   max-width:300px;
   color:#72798b;
-  font-size:9px;
+  font-size:var(--ui-type-caption);
   line-height:1.25;
   text-overflow:ellipsis;
   white-space:nowrap;
@@ -7161,7 +7161,7 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
   border-radius:9px;
   background:#0e1019;
   color:#b9b0d3;
-  font-size:9px;
+  font-size:var(--ui-type-caption);
   font-weight:800;
   cursor:pointer;
 }
@@ -7211,13 +7211,13 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
   white-space:nowrap;
 }
 .cc-slot-picker-trigger-copy b{
-  font-size:10.5px;
+  font-size:var(--ui-type-caption);
   line-height:1.1;
 }
 .cc-slot-picker-trigger-copy small{
   margin-top:2px;
   color:#747b8d;
-  font-size:8px;
+  font-size:var(--ui-type-caption);
   line-height:1;
 }
 .cc-slot-picker-trigger-side{
@@ -7235,7 +7235,7 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
   border-radius:999px;
   background:#171922;
   color:#8f94a3;
-  font:800 7.5px/1 monospace;
+  font:800 var(--ui-type-caption)/1 monospace;
   white-space:nowrap;
 }
 .cc-slot-state.state-running{
@@ -7317,19 +7317,19 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
   white-space:nowrap;
 }
 .cc-slot-picker-option-copy b{
-  font-size:10.5px;
+  font-size:var(--ui-type-caption);
   line-height:1.15;
 }
 .cc-slot-picker-option-copy small{
   margin-top:2px;
   color:#858a9d;
-  font-size:8px;
+  font-size:var(--ui-type-caption);
   line-height:1.1;
 }
 .cc-slot-manage{
   min-height:34px!important;
   padding:0 10px!important;
-  font-size:9px!important;
+  font-size:var(--ui-type-caption)!important;
   white-space:nowrap;
 }
 @media(max-width:760px){
@@ -7346,7 +7346,7 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
   }
   .cc-slot-switcher-copy small{
     grid-column:1 / -1;
-    font-size:7px;
+    font-size:var(--ui-type-caption);
   }
   .cc-slot-switcher-copy b{
     max-width:none;
@@ -7355,7 +7355,7 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
   .cc-slot-switcher-copy span{
     max-width:none;
     align-self:center;
-    font-size:7.5px;
+    font-size:var(--ui-type-caption);
     text-align:right;
   }
   .cc-slot-switcher-actions{
@@ -7366,7 +7366,7 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
   .cc-slot-rename{
     min-height:32px;
     padding:0 7px;
-    font-size:8.5px;
+    font-size:var(--ui-type-caption);
   }
   .cc-slot-picker{
     max-width:none;
@@ -7376,12 +7376,12 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
     min-height:32px;
     padding:4px 7px;
   }
-  .cc-slot-picker-trigger-copy b{font-size:10px}
-  .cc-slot-picker-trigger-copy small{font-size:7.5px}
+  .cc-slot-picker-trigger-copy b{font-size:var(--ui-type-caption)}
+  .cc-slot-picker-trigger-copy small{font-size:var(--ui-type-caption)}
   .cc-slot-state{
     min-height:16px;
     padding:0 4px;
-    font-size:7px;
+    font-size:var(--ui-type-caption);
   }
   .cc-slot-picker-menu{
     min-width:0;
@@ -7391,12 +7391,12 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
     min-height:38px;
     padding:4px 6px;
   }
-  .cc-slot-picker-option-copy b{font-size:10px}
-  .cc-slot-picker-option-copy small{font-size:7.5px}
+  .cc-slot-picker-option-copy b{font-size:var(--ui-type-caption)}
+  .cc-slot-picker-option-copy small{font-size:var(--ui-type-caption)}
   .cc-slot-manage{
     min-height:32px!important;
     padding:0 7px!important;
-    font-size:8px!important;
+    font-size:var(--ui-type-caption)!important;
   }
 }
 
