@@ -486,6 +486,52 @@ export class CloudCustomerController {
     if (order.charge_id && order.status !== "PAID") await this.cloud.reconcile(order.charge_id);
     return { ok: true };
   }
+  @Post("owner/addon-slot")
+  async createOwnerAddonSlot(@Req() req: any) {
+    return this.db.transaction(async tx => {
+      await tx.query("SELECT pg_advisory_xact_lock(740091)");
+      const user = (await tx.query(
+        "SELECT id,role,status FROM users WHERE id=$1 FOR UPDATE",
+        [req.user.sub]
+      )).rows[0];
+      if (!user || user.status !== "ACTIVE" || String(user.role || "").toUpperCase() !== "OWNER") {
+        throw new UnauthorizedException("Owner เท่านั้นที่เพิ่ม VPS Slot แบบไม่จำกัดได้");
+      }
+
+      const slot = (await tx.query(
+        `INSERT INTO license_slots(
+           owner_user_id,assigned_user_id,subscription_id,mode,slot_number,slot_type,status,label
+         )
+         SELECT
+           $1,$1,NULL,'CLOUD',COALESCE(MAX(slot_number),0)+1,'ADDON','ACTIVE','Owner Cloud Trading'
+         FROM license_slots
+         WHERE owner_user_id=$1
+           AND mode='CLOUD'
+           AND status<>'DELETED'
+         RETURNING *`,
+        [req.user.sub]
+      )).rows[0];
+
+      await tx.query(
+        `INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail)
+         VALUES($1,'OWNER_CLOUD_ADDON_SLOT_CREATED','license_slot',$2,$3::jsonb)`,
+        [
+          String(req.user?.code || req.user?.sub || "OWNER").slice(0,160),
+          slot.id,
+          JSON.stringify({
+            slotNumber: Number(slot.slot_number || 0),
+            mode: "CLOUD",
+            slotType: "ADDON",
+            unlimited: true,
+            paymentRequired: false
+          })
+        ]
+      );
+
+      return { ok:true, slot, unlimited:true, paymentRequired:false };
+    });
+  }
+
   @Post("addon-prices")
   async updateAddonPrices(
     @Req() req: any,

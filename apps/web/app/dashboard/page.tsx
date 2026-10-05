@@ -1668,7 +1668,9 @@ export default function DashboardPage() {
       (Boolean(slot?.can_manage) || Boolean(slot?.can_control))
     )
     .sort((a:any,b:any)=>Number(a?.slot_number || 0)-Number(b?.slot_number || 0));
-  const ownerCloudAccess = ["OWNER","ADMIN"].includes(String(data?.user?.role || "").toUpperCase());
+  const userRole = String(data?.user?.role || "").toUpperCase();
+  const ownerCloudAccess = ["OWNER","ADMIN"].includes(userRole);
+  const ownerCanAddVpsSlot = userRole === "OWNER";
   const cloudSlotSummary = {
     total:cloudSlots.length,
     online:cloudSlots.filter((slot:any)=>Boolean(slot?.runner_online)).length,
@@ -1705,9 +1707,11 @@ export default function DashboardPage() {
     .sort((a,b)=>Number(a.months)-Number(b.months));
   const selectedVpsPackage = vpsPackages.find(pack=>Number(pack.months)===Number(vpsPurchaseMonths)) || vpsPackages[0] || null;
   const vpsRenewSlot = cloudSlots.find((slot:any)=>String(slot?.id || "")===String(vpsRenewSlotId || "")) || null;
-  const canBuyVpsSlot = Boolean(cloudCatalog?.checkoutEnabled) &&
+  const canBuyVpsSlot = ownerCanAddVpsSlot || (
+    Boolean(cloudCatalog?.checkoutEnabled) &&
     primaryCloudActive &&
-    cloudCatalog?.capacityAvailable !== false;
+    cloudCatalog?.capacityAvailable !== false
+  );
   const canCheckoutVpsOrder = Boolean(cloudCatalog?.checkoutEnabled) &&
     primaryCloudActive &&
     (Boolean(vpsRenewSlotId) || cloudCatalog?.capacityAvailable !== false);
@@ -2452,7 +2456,28 @@ export default function DashboardPage() {
     window.location.href = "/packages?system=cloud&renew=primary";
   }
 
+  async function createOwnerVpsSlot() {
+    if (vpsPurchaseBusy || !ownerCanAddVpsSlot) return;
+    setVpsPurchaseBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const result = await api("/cloud/owner/addon-slot", { method:"POST" });
+      const slotId = String(result?.slot?.id || "");
+      await load(slotId);
+      setNotice("เพิ่ม VPS Slot สำหรับ Owner เรียบร้อยแล้ว · ใช้งานได้ไม่จำกัดเวลา");
+    } catch (e:any) {
+      setError(String(e?.message || "เพิ่ม VPS Slot สำหรับ Owner ไม่สำเร็จ"));
+    } finally {
+      setVpsPurchaseBusy(false);
+    }
+  }
+
   function openVpsSlotDialog(slotId = "") {
+    if (!slotId && ownerCanAddVpsSlot) {
+      void createOwnerVpsSlot();
+      return;
+    }
     const targetSlot = cloudSlots.find((slot:any)=>String(slot?.id || "")===String(slotId || "")) || null;
     const targetIsPrimary =
       Boolean(targetSlot) &&
@@ -4832,8 +4857,10 @@ export default function DashboardPage() {
                 summary={cloudSlotSummary}
                 selectedSlotId={String(data.selectedSlot?.id || "")}
                 ownerUnlimited={ownerCloudAccess}
+                ownerDirectAdd={ownerCanAddVpsSlot}
                 primaryActive={primaryCloudActive}
                 canBuy={canBuyVpsSlot}
+                busy={vpsPurchaseBusy}
                 capacity={Number(cloudCatalog?.available || 0)}
                 ownerCanPrice={String(data.user?.role || "").toUpperCase()==="OWNER"}
                 onSelect={(slotId:string)=>selectSlot(slotId)}
@@ -5569,8 +5596,10 @@ function VpsSlotManager(props:{
   summary:{total:number;online:number;ready:number;expiring:number};
   selectedSlotId:string;
   ownerUnlimited:boolean;
+  ownerDirectAdd:boolean;
   primaryActive:boolean;
   canBuy:boolean;
+  busy:boolean;
   capacity:number;
   ownerCanPrice:boolean;
   onSelect:(slotId:string)=>void;
@@ -5623,7 +5652,7 @@ function VpsSlotManager(props:{
               <button type="button" className="btn ghost" onClick={props.onConfigurePricing}>ตั้งราคา Slot เสริม</button>
             </>
           )}
-          <button type="button" className="btn primary" disabled={!props.canBuy} onClick={props.onBuy}>+ ซื้อ Slot เสริม</button>
+          <button type="button" className="btn primary" disabled={props.busy || !props.canBuy} onClick={props.onBuy}>{props.ownerDirectAdd ? (props.busy ? "กำลังเพิ่ม..." : "+ เพิ่ม Slot เสริม") : "+ ซื้อ Slot เสริม"}</button>
         </div>
       </div>
 
@@ -5717,9 +5746,10 @@ function VpsSlotManager(props:{
           );
         })}
 
-        <button type="button" className="vps-slot-add-card" disabled={!props.canBuy} onClick={props.onBuy}>
+        <button type="button" className="vps-slot-add-card" disabled={props.busy || !props.canBuy} onClick={props.onBuy}>
           <span className="vps-slot-add-icon">+</span>
-          <b>ซื้อ VPS Slot เสริม</b>
+          <b>{props.ownerDirectAdd ? "เพิ่ม VPS Slot เสริม" : "ซื้อ VPS Slot เสริม"}</b>
+          {props.ownerDirectAdd && <small>OWNER · ไม่ต้องชำระเงิน · ไม่จำกัดเวลา</small>}
         </button>
       </div>
     </section>
