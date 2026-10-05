@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.1.24"
-#define SCENOVA_EA_VERSION "1.1.24"
-#define SCENOVA_PRODUCT_VERSION "1.1.24"
+#property version   "1.1.25"
+#define SCENOVA_EA_VERSION "1.1.25"
+#define SCENOVA_PRODUCT_VERSION "1.1.25"
 #define SCENOVA_BUILD_ID "SOURCE"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_CONFIGURED_LOSS_ONLY_V1"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
@@ -185,8 +185,14 @@ input double          InpCounterPerPositionProfitMoney = 0.50;
 #define AUTO_V21_EXIT_LAST_FILL_GRACE_SECONDS 15
 #define AUTO_V21_EXIT_CONFIRM_SECONDS 10
 #define AUTO_V21_EXIT_SEVERE_CONFIRM_SECONDS 6
-// AUTO initial Broker SL standard. It is market-volatility based and must not
-// shrink because of account balance/equity or the configured Lot.
+// AUTO initial Broker SL standard for XAUUSD: use a fixed 0.01-lot reference
+// so the price distance corresponds to about USD 10 on a standard USD account.
+// Actual configured Lot never changes the SL price distance; e.g. 0.02 lot
+// keeps the same SL price and therefore carries about twice the money risk.
+#define AUTO_V20_REFERENCE_SL_LOT 0.01
+#define AUTO_V20_REFERENCE_SL_USD 10.00
+#define AUTO_V20_REFERENCE_SL_STRUCTURE_CAP 1.20
+// Non-XAU / non-USD fallback remains volatility based.
 #define AUTO_V20_STOP_ATR_FLOOR 1.25
 #define AUTO_V20_STOP_ATR_CAP 2.40
 #define AUTO_V20_STOP_SPREAD_MULTIPLIER 4.00
@@ -15310,6 +15316,59 @@ double AutoV20ProfitForMove(int direction,double volume,double openPrice,double 
    return result;
 }
 
+double AutoV20ReferenceStopMoneyAccountUnits()
+{
+   string currency=AccountInfoString(ACCOUNT_CURRENCY);
+   StringToUpper(currency);
+
+   // Broker-native Cent accounts report money in cents. USD 10 therefore means
+   // 1,000 account-currency units there. Standard USD accounts use 10 directly.
+   if(currency=="USD")
+      return AUTO_V20_REFERENCE_SL_USD;
+   if(currency=="USC" || StringFind(currency,"CENT")>=0)
+      return AUTO_V20_REFERENCE_SL_USD*100.0;
+   return 0.0;
+}
+
+double AutoV20ReferenceMoneyStopDistance(int direction,double entryPrice)
+{
+   if(direction==0 || entryPrice<=0.0)
+      return 0.0;
+
+   string symbolUpper=_Symbol;
+   StringToUpper(symbolUpper);
+   bool xauFamily=
+      StringFind(symbolUpper,"XAUUSD")==0 ||
+      symbolUpper=="XAUUSC";
+   if(!xauFamily)
+      return 0.0;
+
+   double targetMoney=AutoV20ReferenceStopMoneyAccountUnits();
+   if(targetMoney<=0.0)
+      return 0.0;
+
+   double tickSize=SymbolInfoDouble(_Symbol,SYMBOL_TRADE_TICK_SIZE);
+   if(tickSize<=0.0)
+      tickSize=_Point;
+   if(tickSize<=0.0)
+      return 0.0;
+
+   double probePrice=direction>0
+      ? entryPrice-tickSize
+      : entryPrice+tickSize;
+   double oneTickLoss=MathAbs(AutoV20ProfitForMove(
+      direction,
+      AUTO_V20_REFERENCE_SL_LOT,
+      entryPrice,
+      probePrice
+   ));
+   if(oneTickLoss<=0.0)
+      return 0.0;
+
+   double ticks=MathCeil(targetMoney/oneTickLoss);
+   return MathMax(tickSize,ticks*tickSize);
+}
+
 // Net RR remains execution telemetry and a ranking input. It is deliberately
 // not an entry gate: AUTO must evaluate and execute valid market opportunities
 // rather than wait indefinitely for a fixed reward/risk number.
@@ -15329,12 +15388,15 @@ void AutoV20PlanPrices(AUTO_V20_SIDE &side,AUTO_V20_LEVELS &levels)
       AverageTrueRangePoints(PERIOD_M5,g_atrPeriod)*_Point);
    side.entryPrice=side.direction>0 ? tick.ask : tick.bid;
 
-   // AUTO used to start at only 0.58 x M5 ATR and could be clamped as low as
-   // 0.32 x ATR. On XAUUSD that places the first Broker SL inside ordinary M5
-   // noise, so a valid entry can be stopped almost immediately. Use a stable
-   // market standard instead: at least 1.25 x M5 ATR, 4 x live spread and the
-   // broker Stops/Freeze requirement. Balance/equity and Lot are deliberately
-   // absent from this calculation.
+   // XAUUSD standard: choose the price distance that would lose about USD 10
+   // for a fixed 0.01-lot reference position. This is intentionally independent
+   // of account balance/equity and of the customer's actual configured Lot.
+   // If the broker/account cannot express that USD reference safely, fall back
+   // to the existing ATR standard.
+   double referenceMoneyStop=AutoV20ReferenceMoneyStopDistance(
+      side.direction,side.entryPrice
+   );
+   double atrFallback=atrPrice*AUTO_V20_STOP_ATR_FLOOR;
    double spreadPoints=CurrentSpreadPoints();
    double spreadFloorPrice=
       (spreadPoints>0.0 && spreadPoints<999999.0)
@@ -15345,22 +15407,37 @@ void AutoV20PlanPrices(AUTO_V20_SIDE &side,AUTO_V20_LEVELS &levels)
       (double)SymbolInfoInteger(_Symbol,SYMBOL_TRADE_FREEZE_LEVEL)
    )+2.0;
    double brokerFloorPrice=brokerFloorPoints*_Point;
+
+   double referenceFloor=referenceMoneyStop>0.0
+      ? referenceMoneyStop
+      : atrFallback;
    double standardStopFloor=MathMax(
-      atrPrice*AUTO_V20_STOP_ATR_FLOOR,
+      referenceFloor,
       MathMax(spreadFloorPrice,brokerFloorPrice)
    );
+
+   // On XAUUSD/USD the zone/structure layer may widen the ~USD 10 reference
+   // only modestly (up to ~20%). It can never pull the stop closer than the
+   // reference distance. Other symbols retain the ATR 2.40x outer envelope.
+   double structureStopCap=referenceMoneyStop>0.0
+      ? MathMax(
+         standardStopFloor,
+         referenceMoneyStop*AUTO_V20_REFERENCE_SL_STRUCTURE_CAP
+      )
+      : atrPrice*AUTO_V20_STOP_ATR_CAP;
+
    double stopDistance=standardStopFloor;
    bool zoneStopApplied=false;
 
    // Zone-First AUTO may widen the standard SL beyond the active Demand/Supply
    // boundary, but a nearby zone is never allowed to pull SL back inside the
-   // standard volatility floor.
+   // standard stop floor.
    if(side.direction>0 &&
       g_demandZoneLow>0.0 && g_demandZoneHigh>=g_demandZoneLow &&
       side.entryPrice<=g_demandZoneHigh+atrPrice*0.30)
    {
       double zoneDistance=side.entryPrice-(g_demandZoneLow-atrPrice*0.10);
-      if(zoneDistance>0.0 && zoneDistance<=atrPrice*AUTO_V20_STOP_ATR_CAP)
+      if(zoneDistance>0.0 && zoneDistance<=structureStopCap)
       {
          stopDistance=MathMax(stopDistance,zoneDistance);
          zoneStopApplied=true;
@@ -15371,7 +15448,7 @@ void AutoV20PlanPrices(AUTO_V20_SIDE &side,AUTO_V20_LEVELS &levels)
            side.entryPrice>=g_supplyZoneLow-atrPrice*0.30)
    {
       double zoneDistance=(g_supplyZoneHigh+atrPrice*0.10)-side.entryPrice;
-      if(zoneDistance>0.0 && zoneDistance<=atrPrice*AUTO_V20_STOP_ATR_CAP)
+      if(zoneDistance>0.0 && zoneDistance<=structureStopCap)
       {
          stopDistance=MathMax(stopDistance,zoneDistance);
          zoneStopApplied=true;
@@ -15386,7 +15463,7 @@ void AutoV20PlanPrices(AUTO_V20_SIDE &side,AUTO_V20_LEVELS &levels)
    {
       double structureDistance=side.entryPrice-(levels.nearestSupport-atrPrice*0.08);
       if(structureDistance>0.0 &&
-         structureDistance<=atrPrice*AUTO_V20_STOP_ATR_CAP)
+         structureDistance<=structureStopCap)
          stopDistance=MathMax(stopDistance,structureDistance);
    }
    else if(!zoneStopApplied &&
@@ -15394,14 +15471,15 @@ void AutoV20PlanPrices(AUTO_V20_SIDE &side,AUTO_V20_LEVELS &levels)
    {
       double structureDistance=(levels.nearestResistance+atrPrice*0.08)-side.entryPrice;
       if(structureDistance>0.0 &&
-         structureDistance<=atrPrice*AUTO_V20_STOP_ATR_CAP)
+         structureDistance<=structureStopCap)
          stopDistance=MathMax(stopDistance,structureDistance);
    }
 
-   // Keep AUTO bounded. The configured system ATR hard stop can tighten the
-   // outer envelope, but it can never shrink the initial SL below the standard
-   // AUTO floor above.
-   double maximumStop=atrPrice*AUTO_V20_STOP_ATR_CAP;
+   // Keep AUTO bounded. For XAUUSD/USD, structure stays near the USD 10
+   // reference instead of reopening a very wide ATR envelope. The configured
+   // system hard stop may tighten only the outer envelope; it can never shrink
+   // the initial SL below the standard floor.
+   double maximumStop=structureStopCap;
    double configuredStop=EffectiveStopLossDistancePoints()*_Point;
    if(configuredStop>standardStopFloor)
       maximumStop=MathMin(maximumStop,configuredStop);
