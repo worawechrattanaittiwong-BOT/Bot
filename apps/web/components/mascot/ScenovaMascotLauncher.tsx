@@ -143,7 +143,7 @@ export function ScenovaMascotLauncher({ className = "", onConnectMobile, error }
                 </button>
               </header>
 
-              <p className={styles.greeting}>สวัสดีครับ วันนี้ให้ผมช่วยอะไรดี?</p>
+              <p className={styles.greeting}>สวัสดีครับ 👋 วันนี้ให้ผมช่วยอะไรดี?</p>
 
               <button
                 ref={actionRef}
@@ -154,7 +154,7 @@ export function ScenovaMascotLauncher({ className = "", onConnectMobile, error }
                 <span className={styles.actionIcon} aria-hidden="true">✦</span>
                 <span className={styles.actionText}>
                   <strong>ถาม SCENOVA AI</strong>
-                  <small>โหมด · การตั้งค่า · MT5/EA · Broker · ความเสี่ยง</small>
+                  <small>ถามวิธีใช้ แก้ปัญหา หรือให้ผมพาไปหน้าที่ต้องการ</small>
                 </span>
                 <span className={styles.arrow} aria-hidden="true">→</span>
               </button>
@@ -173,13 +173,13 @@ export function ScenovaMascotLauncher({ className = "", onConnectMobile, error }
                 </span>
                 <span className={styles.actionText}>
                   <strong>{busy ? "กำลังเตรียมการเชื่อมต่อ…" : "เชื่อมต่อหน้าจอมือถือ"}</strong>
-                  <small>สแกน QR เพื่อเปิด Mobile Mirror</small>
+                  <small>สแกน QR แล้วเปิดใช้งานจากมือถือ</small>
                 </span>
                 <span className={styles.arrow} aria-hidden="true">↗</span>
               </button>
 
               {error && <p className={styles.error} role="alert">{error}</p>}
-              <footer className={styles.footer}><span aria-hidden="true" /> พร้อมอยู่ข้างคุณ</footer>
+              <footer className={styles.footer}><span aria-hidden="true" /> พร้อมช่วยคุณ</footer>
             </>
           )}
         </section>

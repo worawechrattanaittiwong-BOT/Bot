@@ -30,9 +30,15 @@ type Bootstrap = {
   contacts: Contact[];
 };
 
+type NavigationAction = {
+  label: string;
+  href: string;
+};
+
 type Message = {
   role: "USER" | "ASSISTANT";
   content: string;
+  actions?: NavigationAction[];
 };
 
 function ContactIcon({ type }: { type: string }) {
@@ -114,7 +120,13 @@ export function ScenovaAiPanel({
       setConversationId(String(data.conversationId || conversationId));
       setMessages(current => [...current, {
         role: "ASSISTANT",
-        content: String(data.message || "ไม่พบข้อความตอบกลับ")
+        content: String(data.message || "ไม่พบข้อความตอบกลับ"),
+        actions: Array.isArray(data.actions)
+          ? data.actions
+              .filter((item: any) => item?.label && item?.href)
+              .slice(0, 2)
+              .map((item: any) => ({ label: String(item.label), href: String(item.href) }))
+          : []
       }]);
       setBootstrap(current => current ? {
         ...current,
@@ -151,26 +163,66 @@ export function ScenovaAiPanel({
 
       <div className={styles.statusRow}>
         <span className={bootstrap?.configured ? styles.ready : styles.waiting}>
-          {bootstrap?.configured ? "● AI พร้อมใช้งาน" : "● รอเชื่อม AI Provider"}
+          {bootstrap?.configured ? "● พร้อมใช้งาน" : "● ยังไม่พร้อมใช้งาน"}
         </span>
-        {bootstrap?.remainingToday != null && <small>เหลือ {bootstrap.remainingToday} ข้อความวันนี้</small>}
       </div>
 
       <div ref={listRef} className={styles.messages}>
         {messages.length === 0 && (
-          <div className={styles.welcome}>
-            <b>ถามได้เฉพาะเรื่องระบบ SCENOVA</b>
-            <p>โหมดการเทรด · การตั้งค่า · MT5/EA · Exness/Broker · Error · ความเสี่ยงของค่าปัจจุบัน</p>
-            <span>AI เป็น Read-only และไม่มีสิทธิ์ Start/Stop หรือส่งคำสั่งซื้อขาย</span>
+          <div className={styles.welcomeRow}>
+            <img
+              className={styles.aiAvatar}
+              src="/assets/scenova-ai-operator-v1.png"
+              alt="SCENOVA AI"
+            />
+            <div className={styles.welcome}>
+              <b>สวัสดีครับ 👋</b>
+              <p>อยากให้ช่วยเรื่องไหน ถามได้เลยครับ ผมอธิบายเป็นขั้นตอนให้เข้าใจง่าย ๆ ได้</p>
+            </div>
           </div>
         )}
         {messages.map((message, index) => (
-          <div key={index} className={message.role === "USER" ? styles.userMessage : styles.aiMessage}>
-            <small>{message.role === "USER" ? "คุณ" : "SCENOVA AI"}</small>
-            <p>{message.content}</p>
-          </div>
+          message.role === "USER" ? (
+            <div key={index} className={styles.userMessage}>
+              <small>คุณ</small>
+              <p>{message.content}</p>
+            </div>
+          ) : (
+            <div key={index} className={styles.aiRow}>
+              <img
+                className={styles.aiAvatar}
+                src="/assets/scenova-ai-operator-v1.png"
+                alt=""
+                aria-hidden="true"
+              />
+              <div className={styles.aiMessage}>
+                <small>SCENOVA AI</small>
+                <p>{message.content}</p>
+                {message.actions?.length ? (
+                  <div className={styles.messageActions}>
+                    {message.actions.map(action => (
+                      <a key={action.href} href={action.href}>
+                        <span>{action.label}</span>
+                        <span aria-hidden="true">→</span>
+                      </a>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          )
         ))}
-        {busy && <div className={styles.typing}>SCENOVA AI กำลังตอบ…</div>}
+        {busy && (
+          <div className={styles.aiRow}>
+            <img
+              className={styles.aiAvatar}
+              src="/assets/scenova-ai-operator-v1.png"
+              alt=""
+              aria-hidden="true"
+            />
+            <div className={styles.typing}>กำลังตอบ…</div>
+          </div>
+        )}
       </div>
 
       {messages.length === 0 && bootstrap?.suggestions?.length ? (
@@ -194,7 +246,7 @@ export function ScenovaAiPanel({
         <textarea
           value={input}
           onChange={event => setInput(event.target.value)}
-          placeholder={bootstrap?.configured ? "ถามเกี่ยวกับ SCENOVA..." : "ตั้งค่า AI Provider ก่อนใช้งาน"}
+          placeholder={bootstrap?.configured ? "พิมพ์คำถามได้เลย..." : "SCENOVA AI ยังไม่พร้อมใช้งาน"}
           maxLength={1500}
           rows={2}
           disabled={!bootstrap?.configured || busy}
@@ -213,7 +265,13 @@ export function ScenovaAiPanel({
           <small>ติดต่อผู้พัฒนา</small>
           <div>
             {bootstrap.contacts.map(contact => (
-              <a key={contact.id} href={contact.url} target="_blank" rel="noreferrer">
+              <a
+                key={contact.id}
+                href={contact.url}
+                target="_blank"
+                rel="noreferrer"
+                data-channel={String(contact.type || "").toUpperCase()}
+              >
                 <ContactIcon type={contact.type} />
                 <span>{contact.type === "LINE"
                   ? "LINE"

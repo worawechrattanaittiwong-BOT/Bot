@@ -27,17 +27,41 @@ export class AiAssistantService {
   }
 
   private suggestions(controlMode: string | null) {
-    const common = [
-      "ช่วยดูการตั้งค่าปัจจุบันว่ามีจุดไหนเสี่ยงบ้าง",
-      "ทำไม EA Offline และควรตรวจอะไรบ้าง",
-      "Safe Stop คืออะไร"
-    ];
-    if (!controlMode) return ["อธิบายโหมดการเทรดของ SCENOVA", ...common];
+    const modeQuestion = controlMode
+      ? "โหมด " + controlMode + " ทำงานยังไง?"
+      : "โหมดเทรดของ SCENOVA ต่างกันยังไง?";
     return [
-      "อธิบายโหมด " + controlMode + " ให้หน่อย",
-      "ค่าของ " + controlMode + " ตอนนี้มีความเสี่ยงอะไรบ้าง",
-      ...common.slice(1)
+      "เชื่อมบัญชี MT5 ยังไง?",
+      "เปิด EA ยังไง?",
+      modeQuestion,
+      "เปลี่ยนแพ็กเกจยังไง?"
     ];
+  }
+
+  private navigationActions(message: string) {
+    const text = String(message || "").toLowerCase();
+    const actions: Array<{ label: string; href: string }> = [];
+    const add = (label: string, href: string) => {
+      if (!actions.some(item => item.href === href)) actions.push({ label, href });
+    };
+
+    if (/(แพ็กเกจ|package|ต่ออายุ|สมาชิก|subscription|เปลี่ยนแพ็ก)/i.test(text)) {
+      add("ไปหน้าแพ็กเกจ", "/packages");
+    }
+    if (/(เชื่อม.*(mt5|บัญชี)|เพิ่ม.*บัญชี|mt5.*(เชื่อม|บัญชี)|ea.*เชื่อม|บัญชี.*ea)/i.test(text)) {
+      add("ไปหน้า MT5 & EA", "/dashboard?view=account");
+    }
+    if (/(ตั้งค่า|setting|lot|ล็อต|โหมด|mode|grid|zero_grid|safe stop)/i.test(text)) {
+      add("ไปหน้าตั้งค่า EA", "/dashboard?view=overview#bot-settings");
+    }
+    if (/(กำไร|ขาดทุน|performance|ผลการเทรด|สถิติ|drawdown)/i.test(text)) {
+      add("ดูผลการเทรด", "/performance");
+    }
+    if (/(broker|exness|โบรกเกอร์)/i.test(text)) {
+      add("ไปหน้า Broker", "/broker");
+    }
+
+    return actions.slice(0, 2);
   }
 
   async bootstrap(userId: string, role: string, slotId = "") {
@@ -123,6 +147,7 @@ export class AiAssistantService {
       slotId: slot?.slotId || null,
       provider: result.provider,
       model: result.model,
+      actions: this.navigationActions(message),
       remainingToday: this.elevated(input.role)
         ? null
         : Math.max(0, settings.dailyMessageLimit - nextUsage)

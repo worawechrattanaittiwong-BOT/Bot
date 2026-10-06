@@ -63,12 +63,12 @@
   right: 5px;
   bottom: calc(100% + 7px);
   box-sizing: border-box;
-  width: min(310px, calc(100vw - 28px));
+  width: min(292px, calc(100vw - 28px));
   max-height: calc(100dvh - 280px);
   overflow: auto;
-  padding: 19px;
+  padding: 16px;
   border: 1px solid #9887e55c;
-  border-radius: 22px;
+  border-radius: 20px;
   background: linear-gradient(145deg, #192036fc, #101421fc 65%);
   box-shadow: 0 20px 65px #0008, 0 0 35px #7560ff0d, inset 0 1px #ffffff0d;
   animation: appear 170ms ease-out;
@@ -76,23 +76,23 @@
 .cardGlow { position: absolute; height: 1px; top: 0; left: 25%; right: 25%; background: linear-gradient(90deg, transparent, #8bceff, transparent); }
 .cardAi { width: min(390px, calc(100vw - 28px)); padding: 15px; overflow: hidden; }
 .header { display: flex; align-items: center; gap: 10px; }
-.sparkle { display: grid; place-items: center; width: 38px; height: 38px; flex: 0 0 auto; border-radius: 12px; background: linear-gradient(140deg, #70dfff20, #a083ff22); border: 1px solid #89c9ff35; color: #8de5ff; font-size: 24px; }
-.header h2 { margin: 0; color: #f2f5ff; font-size: 16px; line-height: 1.25; letter-spacing: 1.5px; }
+.sparkle { display: grid; place-items: center; width: 34px; height: 34px; flex: 0 0 auto; border-radius: 11px; background: linear-gradient(140deg, #70dfff20, #a083ff22); border: 1px solid #89c9ff35; color: #8de5ff; font-size: 24px; }
+.header h2 { margin: 0; color: #f2f5ff; font-size: 15px; line-height: 1.25; letter-spacing: 1.3px; }
 .close { align-self: flex-start; margin-left: auto; width: 30px; height: 30px; flex: 0 0 auto; border: 1px solid #ffffff12; border-radius: 9px; color: #b7bfd8; background: #ffffff05; font-size: 21px; cursor: pointer; }
 .close:hover { background: #ffffff10; }
-.greeting { margin: 16px 0; font-size: 12px; line-height: 1.7; color: #c9cede; }
-.action { display: flex; align-items: center; gap: 10px; width: 100%; padding: 12px 10px; text-align: left; border: 1px solid #8c80ec3d; border-radius: 14px; color: #ebedff; background: linear-gradient(110deg, #7863ff16, #54d1ff08); font-family: inherit; cursor: pointer; transition: border-color 160ms, background 160ms; }
+.greeting { margin: 12px 0; font-size: 12px; line-height: 1.6; color: #d7dbea; }
+.action { display: flex; align-items: center; gap: 9px; width: 100%; padding: 10px; text-align: left; border: 1px solid #8c80ec3d; border-radius: 14px; color: #ebedff; background: linear-gradient(110deg, #7863ff16, #54d1ff08); font-family: inherit; cursor: pointer; transition: border-color 160ms, background 160ms; }
 .action:hover { border-color: #8cafff8a; background: #8974ff22; }
 .action + .action { margin-top: 8px; }
-.aiAction { border-color: #6fd8ff45; background: linear-gradient(110deg, #43cfff18, #7863ff18); }
+.aiAction { border-color: #8b7dff75; background: linear-gradient(110deg, #6654ff2e, #4ba8ff20); box-shadow: 0 8px 24px #4f46e51a, inset 0 1px #ffffff0b; }
 .action:disabled { cursor: progress; opacity: .6; }
 .action:focus-visible, .close:focus-visible { outline: 2px solid #77eaff; outline-offset: 3px; }
-.actionIcon { display: grid; place-items: center; width: 34px; height: 38px; flex: 0 0 auto; border-radius: 10px; background: #a48aff14; color: #bcaeff; }
+.actionIcon { display: grid; place-items: center; width: 33px; height: 35px; flex: 0 0 auto; border-radius: 10px; background: #a48aff14; color: #bcaeff; }
 .actionText { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.actionText strong { font-size: 12px; line-height: 1.5; font-weight: 650; }
-.actionText small { font-size: 11px; line-height: 1.5; color: #a4aec5; }
+.actionText strong { font-size: 12px; line-height: 1.4; font-weight: 700; }
+.actionText small { font-size: 10.5px; line-height: 1.45; color: #a4aec5; }
 .arrow { margin-left: auto; color: #8edfff; font-size: 19px; }
-.footer { display: flex; align-items: center; gap: 6px; margin-top: 16px; color: #8f9ab6; font-size: 11px; }
+.footer { display: flex; align-items: center; gap: 6px; margin-top: 13px; color: #8f9ab6; font-size: 11px; }
 .footer > span { width: 5px; height: 5px; border-radius: 50%; background: #80e3cb; box-shadow: 0 0 8px #80e3cb55; }
 .error { margin: 12px 0 0; padding: 9px; border-radius: 9px; color: #f5d298; background: #e7a84e0d; font-size: 11px; line-height: 1.6; overflow-wrap: anywhere; }
 @keyframes appear { from { opacity: 0; transform: translateY(7px) scale(.98); } to { opacity: 1; transform: none; } }
@@ -133,8 +133,8 @@
   .header { gap: 9px; }
   .sparkle { width: 40px; height: 40px; }
   .header h2 { font-size: 18px; }
-  .greeting { margin: 14px 0; font-size: 13px; }
-  .action { min-height: 66px; padding: 12px; }
+  .greeting { margin: 11px 0; font-size: 13px; }
+  .action { min-height: 60px; padding: 10px 11px; }
   .actionText strong { font-size: 13px; }
   .actionText small { font-size: 11px; }
   .close { width: 36px; height: 36px; }
