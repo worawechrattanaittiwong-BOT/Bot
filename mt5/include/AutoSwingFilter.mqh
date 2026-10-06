@@ -340,8 +340,9 @@ bool AutoSwingEntryAllowed(
    int h4Direction=AutoTrendDirection(h4[0].close,h4e50,h4e100,h4e100Past);
    int h1Direction=AutoTrendDirection(h1[0].close,h1e50,h1e100,h1e100Past);
 
-   // H4 is the hard directional anchor. AUTO cannot enter against it.
-   if(h4Direction!=direction)
+   // Preserve the original strict HTF contract for AUTO add positions.
+   // Only the first entry gets the anti-starvation relaxation.
+   if(isAdd && h4Direction!=direction)
    {
       reasonOut=h4Direction==0
          ? "AUTO_H4_TREND_UNCLEAR"
@@ -362,11 +363,26 @@ bool AutoSwingEntryAllowed(
       AverageTrueRangePoints(PERIOD_H1,g_atrPeriod)*_Point);
 
    bool correctSide100=direction>0 ? price>h1e100 : price<h1e100;
-   if(!correctSide100 || h1Direction==-direction)
+   if(isAdd)
    {
-      reasonOut="AUTO_H1_NOT_ALIGNED";
-      g_autoLastFilterReason=reasonOut;
-      return false;
+      if(!correctSide100 || h1Direction==-direction)
+      {
+         reasonOut="AUTO_H1_NOT_ALIGNED";
+         g_autoLastFilterReason=reasonOut;
+         return false;
+      }
+   }
+   else
+   {
+      bool strongHtfConflict=
+         h4Direction==-direction &&
+         (h1Direction==-direction || !correctSide100);
+      if(strongHtfConflict)
+      {
+         reasonOut="AUTO_H4_TREND_OPPOSITE";
+         g_autoLastFilterReason=reasonOut;
+         return false;
+      }
    }
 
    double distanceEma50=MathAbs(price-h1e50);
@@ -384,16 +400,23 @@ bool AutoSwingEntryAllowed(
       sharedZoneFirst ||
       roleFlip;
 
-   if(!setupLocation)
+   int executionConfirmations=
+      AutoExecutionConfirmationCount(direction,momentum,pb);
+
+   // Keep add-position location rules unchanged. For the first entry only,
+   // two independent execution confirmations may override a missing location.
+   if((isAdd && !setupLocation) ||
+      (!isAdd && !setupLocation && executionConfirmations<2))
    {
       reasonOut="AUTO_WAIT_PULLBACK_VALUE";
       g_autoLastFilterReason=reasonOut;
       return false;
    }
 
-   int executionConfirmations=
-      AutoExecutionConfirmationCount(direction,momentum,pb);
-   int requiredExecutionConfirmations=1;
+   // A validated first-entry Zone-First reaction already contains live reaction
+   // evidence; add positions keep the original confirmation requirement.
+   int requiredExecutionConfirmations=
+      (!isAdd && sharedZoneFirst) ? 0 : 1;
    if(executionConfirmations<requiredExecutionConfirmations)
    {
       reasonOut=isAdd
@@ -403,11 +426,14 @@ bool AutoSwingEntryAllowed(
       return false;
    }
 
-   // Do not open directly into a nearby opposing M5 reaction level.
    double opposingRoomAtr=direction>0
       ? levels.nearestResistanceDistanceAtr
       : levels.nearestSupportDistanceAtr;
-   if(opposingRoomAtr>0.0 && opposingRoomAtr<0.20 && !roleFlip)
+   bool opposingLevelBlocks=isAdd
+      ? (opposingRoomAtr>0.0 && opposingRoomAtr<0.20 && !roleFlip)
+      : (opposingRoomAtr>0.0 && opposingRoomAtr<0.15 &&
+         !roleFlip && executionConfirmations<2);
+   if(opposingLevelBlocks)
    {
       reasonOut="AUTO_OPPOSING_LEVEL_TOO_CLOSE";
       g_autoLastFilterReason=reasonOut;

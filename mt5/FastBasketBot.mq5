@@ -191,7 +191,7 @@ input double          InpCounterPerPositionProfitMoney = 0.50;
 #define AUTO_FIRST_ENTRY_START_WARMUP_SECONDS 5
 #define AUTO_FIRST_ENTRY_STABLE_CONFIRM_SECONDS 2
 #define AUTO_FIRST_ENTRY_SIGNAL_GAP_SECONDS 2
-#define AUTO_FIRST_ENTRY_MIN_NET_RR 1.10
+#define AUTO_FIRST_ENTRY_MIN_NET_RR 1.05
 // A wrong-direction exit is an emergency quality correction, not a tiny-loss
 // scalper. Require a meaningful fraction of the original SL distance first.
 #define AUTO_WRONG_DIRECTION_MIN_R 0.25
@@ -16199,15 +16199,17 @@ int AutoPrecisionDirection(double momentum)
    // Zone-First can contribute its real location quality.
    if(count<=0)
    {
-      double firstMinimumConfidence=60.0;
-      double firstMinimumRank=62.0;
+      // Keep the first AUTO entry selective without starving execution.
+      // HTF/location/confirmation filters still protect the trade later.
+      double firstMinimumConfidence=54.0;
+      double firstMinimumRank=56.0;
       if(g_marketRegime=="HIGH_VOLATILITY")
       {
-         firstMinimumConfidence+=4.0;
-         firstMinimumRank+=4.0;
+         firstMinimumConfidence+=2.0;
+         firstMinimumRank+=2.0;
       }
       else if(g_marketRegime=="RANGE")
-         firstMinimumRank+=3.0;
+         firstMinimumRank+=1.0;
 
       if(selected.confidence<firstMinimumConfidence ||
          selected.rankScore<firstMinimumRank)
@@ -16380,10 +16382,11 @@ int AutoPrecisionDirection(double momentum)
 
    string vectorLiveReason="NONE";
    bool vectorLiveAllowed=AutoVectorEdgeLiveAllow(direction,vectorLiveReason);
-   if(!vectorLiveAllowed && count<=0)
+   if(!vectorLiveAllowed && count<=0 &&
+      vectorLiveReason!="VECTOR_EDGE_TOO_WEAK")
    {
-      // AUTO: the first order is the most selective order. Once Vector
-      // Edge has enough history to reject the side, do not bypass that veto.
+      // First entry still hard-blocks negative expectancy or opposite Vector
+      // direction. Weak but positive same-direction edge is advisory only.
       g_autoRejectReason=vectorLiveReason;
       g_adaptiveBlockReason="AUTO_VECTOR_EDGE_FIRST_WAIT";
       g_cachedAdaptiveDirection=0;
