@@ -119,6 +119,6 @@ assert.match(ea, /bool ZeroGridFlatConfirmedForReset\(\)/, "ZERO stable-flat con
 assert.match(ea, /ZERO_GRID_EXISTING_CYCLE_GUARD/, "ZERO must hard-block a fresh cycle while old ZERO exposure still exists");
 assert.match(ea, /ZERO_GRID_WAIT_FLAT_CONFIRM/, "ZERO must wait through transient async flat snapshots");
 assert.match(web, /zeroGridBaseLot: 0\.03/, "ZERO UI default lot must be 0.03");
-assert.match(web, /ZERO_GRID_BASE_LOT_OPTIONS = \[0\.03,0\.06,0\.09\]/, "ZERO UI must expose 0.03 / 0.06 / 0.09 base lot choices");
+assert.match(web, /ZERO_GRID_BASE_LOT_OPTIONS = \[0\.01,0\.02,0\.03,0\.04,0\.05,0\.06,0\.07,0\.08,0\.09\]/, "ZERO UI must expose 0.01 through 0.09 base lot choices");
 
 assert.match(web, /zeroGridStepPrice: 3/, "ZERO default step must remain 3.00");

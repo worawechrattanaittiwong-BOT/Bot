@@ -33,8 +33,8 @@ Assert-Contains $bot 'metrics.zeroGridConfiguredBaseLot' 'Start guard verifies a
 Assert-Contains $web 'props.metrics?.zeroGridConfiguredBaseLot' 'UI sync verifies applied ZERO base lot'
 Assert-Contains $web 'zeroGridStepPrice: 3' 'web ZERO grid step defaults to 3.00'
 Assert-Contains $web 'zeroGridBaseLot: 0.03' 'web ZERO base lot defaults to 0.03'
-Assert-Contains $web 'ZERO_GRID_BASE_LOT_OPTIONS = [0.03,0.06,0.09]' 'web ZERO base lot selector exposes 0.03 / 0.06 / 0.09'
-Assert-Contains $bot '[0.03, 0.06, 0.09].includes(zeroGridBaseLot)' 'API validates allowed ZERO base lots'
+Assert-Contains $web 'ZERO_GRID_BASE_LOT_OPTIONS = [0.01,0.02,0.03,0.04,0.05,0.06,0.07,0.08,0.09]' 'web ZERO base lot selector exposes 0.01 through 0.09'
+Assert-Contains $bot '[0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09].includes(zeroGridBaseLot)' 'API validates allowed ZERO base lots'
 Assert-Contains $web '<option value="0.5">0.50</option>' 'web ZERO grid step includes 0.50'
 Assert-Contains $web '<option value="1">1.00</option>' 'web ZERO grid step includes 1.00'
 if ($web.Contains('กริดตลาดความผันผวนต่ำ') -or $web.Contains('const zeroGridLowVolatilityEnabled')) { throw 'Removed ZERO low-volatility control must not return' }

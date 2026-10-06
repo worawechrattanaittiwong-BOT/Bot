@@ -2213,8 +2213,14 @@ double ZeroGridAllowedStep(double requested)
 
 double ZeroGridAllowedBaseLot(double requested)
 {
+   if(MathAbs(requested-0.01)<0.000001) return 0.01;
+   if(MathAbs(requested-0.02)<0.000001) return 0.02;
    if(MathAbs(requested-0.03)<0.000001) return 0.03;
+   if(MathAbs(requested-0.04)<0.000001) return 0.04;
+   if(MathAbs(requested-0.05)<0.000001) return 0.05;
    if(MathAbs(requested-0.06)<0.000001) return 0.06;
+   if(MathAbs(requested-0.07)<0.000001) return 0.07;
+   if(MathAbs(requested-0.08)<0.000001) return 0.08;
    if(MathAbs(requested-0.09)<0.000001) return 0.09;
    return ZERO_GRID_DEFAULT_BASE_LOT;
 }

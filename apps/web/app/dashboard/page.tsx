@@ -192,11 +192,11 @@ function legacyCounterPerSideToTotal(value: unknown) {
   return normalizeCounterTotalPositions(perSide * 2);
 }
 
-const ZERO_GRID_BASE_LOT_OPTIONS = [0.03,0.06,0.09] as const;
+const ZERO_GRID_BASE_LOT_OPTIONS = [0.01,0.02,0.03,0.04,0.05,0.06,0.07,0.08,0.09] as const;
 
 function normalizeZeroGridBaseLot(value:any) {
   const parsed = Number(value);
-  return ZERO_GRID_BASE_LOT_OPTIONS.includes(parsed as 0.03|0.06|0.09) ? parsed : 0.03;
+  return ZERO_GRID_BASE_LOT_OPTIONS.includes(parsed as 0.01|0.02|0.03|0.04|0.05|0.06|0.07|0.08|0.09) ? parsed : 0.03;
 }
 
 const defaultSettings = {
@@ -7125,7 +7125,7 @@ function BotSettingsModal(props:any) {
                   {controlMode==="ZERO_GRID" ? <>
                     <label className="cc-bot-v2-field">{settingHelpLabel("grid-step","ระยะห่างกริด","กำหนดระยะห่างระหว่างแต่ละระดับของกริด","layers")}<select className="input" value={String(selectedZeroGridStep)} onChange={e=>props.onEdit?.("zeroGridStepPrice",Number(e.target.value))}><option value="0.5">0.50</option><option value="1">1.00</option><option value="2">2.00</option><option value="3">3.00</option></select></label>
                     <label className="cc-bot-v2-field">{settingHelpLabel("grid-levels","จำนวนคำสั่งรอต่อฝั่ง","กำหนดจำนวน BUY STOP และ SELL STOP ต่อฝั่ง","layers")}<select className="input" value={String(Math.max(1,Math.min(30,Number(props.settings.zeroGridLevelsPerSide)||10)))} onChange={e=>props.onEdit?.("zeroGridLevelsPerSide",Number(e.target.value))}>{Array.from({length:30},(_,i)=>i+1).map(value=><option key={value} value={value}>{value} ระดับต่อฝั่ง</option>)}</select></label>
-                    <label className="cc-bot-v2-field">{settingHelpLabel("grid-base-lot","Lot เริ่มต้น","กำหนดชุด Lot ตาม Level: 0.03→0.06→0.09, 0.06→0.12→0.18 หรือ 0.09→0.18→0.27","lot")}<select className="input" value={String(selectedZeroBaseLot)} onChange={e=>props.onEdit?.("zeroGridBaseLot",Number(e.target.value))}>{ZERO_GRID_BASE_LOT_OPTIONS.map(v=><option key={v} value={v}>{v.toFixed(2)} Lot · {v.toFixed(2)} / {(v*2).toFixed(2)} / {(v*3).toFixed(2)}…</option>)}</select></label>
+                    <label className="cc-bot-v2-field">{settingHelpLabel("grid-base-lot","Lot เริ่มต้น","กำหนดชุด Lot ตาม Level: 0.03→0.06→0.09, 0.06→0.12→0.18 หรือ 0.09→0.18→0.27","lot")}<select className="input" value={String(selectedZeroBaseLot)} onChange={e=>props.onEdit?.("zeroGridBaseLot",Number(e.target.value))}>{ZERO_GRID_BASE_LOT_OPTIONS.map(v=><option key={v} value={v}>Lot {v.toFixed(2)}</option>)}</select></label>
                     <label className="cc-bot-v2-field">{settingHelpLabel("grid-profit","เป้ากำไรสุทธิ","กำไรรวมถึงยอดนี้ EA จะปิดทั้งรอบ","profit")}<MoneyInput value={props.settings.zeroGridMinNetProfitMoney || 0.5} currency={accountCurrency} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.("zeroGridMinNetProfitMoney",v)}/></label>
                   </> : controlMode==="COUNTER" ? <>
                     <label className="cc-bot-v2-field">{settingHelpLabel("lot-per-order","Lot ต่อไม้","กำหนดขนาด Lot ของแต่ละออเดอร์","lot")}<select className="input cc-bot-v19-two-thirds-control" value={String(activeLot)} onChange={e=>editModeSizing("lot",e.target.value)}>{[0.01,0.02,0.03,0.05,0.1,0.2,0.3,0.5,1].map(v=><option key={v} value={v}>{Number(v).toFixed(2)} Lot</option>)}</select></label>

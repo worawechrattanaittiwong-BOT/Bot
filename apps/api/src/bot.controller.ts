@@ -3350,7 +3350,7 @@ export class BotController {
           )
         );
         const requestedBaseLotRaw = Number(savedSettings.zeroGridBaseLot ?? 0.03);
-        const requestedBaseLot = [0.03, 0.06, 0.09].includes(requestedBaseLotRaw) ? requestedBaseLotRaw : 0.03;
+        const requestedBaseLot = [0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09].includes(requestedBaseLotRaw) ? requestedBaseLotRaw : 0.03;
         const appliedLevels = Number(metrics.zeroGridConfiguredLevelsPerSide);
         const appliedBaseLot = Number(metrics.zeroGridConfiguredBaseLot);
         const appliedMax = Number(metrics.zeroGridMaxLevelsPerSide);
@@ -3694,8 +3694,8 @@ export class BotController {
     numberSetting("zeroGridLevelsPerSide", 1, 30, true);
     if (body.zeroGridBaseLot !== undefined) {
       const zeroGridBaseLot = Number(body.zeroGridBaseLot);
-      if (![0.03, 0.06, 0.09].includes(zeroGridBaseLot)) {
-        throw new BadRequestException("ZERO GRID Lot เริ่มต้นต้องเป็น 0.03, 0.06 หรือ 0.09 เท่านั้น");
+      if (![0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09].includes(zeroGridBaseLot)) {
+        throw new BadRequestException("ZERO GRID Lot เริ่มต้นต้องเป็น 0.01 ถึง 0.09 เท่านั้น");
       }
       clean.zeroGridBaseLot = zeroGridBaseLot;
     }
@@ -3978,7 +3978,7 @@ export class BotController {
       const zeroGridStepPrice = Number(clean.zeroGridStepPrice);
       clean.zeroGridStepPrice = [0.5, 1, 2, 3].includes(zeroGridStepPrice) ? zeroGridStepPrice : 3;
       const zeroGridBaseLot = Number(clean.zeroGridBaseLot);
-      clean.zeroGridBaseLot = [0.03, 0.06, 0.09].includes(zeroGridBaseLot) ? zeroGridBaseLot : 0.03;
+      clean.zeroGridBaseLot = [0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09].includes(zeroGridBaseLot) ? zeroGridBaseLot : 0.03;
       if (body.zeroGridMinNetProfitMoney === undefined) clean.zeroGridMinNetProfitMoney = 0.5;
       // ZERO closes exactly at zeroGridMinNetProfitMoney. Keep legacy reserve
       // field normalized to zero so old clients cannot add a hidden buffer.
