@@ -19,17 +19,17 @@ type ApiStyle =
 export class AiProviderService {
   private config(settings: AiAssistantSettings) {
     const apiKey = String(process.env.SCENOVA_AI_API_KEY || "").trim();
-    const baseUrl = String(process.env.SCENOVA_AI_BASE_URL || "").trim().replace(/\/+$/, "");
+    const baseUrl = String(process.env.SCENOVA_AI_BASE_URL || "https://api.inceptionlabs.ai/v1").trim().replace(/\/+$/, "");
     const apiStyle = String(process.env.SCENOVA_AI_API_STYLE || "OPENAI_COMPATIBLE_CHAT")
       .trim()
       .toUpperCase() as ApiStyle;
     const configuredProvider = String(settings.provider || "").trim().toUpperCase();
     const provider = String(
       (!configuredProvider || configuredProvider === "CUSTOM")
-        ? process.env.SCENOVA_AI_PROVIDER || configuredProvider || "CUSTOM"
+        ? process.env.SCENOVA_AI_PROVIDER || configuredProvider || "INCEPTION"
         : configuredProvider
     ).trim().toUpperCase();
-    const model = String(settings.model || process.env.SCENOVA_AI_MODEL || "").trim();
+    const model = String(settings.model || process.env.SCENOVA_AI_MODEL || "mercury-2.5").trim();
     return { apiKey, baseUrl, apiStyle, provider, model };
   }
 

@@ -13,8 +13,8 @@ export class AiStoreService {
     );
     return {
       enabled: row?.enabled !== false,
-      provider: String(row?.provider || "CUSTOM").toUpperCase(),
-      model: String(row?.model || ""),
+      provider: String(row?.provider || "INCEPTION").toUpperCase(),
+      model: String(row?.model || "mercury-2.5"),
       dailyMessageLimit: Math.max(1, Number(row?.daily_message_limit || 30)),
       maxHistoryMessages: Math.max(2, Number(row?.max_history_messages || 12)),
       maxOutputTokens: Math.max(128, Number(row?.max_output_tokens || 700)),

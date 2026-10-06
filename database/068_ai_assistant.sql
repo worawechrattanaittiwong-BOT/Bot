@@ -1,8 +1,8 @@
 CREATE TABLE IF NOT EXISTS ai_assistant_settings (
   id smallint PRIMARY KEY CHECK (id = 1),
   enabled boolean NOT NULL DEFAULT true,
-  provider varchar(32) NOT NULL DEFAULT 'CUSTOM',
-  model varchar(120) NOT NULL DEFAULT '',
+  provider varchar(32) NOT NULL DEFAULT 'INCEPTION',
+  model varchar(120) NOT NULL DEFAULT 'mercury-2.5',
   daily_message_limit integer NOT NULL DEFAULT 30 CHECK (daily_message_limit BETWEEN 1 AND 1000),
   max_history_messages integer NOT NULL DEFAULT 12 CHECK (max_history_messages BETWEEN 2 AND 40),
   max_output_tokens integer NOT NULL DEFAULT 700 CHECK (max_output_tokens BETWEEN 128 AND 4000),
