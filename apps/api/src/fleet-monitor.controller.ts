@@ -9,6 +9,7 @@ import {
 } from "@nestjs/common";
 import { DbService } from "./db.service";
 import { JwtGuard } from "./security";
+import { reconstructCompletedJournal } from "./performance-journal";
 
 type FleetActor = {
   sub: string;
@@ -58,11 +59,7 @@ export class FleetMonitorController {
       [actor.sub]
     );
 
-    const params = [
-      actor.sub,
-      fromAt ? fromAt.toISOString() : null,
-      toAt ? toAt.toISOString() : null
-    ];
+    const params = [actor.sub];
     const customerSlotScope = elevated ? "" : "AND ls.assigned_user_id=$1";
     const instanceOwnershipGuard = elevated
       ? ""
@@ -78,124 +75,7 @@ export class FleetMonitorController {
     const accountOwnershipGuard = elevated ? "" : "AND a.user_id=$1";
 
     const result = await this.db.query(
-      `WITH request_range AS (
-         SELECT
-           $1::uuid AS actor_id,
-           $2::timestamptz AS from_at,
-           $3::timestamptz AS to_at
-       ),
-       basket_stats AS (
-         SELECT
-           tj.mt5_account_id,
-           COUNT(*)::int AS closed_baskets,
-           COUNT(*) FILTER (WHERE tj.net_profit>0)::int AS wins,
-           COUNT(*) FILTER (WHERE tj.net_profit<0)::int AS losses,
-           COALESCE(SUM(tj.net_profit),0)::float8 AS net_profit,
-           COALESCE(SUM(tj.net_profit) FILTER (WHERE tj.net_profit>0),0)::float8 AS gross_profit,
-           ABS(COALESCE(SUM(tj.net_profit) FILTER (WHERE tj.net_profit<0),0))::float8 AS gross_loss,
-           COALESCE(AVG(tj.net_profit) FILTER (WHERE tj.net_profit>0),0)::float8 AS average_win,
-           COALESCE(AVG(tj.net_profit) FILTER (WHERE tj.net_profit<0),0)::float8 AS average_loss,
-           COUNT(*) FILTER (
-             WHERE tj.created_at >= (
-               date_trunc('day',now() AT TIME ZONE 'Asia/Bangkok')
-               AT TIME ZONE 'Asia/Bangkok'
-             )
-           )::int AS today_baskets,
-           COUNT(*) FILTER (
-             WHERE tj.net_profit>0
-               AND tj.created_at >= (
-                 date_trunc('day',now() AT TIME ZONE 'Asia/Bangkok')
-                 AT TIME ZONE 'Asia/Bangkok'
-               )
-           )::int AS today_wins,
-           COUNT(*) FILTER (
-             WHERE tj.net_profit<0
-               AND tj.created_at >= (
-                 date_trunc('day',now() AT TIME ZONE 'Asia/Bangkok')
-                 AT TIME ZONE 'Asia/Bangkok'
-               )
-           )::int AS today_losses,
-           COALESCE(SUM(tj.net_profit) FILTER (
-             WHERE tj.created_at >= (
-               date_trunc('day',now() AT TIME ZONE 'Asia/Bangkok')
-               AT TIME ZONE 'Asia/Bangkok'
-             )
-           ),0)::float8 AS today_net_profit,
-           COUNT(*) FILTER (WHERE tj.created_at>=now()-interval '30 days')::int AS baskets_30d,
-           COALESCE(SUM(tj.net_profit) FILTER (WHERE tj.created_at>=now()-interval '30 days'),0)::float8 AS net_profit_30d,
-           MAX(tj.created_at) AS latest_basket_at
-         FROM trade_journal tj
-         WHERE tj.event_type='BASKET'
-           AND tj.mt5_account_id IS NOT NULL
-           AND ((SELECT from_at FROM request_range) IS NULL OR tj.created_at >= (SELECT from_at FROM request_range))
-           AND ((SELECT to_at FROM request_range) IS NULL OR tj.created_at <= (SELECT to_at FROM request_range))
-         GROUP BY tj.mt5_account_id
-       ),
-       entry_stats AS (
-         SELECT
-           tj.mt5_account_id,
-           COUNT(*)::int AS entries,
-           COALESCE(SUM(tj.volume),0)::float8 AS total_entry_lots,
-           COUNT(*) FILTER (
-             WHERE tj.created_at >= (
-               date_trunc('day',now() AT TIME ZONE 'Asia/Bangkok')
-               AT TIME ZONE 'Asia/Bangkok'
-             )
-           )::int AS entries_today,
-           MAX(tj.created_at) AS latest_entry_at
-         FROM trade_journal tj
-         WHERE tj.event_type='ENTRY'
-           AND tj.mt5_account_id IS NOT NULL
-           AND ((SELECT from_at FROM request_range) IS NULL OR tj.created_at >= (SELECT from_at FROM request_range))
-           AND ((SELECT to_at FROM request_range) IS NULL OR tj.created_at <= (SELECT to_at FROM request_range))
-         GROUP BY tj.mt5_account_id
-       ),
-       curve AS (
-         SELECT
-           tj.mt5_account_id,
-           tj.id,
-           tj.created_at,
-           SUM(tj.net_profit::float8) OVER (
-             PARTITION BY tj.mt5_account_id
-             ORDER BY tj.created_at,tj.id
-             ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-           ) AS cumulative_net
-         FROM trade_journal tj
-         WHERE tj.event_type='BASKET'
-           AND tj.mt5_account_id IS NOT NULL
-           AND ((SELECT from_at FROM request_range) IS NULL OR tj.created_at >= (SELECT from_at FROM request_range))
-           AND ((SELECT to_at FROM request_range) IS NULL OR tj.created_at <= (SELECT to_at FROM request_range))
-       ),
-       curve_peak AS (
-         SELECT
-           c.*,
-           MAX(c.cumulative_net) OVER (
-             PARTITION BY c.mt5_account_id
-             ORDER BY c.created_at,c.id
-             ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-           ) AS peak_cumulative
-         FROM curve c
-       ),
-       drawdown_ranked AS (
-         SELECT
-           cp.mt5_account_id,
-           GREATEST(0,cp.peak_cumulative-cp.cumulative_net)::float8 AS drawdown_money,
-           cp.peak_cumulative::float8 AS peak_cumulative,
-           ROW_NUMBER() OVER (
-             PARTITION BY cp.mt5_account_id
-             ORDER BY
-               (cp.peak_cumulative-cp.cumulative_net) DESC,
-               cp.created_at DESC,
-               cp.id DESC
-           ) AS rn
-         FROM curve_peak cp
-       ),
-       drawdown AS (
-         SELECT mt5_account_id,drawdown_money,peak_cumulative
-         FROM drawdown_ranked
-         WHERE rn=1
-       )
-       SELECT
+      `SELECT
          ls.id AS slot_id,
          ls.slot_number,
          ls.label AS slot_label,
@@ -228,28 +108,7 @@ export class FleetMonitorController {
          a.mode AS account_mode,
          a.status AS account_status,
          account_user.user_code AS account_user_code,
-         account_user.email AS account_user_email,
-         COALESCE(bs.closed_baskets,0)::int AS closed_baskets,
-         COALESCE(bs.wins,0)::int AS wins,
-         COALESCE(bs.losses,0)::int AS losses,
-         COALESCE(bs.net_profit,0)::float8 AS net_profit,
-         COALESCE(bs.gross_profit,0)::float8 AS gross_profit,
-         COALESCE(bs.gross_loss,0)::float8 AS gross_loss,
-         COALESCE(bs.average_win,0)::float8 AS average_win,
-         COALESCE(bs.average_loss,0)::float8 AS average_loss,
-         COALESCE(bs.today_baskets,0)::int AS today_baskets,
-         COALESCE(bs.today_wins,0)::int AS today_wins,
-         COALESCE(bs.today_losses,0)::int AS today_losses,
-         COALESCE(bs.today_net_profit,0)::float8 AS today_net_profit,
-         COALESCE(bs.baskets_30d,0)::int AS baskets_30d,
-         COALESCE(bs.net_profit_30d,0)::float8 AS net_profit_30d,
-         bs.latest_basket_at,
-         COALESCE(es.entries,0)::int AS entries,
-         COALESCE(es.total_entry_lots,0)::float8 AS total_entry_lots,
-         COALESCE(es.entries_today,0)::int AS entries_today,
-         es.latest_entry_at,
-         COALESCE(dd.drawdown_money,0)::float8 AS max_drawdown_money,
-         COALESCE(dd.peak_cumulative,0)::float8 AS drawdown_peak_cumulative
+         account_user.email AS account_user_email
        FROM license_slots ls
        JOIN users ou ON ou.id=ls.owner_user_id
        LEFT JOIN users au ON au.id=ls.assigned_user_id
@@ -266,9 +125,6 @@ export class FleetMonitorController {
        LEFT JOIN worker_nodes wn ON wn.runner_id=bi.runner_id
        JOIN mt5_accounts a ON a.id=bi.mt5_account_id AND a.status='ACTIVE' ${accountOwnershipGuard}
        LEFT JOIN users account_user ON account_user.id=a.user_id
-       LEFT JOIN basket_stats bs ON bs.mt5_account_id=a.id
-       LEFT JOIN entry_stats es ON es.mt5_account_id=a.id
-       LEFT JOIN drawdown dd ON dd.mt5_account_id=a.id
        WHERE ls.status<>'DELETED'
          ${customerSlotScope}
        ORDER BY
@@ -279,29 +135,205 @@ export class FleetMonitorController {
       params
     );
 
+    // PERFORMANCE_ACTUAL_DEALS_V1: Fleet Monitor uses the same canonical
+    // ENTRY/EXIT reconstruction as Performance Analytics. Raw legacy BASKET
+    // rows are not authoritative and may be absent entirely.
+    const accountIds = Array.from(new Set(
+      (result.rows || [])
+        .map((row: any) => String(row.account_id || "").trim())
+        .filter(Boolean)
+    ));
+    const journalResult = accountIds.length
+      ? await this.db.query(
+          `WITH journal_source AS (
+             SELECT
+               tj.mt5_account_id,
+               tj.id,
+               tj.deal_ticket,
+               tj.position_id,
+               tj.event_type,
+               tj.direction,
+               tj.volume::float8,
+               tj.price::float8,
+               tj.net_profit::float8,
+               tj.entry_model,
+               tj.entry_trigger,
+               tj.entry_quality_score::float8,
+               tj.confidence::float8,
+               tj.created_at,
+               tj.metadata,
+               COALESCE(
+                 CASE
+                   WHEN (tj.metadata->>'dealTimeMsc') ~ '^[0-9]+$'
+                     AND (tj.metadata->>'dealTimeMsc')::numeric > 0
+                   THEN to_timestamp(
+                     (tj.metadata->>'dealTimeMsc')::double precision / 1000.0 -
+                     CASE
+                       WHEN (tj.metadata->>'brokerUtcOffsetSeconds') ~ '^-?[0-9]+$'
+                       THEN (tj.metadata->>'brokerUtcOffsetSeconds')::double precision
+                       ELSE 0
+                     END
+                   )
+                   WHEN (tj.metadata->>'dealTime') ~ '^[0-9]+$'
+                     AND (tj.metadata->>'dealTime')::numeric > 0
+                   THEN to_timestamp(
+                     (tj.metadata->>'dealTime')::double precision -
+                     CASE
+                       WHEN (tj.metadata->>'brokerUtcOffsetSeconds') ~ '^-?[0-9]+$'
+                       THEN (tj.metadata->>'brokerUtcOffsetSeconds')::double precision
+                       ELSE 0
+                     END
+                   )
+                   ELSE NULL
+                 END,
+                 tj.created_at
+               ) AS event_at
+             FROM trade_journal tj
+             WHERE tj.mt5_account_id=ANY($1::uuid[])
+               AND tj.event_type IN ('ENTRY','EXIT')
+           )
+           SELECT *
+           FROM journal_source
+           WHERE ($2::timestamptz IS NULL OR event_at >= $2::timestamptz)
+             AND ($3::timestamptz IS NULL OR event_at <= $3::timestamptz)
+           ORDER BY mt5_account_id,event_at ASC,created_at ASC,id ASC`,
+          [
+            accountIds,
+            fromAt ? fromAt.toISOString() : null,
+            toAt ? toAt.toISOString() : null
+          ]
+        )
+      : { rows: [] as any[] };
+
+    const journalRowsByAccount = new Map<string, any[]>();
+    for (const row of journalResult.rows || []) {
+      const accountId = String(row.mt5_account_id || "");
+      const rows = journalRowsByAccount.get(accountId) || [];
+      rows.push(row);
+      journalRowsByAccount.set(accountId, rows);
+    }
+
     const now = Date.now();
+    const bangkokDayKey = new Date(
+      now + 7 * 60 * 60 * 1000
+    ).toISOString().slice(0, 10);
+    const bangkokDayStartMs = new Date(
+      bangkokDayKey + "T00:00:00.000+07:00"
+    ).getTime();
+    const trailing30dStartMs = now - 30 * 24 * 60 * 60 * 1000;
+    const eventTimeMs = (row: any) =>
+      new Date(row?.event_at || row?.created_at || 0).getTime();
+
+    const journalStatsByAccount = new Map<string, any>();
+    for (const accountId of accountIds) {
+      const accountRows = journalRowsByAccount.get(accountId) || [];
+      const reconstructed = reconstructCompletedJournal(accountRows);
+      const baskets = reconstructed.baskets;
+      const positions = reconstructed.positions;
+      const entries = accountRows.filter(
+        (row: any) => String(row.event_type || "").toUpperCase() === "ENTRY"
+      );
+      const netValues = accountRows.map(
+        (row: any) => this.number(row.net_profit)
+      );
+      const positiveDeals = netValues.filter((value: number) => value > 0);
+      const negativeDeals = netValues.filter((value: number) => value < 0);
+      const grossProfit = positiveDeals.reduce(
+        (sum: number, value: number) => sum + value, 0
+      );
+      const grossLoss = Math.abs(negativeDeals.reduce(
+        (sum: number, value: number) => sum + value, 0
+      ));
+      const todayBaskets = baskets.filter(
+        (basket: any) => new Date(basket.created_at).getTime() >= bangkokDayStartMs
+      );
+      const baskets30d = baskets.filter(
+        (basket: any) => new Date(basket.created_at).getTime() >= trailing30dStartMs
+      );
+      const todayRows = accountRows.filter(
+        (row: any) => eventTimeMs(row) >= bangkokDayStartMs
+      );
+      const rows30d = accountRows.filter(
+        (row: any) => eventTimeMs(row) >= trailing30dStartMs
+      );
+      const entriesToday = entries.filter(
+        (row: any) => eventTimeMs(row) >= bangkokDayStartMs
+      );
+
+      journalStatsByAccount.set(accountId, {
+        closedBaskets: baskets.length,
+        wins: baskets.filter((basket: any) => this.number(basket.net_profit) > 0).length,
+        losses: baskets.filter((basket: any) => this.number(basket.net_profit) < 0).length,
+        netProfit: netValues.reduce(
+          (sum: number, value: number) => sum + value, 0
+        ),
+        grossProfit,
+        grossLoss,
+        averageWin: positiveDeals.length
+          ? grossProfit / positiveDeals.length
+          : 0,
+        averageLoss: negativeDeals.length
+          ? -grossLoss / negativeDeals.length
+          : 0,
+        todayBaskets: todayBaskets.length,
+        todayWins: todayBaskets.filter(
+          (basket: any) => this.number(basket.net_profit) > 0
+        ).length,
+        todayLosses: todayBaskets.filter(
+          (basket: any) => this.number(basket.net_profit) < 0
+        ).length,
+        todayNetProfit: todayRows.reduce(
+          (sum: number, row: any) => sum + this.number(row.net_profit), 0
+        ),
+        baskets30d: baskets30d.length,
+        netProfit30d: rows30d.reduce(
+          (sum: number, row: any) => sum + this.number(row.net_profit), 0
+        ),
+        entries: entries.length,
+        entriesToday: entriesToday.length,
+        totalEntryLots: entries.reduce(
+          (sum: number, row: any) => sum + Math.max(0, this.number(row.volume)), 0
+        ),
+        latestBasketAt: baskets.length
+          ? baskets[baskets.length - 1].created_at
+          : null,
+        latestEntryAt: entries.length
+          ? entries[entries.length - 1].event_at || entries[entries.length - 1].created_at
+          : null,
+        positionProfits: positions.map(
+          (position: any) => this.number(position.net_profit)
+        )
+      });
+    }
+
     const slots = (result.rows || []).map((row: any) => {
       const metrics = row.metrics || {};
+      const journal = journalStatsByAccount.get(String(row.account_id || "")) || {};
       const balance = this.number(metrics.balance);
       const equity = this.number(metrics.equity, balance);
-      const netProfit = this.number(row.net_profit);
-      const grossProfit = this.number(row.gross_profit);
-      const grossLoss = this.number(row.gross_loss);
-      const closedBaskets = Math.max(0, this.number(row.closed_baskets));
-      const wins = Math.max(0, this.number(row.wins));
-      const losses = Math.max(0, this.number(row.losses));
+      const netProfit = this.number(journal.netProfit);
+      const grossProfit = this.number(journal.grossProfit);
+      const grossLoss = this.number(journal.grossLoss);
+      const closedBaskets = Math.max(0, this.number(journal.closedBaskets));
+      const wins = Math.max(0, this.number(journal.wins));
+      const losses = Math.max(0, this.number(journal.losses));
       const derivedStartCapital = balance > 0
         ? balance - netProfit
         : 0;
-      const maxDrawdownMoney = Math.max(0, this.number(row.max_drawdown_money));
-      const peakBalanceAtMaxDrawdown =
-        derivedStartCapital > 0
-          ? derivedStartCapital + this.number(row.drawdown_peak_cumulative)
+      let curveBalance = derivedStartCapital;
+      let curvePeak = curveBalance;
+      let maxDrawdownMoney = 0;
+      let maxDrawdownPercent = 0;
+      for (const positionProfit of journal.positionProfits || []) {
+        curveBalance += this.number(positionProfit);
+        curvePeak = Math.max(curvePeak, curveBalance);
+        const drawdownMoney = Math.max(0, curvePeak - curveBalance);
+        const drawdownPercent = curvePeak > 0
+          ? drawdownMoney / curvePeak * 100
           : 0;
-      const maxDrawdownPercent =
-        peakBalanceAtMaxDrawdown > 0
-          ? maxDrawdownMoney / peakBalanceAtMaxDrawdown * 100
-          : 0;
+        maxDrawdownMoney = Math.max(maxDrawdownMoney, drawdownMoney);
+        maxDrawdownPercent = Math.max(maxDrawdownPercent, drawdownPercent);
+      }
       const heartbeatAgeSeconds = row.last_seen_at
         ? Math.max(0, (now - new Date(row.last_seen_at).getTime()) / 1000)
         : null;
@@ -316,7 +348,7 @@ export class FleetMonitorController {
       const reportedTodayClosed = Number(metrics.botTodayClosedProfit);
       const todayClosedProfit = Number.isFinite(reportedTodayClosed)
         ? reportedTodayClosed
-        : this.number(row.today_net_profit);
+        : this.number(journal.todayNetProfit);
       const profitFactor = grossLoss > 0
         ? grossProfit / grossLoss
         : grossProfit > 0 ? 999 : 0;
@@ -384,13 +416,13 @@ export class FleetMonitorController {
           equity,
           floatingProfit,
           todayClosedProfit,
-          todayNetProfitJournal: this.number(row.today_net_profit),
+          todayNetProfitJournal: this.number(journal.todayNetProfit),
           netProfit,
-          netProfit30d: this.number(row.net_profit_30d),
+          netProfit30d: this.number(journal.netProfit30d),
           grossProfit,
           grossLoss,
-          averageWin: this.number(row.average_win),
-          averageLoss: this.number(row.average_loss),
+          averageWin: this.number(journal.averageWin),
+          averageLoss: this.number(journal.averageLoss),
           derivedStartCapital,
           returnPercent,
           maxDrawdownMoney,
@@ -402,15 +434,15 @@ export class FleetMonitorController {
           losses,
           winRate,
           profitFactor,
-          todayBaskets: Math.max(0, this.number(row.today_baskets)),
-          todayWins: Math.max(0, this.number(row.today_wins)),
-          todayLosses: Math.max(0, this.number(row.today_losses)),
-          baskets30d: Math.max(0, this.number(row.baskets_30d)),
-          entries: Math.max(0, this.number(row.entries)),
-          entriesToday: Math.max(0, this.number(row.entries_today)),
-          totalEntryLots: Math.max(0, this.number(row.total_entry_lots)),
-          latestBasketAt: row.latest_basket_at || null,
-          latestEntryAt: row.latest_entry_at || null
+          todayBaskets: Math.max(0, this.number(journal.todayBaskets)),
+          todayWins: Math.max(0, this.number(journal.todayWins)),
+          todayLosses: Math.max(0, this.number(journal.todayLosses)),
+          baskets30d: Math.max(0, this.number(journal.baskets30d)),
+          entries: Math.max(0, this.number(journal.entries)),
+          entriesToday: Math.max(0, this.number(journal.entriesToday)),
+          totalEntryLots: Math.max(0, this.number(journal.totalEntryLots)),
+          latestBasketAt: journal.latestBasketAt || null,
+          latestEntryAt: journal.latestEntryAt || null
         }
       };
     });
@@ -492,7 +524,7 @@ export class FleetMonitorController {
       },
       source: {
         live: "bot_instances.metrics / EA heartbeat",
-        performance: "trade_journal",
+        performance: "trade_journal ENTRY/EXIT + reconstructCompletedJournal",
         fundingHistory: "NOT_REPORTED_BY_CURRENT_EA"
       },
       summary: {

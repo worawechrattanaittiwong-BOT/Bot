@@ -436,10 +436,10 @@ export default function FleetMonitorPage() {
         <section className={styles.summaryGrid}>
           <div><span>บัญชีที่เชื่อมต่อ</span><b>{data.summary.connectedAccounts}</b><small>{data.summary.online} Online · {data.summary.offline} Offline</small></div>
           <div><span>กำลัง RUNNING</span><b className={styles.good}>{data.summary.running}</b><small>{data.summary.online} Online</small></div>
-          <div><span>Offline</span><b className={styles.bad}>{data.summary.offline}</b><small>{data.summary.stopped} Stopped / Safe Stop</small></div>
+          <div><span>Stopped / Offline</span><b className={data.summary.offline > 0 ? styles.bad : styles.warn}>{data.summary.stopped + data.summary.offline}</b><small>{data.summary.stopped} Stopped · {data.summary.offline} Offline</small></div>
           <div><span>Win Rate · {selectedRangeLabel}</span><b>{percent(data.summary.winRate)}</b><small>{data.summary.totalClosedBaskets.toLocaleString("en-US")} baskets</small></div>
           <div><span>Max Drawdown · {selectedRangeLabel}</span><b className={styles.warn}>{percent(data.summary.highestMaxDrawdownPercent)}</b><small>จาก Trade Journal</small></div>
-          <div><span>Open Positions · Live</span><b>{data.summary.totalPositions}</b><small>{data.summary.totalPendingOrders} Pending</small></div>
+          <div><span>Open Positions · Live</span><b>{data.summary.totalPositions}</b><small>SCENOVA ทั้งบัญชี · {data.summary.totalPendingOrders} Pending</small></div>
           <div><span>{primaryCurrency ? primaryCurrency.currency + " Balance · Live" : "Balance · Live"}</span><b>{primaryCurrency ? money(primaryCurrency.balance, primaryCurrency.currency) : "—"}</b><small>{data.summary.currencyTotals.length} currency · ไม่รวมข้ามสกุล</small></div>
           <div><span>{primaryCurrency ? primaryCurrency.currency + " P/L · " + selectedRangeLabel : "P/L · " + selectedRangeLabel}</span><b className={num(primaryCurrency?.netProfit) >= 0 ? styles.good : styles.bad}>{primaryCurrency ? money(primaryCurrency.netProfit, primaryCurrency.currency, true) : "—"}</b><small>Trade Journal ตามช่วงที่เลือก</small></div>
         </section>
@@ -611,7 +611,7 @@ export default function FleetMonitorPage() {
           <ScenovaIcon name="shield" size={14}/>
           <span>
             หน้านี้แสดงเฉพาะบัญชี MT5 ที่ยัง ACTIVE และยังผูกกับระบบอยู่ · Balance, Equity, Floating, Position, Spread และ Ping เป็นค่า Live ปัจจุบัน ·
-            P/L, Win Rate, Baskets, Entries และ Drawdown ใช้ช่วงวัน/เวลาที่เลือกจาก Trade Journal · ระบบยังไม่แสดง Deposit/Withdraw เพราะ EA ปัจจุบันไม่ได้ส่ง Funding History
+            P/L และ Entries ใช้ ENTRY/EXIT จริงจาก Trade Journal · Win Rate, Baskets และ Drawdown reconstruct จากดีลจริงด้วย logic เดียวกับ Performance · Position/Pending เป็นยอด SCENOVA Magic ทั้งบัญชีทุก Symbol · ระบบยังไม่แสดง Deposit/Withdraw เพราะ EA ปัจจุบันไม่ได้ส่ง Funding History
           </span>
         </div>
       </main>

@@ -26,6 +26,9 @@ foreach ($required in @(
   'AND a.user_id=$1',
   'own_account.user_id=$1',
   'trade_journal',
+  'PERFORMANCE_ACTUAL_DEALS_V1',
+  "event_type IN ('ENTRY','EXIT')",
+  'reconstructCompletedJournal(accountRows)',
   'bot_instances.metrics / EA heartbeat',
   'NOT_REPORTED_BY_CURRENT_EA'
 )) {
@@ -38,6 +41,10 @@ foreach ($forbidden in @('@Post(', '@Put(', '@Delete(', 'INSERT INTO', 'UPDATE '
   if ($api.Contains($forbidden)) {
     throw "Fleet monitor API must remain read-only: $forbidden"
   }
+}
+
+if ($api.Contains("event_type='BASKET'")) {
+  throw 'Fleet Monitor performance must not depend on raw BASKET journal rows'
 }
 
 if (-not $module.Contains('FleetMonitorController')) {
