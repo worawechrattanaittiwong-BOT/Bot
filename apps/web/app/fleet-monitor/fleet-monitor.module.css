@@ -60,7 +60,7 @@
   gap:8px;
   flex-wrap:wrap;
 }
-.scopeBadge,.refreshState,.headActions button{
+.scopeBadge,.refreshState,.headActions button,.accountTypePicker{
   min-height:34px;
   border-radius:9px;
   display:inline-flex;
@@ -68,6 +68,26 @@
   gap:7px;
   font-size:var(--ui-type-caption);
   font-weight:850;
+}
+.accountTypePicker{
+  padding:0 4px 0 10px;
+  border:1px solid #315974;
+  background:linear-gradient(145deg,rgba(21,50,73,.9),rgba(9,22,39,.92));
+  color:#9dd7ff;
+}
+.accountTypePicker select{
+  height:30px;
+  border:0;
+  outline:0;
+  background:transparent;
+  color:#d9efff;
+  font:inherit;
+  font-weight:850;
+  cursor:pointer;
+}
+.accountTypePicker select option{
+  background:#0a1323;
+  color:#eaf5ff;
 }
 .scopeBadge{
   padding:0 10px;
@@ -553,7 +573,9 @@
   .periodApplied{white-space:normal}
   .pageHead h1{font-size:23px}
   .headActions .refreshState{display:none}
-  .scopeBadge{max-width:100%}
+  .scopeBadge,.accountTypePicker{max-width:100%}
+  .accountTypePicker{flex:1 1 170px}
+  .accountTypePicker select{flex:1;min-width:0}
   .summaryGrid{gap:6px}
   .summaryGrid>div{min-height:70px;padding:9px}
   .summaryGrid b{font-size:16px}

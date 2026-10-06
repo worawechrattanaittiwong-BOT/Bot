@@ -45,12 +45,17 @@ export class FleetMonitorController {
   async overview(
     @Req() req: any,
     @Query("from") fromRaw = "",
-    @Query("to") toRaw = ""
+    @Query("to") toRaw = "",
+    @Query("accountType") accountTypeRaw = "ALL"
   ) {
     const actor = req.user as FleetActor;
     const elevated = this.elevated(actor);
     const fromAt = this.dateParam(fromRaw, "เวลาเริ่มต้น");
     const toAt = this.dateParam(toRaw, "เวลาสิ้นสุด");
+    const accountType = String(accountTypeRaw || "ALL").trim().toUpperCase();
+    if (!["ALL", "REAL", "DEMO"].includes(accountType)) {
+      throw new BadRequestException("ประเภทบัญชีต้องเป็น ALL, REAL หรือ DEMO");
+    }
     if (fromAt && toAt && fromAt.getTime() >= toAt.getTime()) {
       throw new BadRequestException("เวลาสิ้นสุดต้องอยู่หลังเวลาเริ่มต้น");
     }
@@ -107,6 +112,13 @@ export class FleetMonitorController {
          a.broker_server,
          a.mode AS account_mode,
          a.status AS account_status,
+         CASE
+           WHEN COALESCE(bi.metrics->>'accountTradeMode','') IN ('0','1') THEN 'DEMO'
+           WHEN COALESCE(bi.metrics->>'accountTradeMode','')='2' THEN 'REAL'
+           WHEN LOWER(COALESCE(a.broker,'') || ' ' || COALESCE(a.broker_server,''))
+                ~ '(demo|practice|trial|contest)' THEN 'DEMO'
+           ELSE 'REAL'
+         END AS account_type,
          account_user.user_code AS account_user_code,
          account_user.email AS account_user_email
        FROM license_slots ls
@@ -135,11 +147,17 @@ export class FleetMonitorController {
       params
     );
 
+    const scopedRows = (result.rows || []).filter(
+      (row: any) =>
+        accountType === "ALL" ||
+        String(row.account_type || "REAL").toUpperCase() === accountType
+    );
+
     // PERFORMANCE_ACTUAL_DEALS_V1: Fleet Monitor uses the same canonical
     // ENTRY/EXIT reconstruction as Performance Analytics. Raw legacy BASKET
     // rows are not authoritative and may be absent entirely.
     const accountIds = Array.from(new Set(
-      (result.rows || [])
+      scopedRows
         .map((row: any) => String(row.account_id || "").trim())
         .filter(Boolean)
     ));
@@ -306,7 +324,7 @@ export class FleetMonitorController {
       });
     }
 
-    const slots = (result.rows || []).map((row: any) => {
+    const slots = scopedRows.map((row: any) => {
       const metrics = row.metrics || {};
       const journal = journalStatsByAccount.get(String(row.account_id || "")) || {};
       const balance = this.number(metrics.balance);
@@ -380,6 +398,7 @@ export class FleetMonitorController {
           number: row.account_number || null,
           broker: row.broker || null,
           server: row.broker_server || null,
+          accountType: String(row.account_type || "REAL"),
           mode: row.account_mode || row.instance_mode || row.slot_mode || null,
           status: row.account_status || null
         } : null,
@@ -516,6 +535,7 @@ export class FleetMonitorController {
       user: self,
       elevated,
       scope: elevated ? "ALL_SLOTS" : "OWN_ASSIGNED_SLOTS",
+      accountTypeFilter: accountType,
       generatedAt: new Date().toISOString(),
       period: {
         from: fromAt ? fromAt.toISOString() : null,

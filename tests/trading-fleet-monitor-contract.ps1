@@ -17,6 +17,11 @@ foreach ($required in @(
   '@Get()',
   '@Query("from")',
   '@Query("to")',
+  '@Query("accountType")',
+  'accountTypeFilter: accountType',
+  "accountType === \"ALL\"",
+  '["ALL", "REAL", "DEMO"].includes(accountType)',
+  'String(row.account_type || "REAL").toUpperCase() === accountType',
   "a.status='ACTIVE'",
   'JOIN mt5_accounts a ON a.id=bi.mt5_account_id',
   'OWN_ASSIGNED_SLOTS',
@@ -52,7 +57,10 @@ if (-not $module.Contains('FleetMonitorController')) {
 }
 
 foreach ($required in @(
-  'api("/fleet-monitor" + fleetPeriodQuery(rangeMode, customFrom, customTo))',
+  'fleetPeriodQuery(rangeMode, customFrom, customTo, accountTypeFilter)',
+  'ทุกบัญชี',
+  'บัญชีจริง',
+  'บัญชีเดโม',
   'Trading Fleet Monitor',
   'MY SLOTS ONLY',
   'ADMIN · ALL SLOTS',

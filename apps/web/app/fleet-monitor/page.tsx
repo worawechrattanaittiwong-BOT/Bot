@@ -46,6 +46,7 @@ type FleetSlot = {
     number?: string | null;
     broker?: string | null;
     server?: string | null;
+    accountType?: "REAL" | "DEMO" | null;
     mode?: string | null;
     status?: string | null;
   };
@@ -118,6 +119,7 @@ type FleetResponse = {
   } | null;
   elevated: boolean;
   scope: "ALL_SLOTS" | "OWN_ASSIGNED_SLOTS";
+  accountTypeFilter: "ALL" | "REAL" | "DEMO";
   generatedAt: string;
   period: {
     from?: string | null;
@@ -149,6 +151,7 @@ type FleetResponse = {
 };
 
 type StatusFilter = "ALL" | "RUNNING" | "ONLINE" | "STOPPED" | "OFFLINE";
+type AccountTypeFilter = "ALL" | "REAL" | "DEMO";
 type SortMode = "SLOT" | "BALANCE" | "PROFIT" | "WIN_RATE" | "DRAWDOWN";
 type RangeMode = "ALL" | "TODAY" | "7D" | "30D" | "CUSTOM";
 
@@ -202,8 +205,14 @@ function bangkokLocalToIso(value: string) {
   return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : "";
 }
 
-function fleetPeriodQuery(mode: RangeMode, customFrom: string, customTo: string) {
+function fleetPeriodQuery(
+  mode: RangeMode,
+  customFrom: string,
+  customTo: string,
+  accountType: AccountTypeFilter
+) {
   const params = new URLSearchParams();
+  if (accountType !== "ALL") params.set("accountType", accountType);
   if (mode === "TODAY") {
     params.set("from", bangkokLocalToIso(bangkokStartTodayValue()));
   } else if (mode === "7D") {
@@ -283,6 +292,7 @@ export default function FleetMonitorPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
+  const [accountTypeFilter, setAccountTypeFilter] = useState<AccountTypeFilter>("ALL");
   const [modeFilter, setModeFilter] = useState("ALL");
   const [brokerFilter, setBrokerFilter] = useState("ALL");
   const [sortMode, setSortMode] = useState<SortMode>("SLOT");
@@ -293,7 +303,10 @@ export default function FleetMonitorPage() {
   async function load(silent = false) {
     if (!silent) setLoading(true);
     try {
-      const next = await api("/fleet-monitor" + fleetPeriodQuery(rangeMode, customFrom, customTo));
+      const next = await api(
+        "/fleet-monitor" +
+          fleetPeriodQuery(rangeMode, customFrom, customTo, accountTypeFilter)
+      );
       setData(next);
       setError("");
     } catch (e: any) {
@@ -307,7 +320,7 @@ export default function FleetMonitorPage() {
     load();
     const timer = window.setInterval(() => load(true), 15_000);
     return () => window.clearInterval(timer);
-  }, [rangeMode, customFrom, customTo]);
+  }, [rangeMode, customFrom, customTo, accountTypeFilter]);
 
   function logout() {
     window.localStorage.removeItem("bot_token");
@@ -419,6 +432,20 @@ export default function FleetMonitorPage() {
             </p>
           </div>
           <div className={styles.headActions}>
+            <label className={styles.accountTypePicker}>
+              <ScenovaIcon name="account" size={15}/>
+              <select
+                value={accountTypeFilter}
+                onChange={(event) =>
+                  setAccountTypeFilter(event.target.value as AccountTypeFilter)
+                }
+                aria-label="ประเภทบัญชี MT5"
+              >
+                <option value="ALL">ทุกบัญชี</option>
+                <option value="REAL">บัญชีจริง</option>
+                <option value="DEMO">บัญชีเดโม</option>
+              </select>
+            </label>
             <span className={styles.scopeBadge}>
               <ScenovaIcon name={data.elevated ? "shield" : "account"} size={15}/>
               {data.elevated ? "ADMIN · ALL SLOTS" : "MY SLOTS ONLY"}
