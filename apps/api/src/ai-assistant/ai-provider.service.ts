@@ -26,7 +26,7 @@ export class AiProviderService {
     const configuredProvider = String(settings.provider || "").trim().toUpperCase();
     const provider = String(
       (!configuredProvider || configuredProvider === "CUSTOM")
-        ? process.env.SCENOVA_AI_PROVIDER || configuredProvider || "INCEPTION"
+        ? process.env.SCENOVA_AI_PROVIDER || "INCEPTION"
         : configuredProvider
     ).trim().toUpperCase();
     const model = String(settings.model || process.env.SCENOVA_AI_MODEL || "mercury-2.5").trim();

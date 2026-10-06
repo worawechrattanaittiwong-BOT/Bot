@@ -12,6 +12,9 @@ CREATE TABLE IF NOT EXISTS ai_assistant_settings (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 INSERT INTO ai_assistant_settings(id) VALUES(1) ON CONFLICT (id) DO NOTHING;
+UPDATE ai_assistant_settings
+SET provider='INCEPTION', model='mercury-2.5', updated_at=now()
+WHERE id=1 AND provider='CUSTOM' AND btrim(model)='';
 
 CREATE TABLE IF NOT EXISTS ai_support_channels (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

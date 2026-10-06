@@ -34,6 +34,7 @@ Assert-Contains $migration "CREATE TABLE IF NOT EXISTS ai_messages" "AI messages
 Assert-Contains $migration "CREATE TABLE IF NOT EXISTS ai_knowledge_articles" "AI knowledge migration missing"
 Assert-Contains $migration "CREATE TABLE IF NOT EXISTS ai_usage_daily" "AI usage migration missing"
 Assert-Contains $migration "CREATE TABLE IF NOT EXISTS ai_support_channels" "AI support channels migration missing"
+Assert-Contains $migration "provider='CUSTOM' AND btrim(model)=''" "AI migration must upgrade the legacy CUSTOM/blank default safely"
 Assert-Contains $deploy "database/068_ai_assistant.sql" "Production deploy must apply AI assistant migration"
 
 Assert-Contains $safety "READ-ONLY 100%" "AI safety policy must explicitly be read-only"
