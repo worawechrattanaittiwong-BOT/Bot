@@ -68,7 +68,8 @@ if ($layout.Contains('CustomerNavigationLabels')) {
 foreach ($required in @(
   'WHERE a.user_id=$1',
   'const accessClause = this.elevated(actor) ? "" : " AND a.user_id=$2"',
-  'const clause = this.elevated(actor) ? "" : " AND br.owner_user_id=$2"',
+  'const ownerScope = this.elevated(actor) ? null : actor.sub;',
+  'AND ($2::uuid IS NULL OR br.owner_user_id=$2::uuid)',
   'WHERE owner_user_id=$1'
 )) {
   if (-not $api.Contains($required)) {
