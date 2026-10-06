@@ -472,7 +472,7 @@ export default function FleetMonitorPage() {
           <div><span>Max Drawdown · {selectedRangeLabel}</span><b className={styles.warn}>{percent(data.summary.highestMaxDrawdownPercent)}</b><small>จาก Trade Journal</small></div>
           <div><span>Open Positions · Live</span><b>{data.summary.totalPositions}</b><small>SCENOVA ทั้งบัญชี · {data.summary.totalPendingOrders} Pending</small></div>
           <div><span>Balance · รวมทั้งหมด</span><b>{data.summary.usdEquivalentComplete ? money(data.summary.totalBalanceUsdEquivalent, "USD") : "—"}</b><small>USD Equivalent · {data.summary.normalizedCurrencies.join(" + ") || "ไม่มีข้อมูล"}</small></div>
-          <div><span>P/L รวม · {selectedRangeLabel}</span><b className={num(data.summary.totalNetProfitUsdEquivalent) >= 0 ? styles.good : styles.bad}>{data.summary.usdEquivalentComplete ? money(data.summary.totalNetProfitUsdEquivalent, "USD", true) : "—"}</b><small>{data.summary.usdEquivalentComplete ? "รวมทุกสกุลที่รองรับ" : "มีสกุลที่ยังแปลง USD ไม่ได้"}</small></div>
+          <div><span>P/L รวม · {selectedRangeLabel}</span><b className={num(data.summary.totalNetProfitUsdEquivalent) >= 0 ? styles.good : styles.bad}>{data.summary.usdEquivalentComplete ? money(data.summary.totalNetProfitUsdEquivalent, "USD", true) : "—"}</b><small>{data.summary.usdEquivalentComplete ? "Trade Journal ตามช่วงที่เลือก · รวมทุกสกุลที่รองรับ" : "Trade Journal ตามช่วงที่เลือก · มีสกุลที่ยังแปลง USD ไม่ได้"}</small></div>
         </section>
 
         <section className={styles.currencyPeriodRow}>
