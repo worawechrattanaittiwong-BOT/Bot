@@ -45,16 +45,23 @@ foreach ($required in @(
   'demoAccounts',
   'Live Accounts (REAL)',
   'Demo Accounts',
+  'Trading Slot / Account',
+  'Slot #{account.slotNumber',
+  'currentSlotAccounts',
+  'slotStatus',
+  'chooseAccount',
+  'availableBacktests.some',
+  'Performance response does not match the selected Slot',
   'clearAllPerformanceData',
   '/performance-actions/reset-test-data',
   'ล้างข้อมูลทั้งระบบ',
   'Account Type',
-  'currentRealDemoAccounts',
-  'compareCurrentAccounts',
-  'slice(0,1)'
+  'compareCurrentAccounts'
 )) {
-  if (-not $web.Contains($required)) { throw "Performance account/reset UI missing: $required" }
+  if (-not $web.Contains($required)) { throw "Performance multi-Slot/reset UI missing: $required" }
 }
+if ($web.Contains('currentRealDemoAccounts')) { throw 'Performance must not collapse multiple Slots into one REAL + one DEMO account' }
+if ($web.Contains('.slice(0,1)')) { throw 'Performance selector must not cap REAL/DEMO groups to one Slot each' }
 
 foreach ($required in @(
   'instance_metrics',
@@ -62,7 +69,13 @@ foreach ($required in @(
   'accountType',
   'demo|practice|trial|contest',
   'instance_last_seen_at',
-  'account_created_at'
+  'account_created_at',
+  'account_display_name',
+  'slot_status',
+  "a.status='ACTIVE'",
+  "ls.status IN ('ACTIVE','AVAILABLE')",
+  'AND slot_id=$2::uuid',
+  '@Query("accountId") accountId = ""'
 )) {
   if (-not $api.Contains($required)) { throw "Performance REAL/DEMO classification missing: $required" }
 }

@@ -904,7 +904,7 @@ export class PerformanceAnalyticsController {
               summary,status,created_at
        FROM backtest_runs
        WHERE owner_user_id=$1
-         AND ($2::uuid IS NULL OR slot_id=$2::uuid)
+         AND slot_id=$2::uuid
        ORDER BY created_at DESC
        LIMIT 50`,
       [account.user_id, account.slot_id || null]
@@ -1036,21 +1036,32 @@ export class PerformanceAnalyticsController {
     const elevated = this.elevated(actor);
     const rows = await this.db.query(
       elevated
-        ? `SELECT a.id,a.user_id,a.account_number,a.broker,a.broker_server,a.mode,a.status,a.created_at AS account_created_at,
-                  u.user_code,u.email,u.role,bi.id AS instance_id,bi.slot_id,bi.metrics AS instance_metrics,bi.last_seen_at AS instance_last_seen_at,ls.slot_number,ls.label AS slot_label
+        ? `SELECT a.id,a.user_id,a.account_number,a.display_name AS account_display_name,a.broker,a.broker_server,a.mode,a.status,a.created_at AS account_created_at,
+                  u.user_code,u.email,u.role,bi.id AS instance_id,bi.slot_id,bi.metrics AS instance_metrics,bi.last_seen_at AS instance_last_seen_at,
+                  ls.slot_number,ls.label AS slot_label,ls.mode AS slot_mode,ls.status AS slot_status,ls.slot_type
            FROM mt5_accounts a
            JOIN users u ON u.id=a.user_id
            LEFT JOIN bot_instances bi ON bi.mt5_account_id=a.id
            LEFT JOIN license_slots ls ON ls.id=bi.slot_id
-           ORDER BY u.user_code,a.created_at,a.account_number`
-        : `SELECT a.id,a.user_id,a.account_number,a.broker,a.broker_server,a.mode,a.status,a.created_at AS account_created_at,
-                  u.user_code,u.email,u.role,bi.id AS instance_id,bi.slot_id,bi.metrics AS instance_metrics,bi.last_seen_at AS instance_last_seen_at,ls.slot_number,ls.label AS slot_label
+           WHERE a.status='ACTIVE'
+             AND ls.id IS NOT NULL
+             AND ls.status IN ('ACTIVE','AVAILABLE')
+           ORDER BY u.user_code,
+                    CASE WHEN ls.mode='CLOUD' THEN 0 ELSE 1 END,
+                    ls.slot_number,a.created_at,a.account_number`
+        : `SELECT a.id,a.user_id,a.account_number,a.display_name AS account_display_name,a.broker,a.broker_server,a.mode,a.status,a.created_at AS account_created_at,
+                  u.user_code,u.email,u.role,bi.id AS instance_id,bi.slot_id,bi.metrics AS instance_metrics,bi.last_seen_at AS instance_last_seen_at,
+                  ls.slot_number,ls.label AS slot_label,ls.mode AS slot_mode,ls.status AS slot_status,ls.slot_type
            FROM mt5_accounts a
            JOIN users u ON u.id=a.user_id
            LEFT JOIN bot_instances bi ON bi.mt5_account_id=a.id
            LEFT JOIN license_slots ls ON ls.id=bi.slot_id
            WHERE a.user_id=$1
-           ORDER BY a.created_at,a.account_number`,
+             AND a.status='ACTIVE'
+             AND ls.id IS NOT NULL
+             AND ls.status IN ('ACTIVE','AVAILABLE')
+           ORDER BY CASE WHEN ls.mode='CLOUD' THEN 0 ELSE 1 END,
+                    ls.slot_number,a.created_at,a.account_number`,
       elevated ? [] : [actor.sub]
     );
     return {
@@ -1074,6 +1085,7 @@ export class PerformanceAnalyticsController {
           email: row.email,
           role: row.role,
           accountNumber: row.account_number,
+          accountDisplayName: row.account_display_name,
           broker: row.broker,
           brokerServer: row.broker_server,
           accountType,
@@ -1084,7 +1096,10 @@ export class PerformanceAnalyticsController {
           instanceId: row.instance_id,
           slotId: row.slot_id,
           slotNumber: row.slot_number,
-          slotLabel: row.slot_label
+          slotLabel: row.slot_label,
+          slotMode: row.slot_mode,
+          slotStatus: row.slot_status,
+          slotType: row.slot_type
         };
       })
     };
@@ -1283,19 +1298,25 @@ export class PerformanceAnalyticsController {
 
   @Get("backtest")
   @Header("Cache-Control", "no-store")
-  async backtest(@Req() req: any, @Query("id") id = "") {
+  async backtest(
+    @Req() req: any,
+    @Query("id") id = "",
+    @Query("accountId") accountId = ""
+  ) {
     if (!id) throw new BadRequestException("backtest id required");
     const actor = req.user as Actor;
-    const params: any[] = [id];
-    const clause = this.elevated(actor) ? "" : " AND br.owner_user_id=$2";
-    if (!this.elevated(actor)) params.push(actor.sub);
+    const account = accountId ? await this.accountForActor(actor, accountId) : null;
+    const ownerScope = this.elevated(actor) ? null : actor.sub;
+    const slotScope = accountId ? String(account?.slot_id || "") : null;
     const run = await this.db.one(
       `SELECT br.*,ls.slot_number,ls.mode AS slot_mode,u.user_code,u.email
        FROM backtest_runs br
        JOIN users u ON u.id=br.owner_user_id
        LEFT JOIN license_slots ls ON ls.id=br.slot_id
-       WHERE br.id=$1${clause}`,
-      params
+       WHERE br.id=$1
+         AND ($2::uuid IS NULL OR br.owner_user_id=$2::uuid)
+         AND ($3::uuid IS NULL OR br.slot_id=$3::uuid)`,
+      [id, ownerScope, slotScope || null]
     );
     if (!run) throw new ForbiddenException("backtest unavailable");
     const trades = await this.db.query(

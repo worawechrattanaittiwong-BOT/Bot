@@ -80,11 +80,23 @@ function compareCurrentAccounts(a:any,b:any) {
     String(b?.accountNumber||"").localeCompare(String(a?.accountNumber||""));
 }
 
-function currentRealDemoAccounts(accounts:any[]) {
+function currentSlotAccounts(accounts:any[]) {
   const sorted=[...(accounts||[])].sort(compareCurrentAccounts);
-  const real=sorted.find((account:any)=>String(account.accountType||"REAL").toUpperCase()==="REAL")||null;
-  const demo=sorted.find((account:any)=>String(account.accountType||"REAL").toUpperCase()!=="REAL")||null;
-  return [real,demo].filter(Boolean);
+  const bySlot=new Map<string,any>();
+  for(const account of sorted){
+    const slotId=String(account?.slotId||"").trim();
+    const accountStatus=String(account?.status||"").toUpperCase();
+    const slotStatus=String(account?.slotStatus||"").toUpperCase();
+    if(!slotId||accountStatus!=="ACTIVE"||!["ACTIVE","AVAILABLE"].includes(slotStatus)) continue;
+    if(!bySlot.has(slotId)) bySlot.set(slotId,account);
+  }
+  return [...bySlot.values()].sort((a:any,b:any)=>{
+    const aMode=String(a?.slotMode||a?.mode||"").toUpperCase()==="CLOUD"?0:1;
+    const bMode=String(b?.slotMode||b?.mode||"").toUpperCase()==="CLOUD"?0:1;
+    return aMode-bMode ||
+      Number(a?.slotNumber||999999)-Number(b?.slotNumber||999999) ||
+      compareCurrentAccounts(a,b);
+  });
 }
 
 function inclusiveDays(from:string,to:string) {
@@ -341,15 +353,15 @@ export default function PerformanceDashboardPage() {
     [options]
   );
   const currentAccounts=useMemo(
-    ()=>currentRealDemoAccounts(ownAccounts),
+    ()=>currentSlotAccounts(ownAccounts),
     [ownAccounts]
   );
   const realAccounts=useMemo(
-    ()=>currentAccounts.filter((account:any)=>String(account.accountType||"REAL").toUpperCase()==="REAL").slice(0,1),
+    ()=>currentAccounts.filter((account:any)=>String(account.accountType||"REAL").toUpperCase()==="REAL"),
     [currentAccounts]
   );
   const demoAccounts=useMemo(
-    ()=>currentAccounts.filter((account:any)=>String(account.accountType||"REAL").toUpperCase()!=="REAL").slice(0,1),
+    ()=>currentAccounts.filter((account:any)=>String(account.accountType||"REAL").toUpperCase()!=="REAL"),
     [currentAccounts]
   );
   const selectedAccount=useMemo(
@@ -371,7 +383,7 @@ export default function PerformanceDashboardPage() {
       const next=await api("/performance-analytics/options");
       setOptions(next);
       const own=(next.accounts||[]).filter((account:any)=>account.userId===next.user?.id);
-      const current=currentRealDemoAccounts(own).sort(compareCurrentAccounts);
+      const current=currentSlotAccounts(own);
       const first=current[0];
       const saved=readPerformancePreferences(String(next.user?.id||""));
       const savedAccount=saved?.accountId
@@ -403,12 +415,18 @@ export default function PerformanceDashboardPage() {
         : "";
       const next=await api(`/performance-analytics/report?accountId=${encodeURIComponent(nextAccountId)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}${strategyQuery}`);
       if(requestId!==refreshSequence.current) return;
+      if(String(next?.account?.id||"")!==String(nextAccountId||"")){
+        throw new Error("Performance response does not match the selected Slot");
+      }
       setReport(next);
       if(nextMode==="BACKTEST"){
-        const candidate=selectedBacktestId||next.backtests?.[0]?.id||"";
+        const availableBacktests=Array.isArray(next.backtests)?next.backtests:[];
+        const candidate=availableBacktests.some((run:any)=>String(run.id)===String(selectedBacktestId))
+          ? selectedBacktestId
+          : availableBacktests[0]?.id||"";
         setSelectedBacktestId(candidate);
         const nextBacktest=candidate
-          ? await api(`/performance-analytics/backtest?id=${encodeURIComponent(candidate)}`)
+          ? await api(`/performance-analytics/backtest?id=${encodeURIComponent(candidate)}&accountId=${encodeURIComponent(nextAccountId)}`)
           : null;
         if(requestId!==refreshSequence.current) return;
         setBacktest(nextBacktest);
@@ -427,6 +445,9 @@ export default function PerformanceDashboardPage() {
   useEffect(()=>{if(!getToken()){window.location.href="/login";return;}void loadOptions().finally(()=>setLoading(false));},[]);
   useEffect(()=>{
     if(currentAccounts.length&&!currentAccounts.some((account:any)=>account.id===accountId)){
+      setReport(null);
+      setBacktest(null);
+      setSelectedBacktestId("");
       setAccountId(currentAccounts[0]?.id||"");
       return;
     }
@@ -498,10 +519,19 @@ export default function PerformanceDashboardPage() {
     });
   }
 
+  function chooseAccount(id:string){
+    if(id===accountId) return;
+    setReport(null);
+    setBacktest(null);
+    setSelectedBacktestId("");
+    setShareResult(null);
+    setAccountId(id);
+  }
+
   async function chooseBacktest(id:string){
     setSelectedBacktestId(id);
     if(!id){setBacktest(null);return;}
-    try{setBacktest(await api(`/performance-analytics/backtest?id=${encodeURIComponent(id)}`));}
+    try{setBacktest(await api(`/performance-analytics/backtest?id=${encodeURIComponent(id)}&accountId=${encodeURIComponent(accountId)}`));}
     catch(e:any){setError(String(e?.message||"โหลด Backtest ไม่สำเร็จ"));}
   }
 
@@ -733,10 +763,10 @@ export default function PerformanceDashboardPage() {
 
             <div className={styles.drawerControls}>
               <label className={styles.drawerField}>
-                <span>Trading Account</span>
-                <select value={accountId} onChange={(e)=>setAccountId(e.target.value)}>
-                  {realAccounts.length?<optgroup label="Live Accounts (REAL)">{realAccounts.map((account:any)=><option key={account.id} value={account.id}>REAL · {account.accountNumber} · {account.broker}</option>)}</optgroup>:null}
-                  {demoAccounts.length?<optgroup label="Demo Accounts">{demoAccounts.map((account:any)=><option key={account.id} value={account.id}>DEMO · {account.accountNumber} · {account.broker}</option>)}</optgroup>:null}
+                <span>Trading Slot / Account</span>
+                <select value={accountId} onChange={(e)=>chooseAccount(e.target.value)}>
+                  {realAccounts.length?<optgroup label="Live Accounts (REAL)">{realAccounts.map((account:any)=><option key={account.id} value={account.id}>Slot #{account.slotNumber||"—"} · {account.accountDisplayName?account.accountDisplayName+" · ":""}{account.accountNumber} · REAL</option>)}</optgroup>:null}
+                  {demoAccounts.length?<optgroup label="Demo Accounts">{demoAccounts.map((account:any)=><option key={account.id} value={account.id}>Slot #{account.slotNumber||"—"} · {account.accountDisplayName?account.accountDisplayName+" · ":""}{account.accountNumber} · DEMO</option>)}</optgroup>:null}
                 </select>
               </label>
 
@@ -842,7 +872,7 @@ export default function PerformanceDashboardPage() {
             <>
               <div className={styles.infoCard}>
                 <div className={styles.infoCol}>
-                  <InfoRow icon="account" label="Account" value={String(report?.account?.accountNumber||"—")}/>
+                  <InfoRow icon="account" label="Account" value={(report?.account?.slotNumber?"Slot #"+String(report.account.slotNumber)+" · ":"")+String(report?.account?.accountNumber||"—")}/>
                   <InfoRow icon="shield" label="Account Type" value={String(selectedAccount?.accountType||"REAL").toUpperCase()}/>
                   <InfoRow icon="wallet" label="Currency" value={currency}/>
                 </div>
