@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable } from "@nestjs/common";
 import { DbService } from "../db.service";
 import type { AiAssistantSettings, AiSupportChannel } from "./ai-assistant.types";
 
@@ -66,12 +66,50 @@ export class AiStoreService {
     return rows.rows;
   }
 
+  private normalizeSupportUrl(type: string, value: unknown) {
+    let url = String(value || "").trim().slice(0, 1200);
+    if (!url) return "";
+
+    if (type === "TELEGRAM") {
+      if (/^@[A-Za-z0-9_]{3,}$/i.test(url)) url = "https://t.me/" + url.slice(1);
+      else if (/^(?:www\.)?t\.me\//i.test(url)) url = "https://" + url.replace(/^www\./i, "");
+      else if (/^(?:www\.)?telegram\.me\//i.test(url)) url = "https://" + url.replace(/^www\./i, "");
+    } else if (type === "FACEBOOK") {
+      if (/^(?:www\.)?(?:facebook\.com|m\.me|fb\.me)\//i.test(url)) url = "https://" + url.replace(/^www\./i, "");
+    } else if (type === "LINE") {
+      if (/^(?:www\.)?(?:line\.me|lin\.ee)\//i.test(url)) url = "https://" + url.replace(/^www\./i, "");
+    }
+
+    if (!/^https:\/\//i.test(url)) {
+      throw new BadRequestException("ลิงก์ติดต่อไม่ถูกต้อง กรุณาใช้ https:// หรือรูปแบบมาตรฐานของช่องทางนั้น");
+    }
+
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      throw new BadRequestException("ลิงก์ติดต่อไม่ถูกต้อง");
+    }
+
+    const host = parsed.hostname.toLowerCase().replace(/^www\./, "");
+    const allowedHosts: Record<string, string[]> = {
+      LINE: ["line.me","lin.ee"],
+      FACEBOOK: ["facebook.com","m.facebook.com","m.me","fb.me"],
+      TELEGRAM: ["t.me","telegram.me"]
+    };
+    if (allowedHosts[type] && !allowedHosts[type].includes(host)) {
+      throw new BadRequestException("ลิงก์ไม่ตรงกับช่องทาง " + type);
+    }
+    return parsed.toString();
+  }
+
   async saveSupportChannel(input: any, actor: string) {
     const type = String(input.type || "").trim().toUpperCase();
-    if (!["LINE","FACEBOOK","TELEGRAM","OTHER"].includes(type)) throw new Error("invalid support channel");
+    if (!["LINE","FACEBOOK","TELEGRAM","OTHER"].includes(type)) {
+      throw new BadRequestException("ช่องทางติดต่อไม่ถูกต้อง");
+    }
     const label = String(input.label || type).trim().slice(0, 80);
-    const url = String(input.url || "").trim().slice(0, 1200);
-    if (url && !/^https:\/\//i.test(url)) throw new Error("support channel URL must use https");
+    const url = this.normalizeSupportUrl(type, input.url);
     const enabled = input.enabled === true && Boolean(url);
     const sortOrder = Math.max(0, Math.min(9999, Number(input.sortOrder || 0)));
     await this.db.query(

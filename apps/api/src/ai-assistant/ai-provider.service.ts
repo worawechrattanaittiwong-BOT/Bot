@@ -81,6 +81,28 @@ export class AiProviderService {
     );
   }
 
+  private extractOpenAiChatText(data: any) {
+    const choice = data?.choices?.[0];
+    const content = choice?.message?.content;
+
+    if (typeof content === "string" && content.trim()) return content.trim();
+    if (Array.isArray(content)) {
+      const text = content
+        .map((part: any) => {
+          if (typeof part === "string") return part;
+          if (typeof part?.text === "string") return part.text;
+          if (typeof part?.text?.value === "string") return part.text.value;
+          if (typeof part?.content === "string") return part.content;
+          return "";
+        })
+        .join("\n")
+        .trim();
+      if (text) return text;
+    }
+    if (typeof choice?.text === "string" && choice.text.trim()) return choice.text.trim();
+    return "";
+  }
+
   private async openAiCompatibleChat(
     baseUrl: string,
     apiKey: string,
@@ -89,26 +111,37 @@ export class AiProviderService {
     messages: AiConversationMessage[],
     maxOutputTokens: number
   ): Promise<Omit<ProviderResult, "provider">> {
+    const isInception = /api\.inceptionlabs\.ai/i.test(baseUrl) || /^mercury/i.test(model);
+    const requestMaxTokens = isInception ? Math.max(1000, maxOutputTokens) : maxOutputTokens;
+    const payload: Record<string, unknown> = {
+      model,
+      messages: [
+        { role: "system", content: instructions },
+        ...messages.map(message => ({
+          role: message.role === "ASSISTANT" ? "assistant" : "user",
+          content: message.content
+        }))
+      ],
+      max_tokens: requestMaxTokens,
+      temperature: 0.2,
+      stream: false
+    };
+    if (isInception) payload.reasoning_effort = "low";
+
     const response = await this.request(baseUrl + "/chat/completions", apiKey, {
       method: "POST",
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: "system", content: instructions },
-          ...messages.map(message => ({
-            role: message.role === "ASSISTANT" ? "assistant" : "user",
-            content: message.content
-          }))
-        ],
-        max_tokens: maxOutputTokens,
-        temperature: 0.2
-      })
+      body: JSON.stringify(payload)
     }, "OPENAI_COMPATIBLE_CHAT");
     if (!response.ok) await this.parseError(response);
     const data: any = await response.json().catch(() => ({}));
-    const text = String(data?.choices?.[0]?.message?.content || "").trim();
+    const text = this.extractOpenAiChatText(data);
     if (!text) {
-      throw new ServiceUnavailableException("AI Provider ไม่ได้ส่งข้อความตอบกลับ");
+      const finishReason = String(data?.choices?.[0]?.finish_reason || "").trim();
+      throw new ServiceUnavailableException(
+        finishReason === "length"
+          ? "AI ใช้โควตาคำตอบหมดก่อนสร้างข้อความ กรุณาลองใหม่"
+          : "AI Provider ไม่ได้ส่งข้อความตอบกลับ"
+      );
     }
     return {
       text,

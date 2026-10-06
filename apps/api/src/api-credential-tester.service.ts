@@ -146,7 +146,7 @@ export class ApiCredentialTesterService {
     const inferred = this.infer(configKey, value, testUrl);
 
     if (configKey === "SCENOVA_AI_API_KEY" || inferred.provider === "Inception Labs") {
-      const { response } = await this.request("https://api.inceptionlabs.ai/v1/chat/completions", {
+      const { response, text } = await this.request("https://api.inceptionlabs.ai/v1/chat/completions", {
         method: "POST",
         headers: {
           Authorization: "Bearer " + value,
@@ -155,17 +155,34 @@ export class ApiCredentialTesterService {
         },
         body: JSON.stringify({
           model: "mercury-2.5",
-          messages: [{ role: "user", content: "Reply OK" }],
-          max_tokens: 1,
-          temperature: 0
+          messages: [{ role: "user", content: "Reply with OK only." }],
+          max_tokens: 256,
+          temperature: 0,
+          reasoning_effort: "low",
+          stream: false
         })
       });
+      let hasContent = false;
+      if (response.ok && text) {
+        try {
+          const data: any = JSON.parse(text);
+          const content = data?.choices?.[0]?.message?.content;
+          hasContent = (typeof content === "string" && content.trim().length > 0) ||
+            (Array.isArray(content) && content.length > 0) ||
+            (typeof data?.choices?.[0]?.text === "string" && data.choices[0].text.trim().length > 0);
+        } catch {}
+      }
+      const ok = response.ok && hasContent;
       return this.result(
-        response.ok,
-        response.ok ? "PASS" : "FAIL",
+        ok,
+        ok ? "PASS" : "FAIL",
         "Inception Labs",
         "preset/config key",
-        response.ok ? "Inception Mercury API ตอบสำเร็จ" : `Inception ปฏิเสธคีย์ (HTTP ${response.status})`,
+        ok
+          ? "Inception Mercury API ตอบข้อความสำเร็จ"
+          : response.ok
+            ? "Inception ตอบ HTTP 200 แต่ไม่มีข้อความใน completion"
+            : `Inception ปฏิเสธคีย์ (HTTP ${response.status})`,
         response.status
       );
     }
