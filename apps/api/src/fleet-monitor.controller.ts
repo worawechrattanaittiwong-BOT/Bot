@@ -30,6 +30,13 @@ export class FleetMonitorController {
     return Number.isFinite(parsed) ? parsed : fallback;
   }
 
+  private usdEquivalentFactor(currency: unknown) {
+    const code = String(currency || "").trim().toUpperCase();
+    if (code === "USD") return 1;
+    if (code === "USC") return 0.01;
+    return null;
+  }
+
   private dateParam(value: unknown, label: string) {
     const text = String(value || "").trim();
     if (!text) return null;
@@ -531,6 +538,24 @@ export class FleetMonitorController {
       }
     }
 
+    const currencyTotals = Array.from(currencyMap.values()).sort((a,b) =>
+      a.currency.localeCompare(b.currency)
+    );
+    let totalBalanceUsdEquivalent = 0;
+    let totalNetProfitUsdEquivalent = 0;
+    const normalizedCurrencies: string[] = [];
+    const unsupportedCurrencies: string[] = [];
+    for (const item of currencyTotals) {
+      const factor = this.usdEquivalentFactor(item.currency);
+      if (factor === null) {
+        unsupportedCurrencies.push(item.currency);
+        continue;
+      }
+      normalizedCurrencies.push(item.currency);
+      totalBalanceUsdEquivalent += this.number(item.balance) * factor;
+      totalNetProfitUsdEquivalent += this.number(item.netProfit) * factor;
+    }
+
     return {
       user: self,
       elevated,
@@ -561,9 +586,12 @@ export class FleetMonitorController {
         totalWins,
         winRate: totalClosedBaskets > 0 ? totalWins / totalClosedBaskets * 100 : 0,
         highestMaxDrawdownPercent,
-        currencyTotals: Array.from(currencyMap.values()).sort((a,b) =>
-          a.currency.localeCompare(b.currency)
-        )
+        totalBalanceUsdEquivalent,
+        totalNetProfitUsdEquivalent,
+        usdEquivalentComplete: unsupportedCurrencies.length === 0,
+        normalizedCurrencies,
+        unsupportedCurrencies,
+        currencyTotals
       },
       slots
     };

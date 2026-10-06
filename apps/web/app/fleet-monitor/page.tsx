@@ -145,6 +145,11 @@ type FleetResponse = {
     totalWins: number;
     winRate: number;
     highestMaxDrawdownPercent: number;
+    totalBalanceUsdEquivalent: number;
+    totalNetProfitUsdEquivalent: number;
+    usdEquivalentComplete: boolean;
+    normalizedCurrencies: string[];
+    unsupportedCurrencies: string[];
     currencyTotals: CurrencyTotal[];
   };
   slots: FleetSlot[];
@@ -392,7 +397,6 @@ export default function FleetMonitorPage() {
     return <main className={styles.loading}>{error || "ไม่พบข้อมูล Fleet Monitor"}</main>;
   }
 
-  const primaryCurrency = [...data.summary.currencyTotals].sort((a,b)=>b.accounts-a.accounts)[0] || null;
   const selectedRangeLabel = rangeLabel(rangeMode, customFrom, customTo);
   const periodProfitLabel = rangeMode === "ALL" ? "Net P/L" : "P/L ช่วง";
 
@@ -467,8 +471,8 @@ export default function FleetMonitorPage() {
           <div><span>Win Rate · {selectedRangeLabel}</span><b>{percent(data.summary.winRate)}</b><small>{data.summary.totalClosedBaskets.toLocaleString("en-US")} baskets</small></div>
           <div><span>Max Drawdown · {selectedRangeLabel}</span><b className={styles.warn}>{percent(data.summary.highestMaxDrawdownPercent)}</b><small>จาก Trade Journal</small></div>
           <div><span>Open Positions · Live</span><b>{data.summary.totalPositions}</b><small>SCENOVA ทั้งบัญชี · {data.summary.totalPendingOrders} Pending</small></div>
-          <div><span>{primaryCurrency ? primaryCurrency.currency + " Balance · Live" : "Balance · Live"}</span><b>{primaryCurrency ? money(primaryCurrency.balance, primaryCurrency.currency) : "—"}</b><small>{data.summary.currencyTotals.length} currency · ไม่รวมข้ามสกุล</small></div>
-          <div><span>{primaryCurrency ? primaryCurrency.currency + " P/L · " + selectedRangeLabel : "P/L · " + selectedRangeLabel}</span><b className={num(primaryCurrency?.netProfit) >= 0 ? styles.good : styles.bad}>{primaryCurrency ? money(primaryCurrency.netProfit, primaryCurrency.currency, true) : "—"}</b><small>Trade Journal ตามช่วงที่เลือก</small></div>
+          <div><span>Balance · รวมทั้งหมด</span><b>{data.summary.usdEquivalentComplete ? money(data.summary.totalBalanceUsdEquivalent, "USD") : "—"}</b><small>USD Equivalent · {data.summary.normalizedCurrencies.join(" + ") || "ไม่มีข้อมูล"}</small></div>
+          <div><span>P/L รวม · {selectedRangeLabel}</span><b className={num(data.summary.totalNetProfitUsdEquivalent) >= 0 ? styles.good : styles.bad}>{data.summary.usdEquivalentComplete ? money(data.summary.totalNetProfitUsdEquivalent, "USD", true) : "—"}</b><small>{data.summary.usdEquivalentComplete ? "รวมทุกสกุลที่รองรับ" : "มีสกุลที่ยังแปลง USD ไม่ได้"}</small></div>
         </section>
 
         <section className={styles.currencyPeriodRow}>

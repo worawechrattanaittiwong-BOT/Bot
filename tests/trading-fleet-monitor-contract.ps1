@@ -35,6 +35,13 @@ foreach ($required in @(
   "event_type IN ('ENTRY','EXIT')",
   'reconstructCompletedJournal(accountRows)',
   'bot_instances.metrics / EA heartbeat',
+  'usdEquivalentFactor',
+  'code === "USD"',
+  'code === "USC"',
+  'return 0.01',
+  'totalBalanceUsdEquivalent',
+  'totalNetProfitUsdEquivalent',
+  'usdEquivalentComplete',
   'NOT_REPORTED_BY_CURRENT_EA'
 )) {
   if (-not $api.Contains($required)) {
@@ -85,6 +92,10 @@ foreach ($required in @(
   'type="datetime-local"',
   'Asia/Bangkok',
   'บัญชีที่เชื่อมต่อ',
+  'Balance · รวมทั้งหมด',
+  'P/L รวม · ',
+  'USD Equivalent · ',
+  'รวมทุกสกุลที่รองรับ',
   'Trade Journal ตามช่วงที่เลือก'
 )) {
   if (-not $web.Contains($required)) {
