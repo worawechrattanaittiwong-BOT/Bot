@@ -31,6 +31,17 @@ assertContains(ea, 'JsonBool(response, "entrySuppressed", false)', "EA must read
 assertContains(ea, 'g_executionStatus = "FIRST_CONNECT_PRIME";', "EA must expose the prime lifecycle status");
 assertContains(ea, "if(g_serverEntrySuppressed) return false;", "Every shared order/lease gate must reject entries during the prime cycle");
 assertContains(ea, "ScenovaAccountPositionCount()<=0", "Prime guard must execute before normal entry engines");
+assertContains(ea, "initial Cloud heartbeat was not queued; refusing false-ready marker", "Cloud runtime must not publish readiness before heartbeat relay initializes");
+const eaText = fs.readFileSync(ea, "utf8");
+const onInitStart = eaText.indexOf("int OnInit()");
+const onInitEnd = eaText.indexOf("void OnDeinit", onInitStart);
+const onInit = eaText.slice(onInitStart, onInitEnd);
+const initialHeartbeatAt = onInit.indexOf("SendHeartbeat();");
+const timerAt = onInit.indexOf("ArmRuntimeTimer()");
+const readyMarkerAt = onInit.indexOf("PublishEaAttachMarker()");
+if (!(initialHeartbeatAt >= 0 && timerAt > initialHeartbeatAt && readyMarkerAt > timerAt)) {
+  throw new Error("Worker-ready marker must be published only after initial heartbeat queueing and runtime timer arming");
+}
 
 assertContains(dashboard, "firstConnectPrimeBlocksStart", "Dashboard must allow compatible Cloud Start to resolve a stuck prime");
 assertContains(dashboard, "isCloudControlReady", "Cloud Start readiness must come from fresh Worker terminal/EA control state");

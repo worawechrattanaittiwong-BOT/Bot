@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.1.27"
-#define SCENOVA_EA_VERSION "1.1.27"
-#define SCENOVA_PRODUCT_VERSION "1.1.27"
+#property version   "1.1.28"
+#define SCENOVA_EA_VERSION "1.1.28"
+#define SCENOVA_PRODUCT_VERSION "1.1.28"
 #define SCENOVA_BUILD_ID "SOURCE"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_CONFIGURED_LOSS_ONLY_V1"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
@@ -1770,11 +1770,10 @@ int OnInit()
       if(SwitchCloudChartToAccountSymbol())
          return(INIT_SUCCEEDED);
 
-      // This marker proves that MetaTrader loaded FastBasketBot with the
-      // intended Cloud preset. Broker history/indicator warm-up and the first
-      // heartbeat may legitimately take longer and must never make the Worker
-      // kill a healthy terminal during startup.
-      PublishEaAttachMarker();
+      // Do not publish the Worker-ready marker yet. A chart can load the
+      // EA far enough to reach this point and still fail later in OnInit before
+      // Cloud heartbeat/control is alive. The marker is published only after
+      // initialization, initial heartbeat queueing and timer arming succeed.
    }
 
    g_lot = InpLot;
@@ -1930,6 +1929,28 @@ int OnInit()
       Print("SCENOVA FATAL: runtime timer could not be armed; refusing false-online state.");
       RenderChartStatus("TIMER ERROR",clrTomato,"Restart MT5 / check terminal log");
       return(INIT_FAILED);
+   }
+
+   if(!MQLInfoInteger(MQL_TESTER))
+   {
+      // Worker readiness must mean more than "the EA appeared on a chart".
+      // Cloud SendHeartbeat() is non-blocking: a successful first call leaves a
+      // relay request pending for the Worker. Require that request before the
+      // ready marker so RELOAD/REBUILD cannot report success for a half-started
+      // EA that never reaches SaaS control.
+      if(InpCloudRelay && !g_cloudHeartbeatPending)
+      {
+         Print("SCENOVA FATAL: initial Cloud heartbeat was not queued; refusing false-ready marker.");
+         RenderChartStatus("HEARTBEAT ERROR",clrTomato,"Cloud relay did not initialize");
+         return(INIT_FAILED);
+      }
+
+      if(!PublishEaAttachMarker())
+      {
+         Print("SCENOVA FATAL: runtime-ready marker could not be published.");
+         RenderChartStatus("READY ERROR",clrTomato,"Restart MT5 / check terminal files");
+         return(INIT_FAILED);
+      }
    }
 
    RefreshChartStatus(true);
