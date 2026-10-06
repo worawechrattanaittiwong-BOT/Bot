@@ -413,10 +413,9 @@ bool AutoSwingEntryAllowed(
       return false;
    }
 
-   // A validated first-entry Zone-First reaction already contains live reaction
-   // evidence; add positions keep the original confirmation requirement.
-   int requiredExecutionConfirmations=
-      (!isAdd && sharedZoneFirst) ? 0 : 1;
+   // Preserve the original execution-safety contract: every AUTO entry,
+   // including Zone-First, still needs at least one strong live confirmation.
+   int requiredExecutionConfirmations=1;
    if(executionConfirmations<requiredExecutionConfirmations)
    {
       reasonOut=isAdd

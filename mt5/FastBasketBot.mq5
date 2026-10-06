@@ -191,7 +191,7 @@ input double          InpCounterPerPositionProfitMoney = 0.50;
 #define AUTO_FIRST_ENTRY_START_WARMUP_SECONDS 5
 #define AUTO_FIRST_ENTRY_STABLE_CONFIRM_SECONDS 2
 #define AUTO_FIRST_ENTRY_SIGNAL_GAP_SECONDS 2
-#define AUTO_FIRST_ENTRY_MIN_NET_RR 1.05
+#define AUTO_FIRST_ENTRY_MIN_NET_RR 1.10
 // A wrong-direction exit is an emergency quality correction, not a tiny-loss
 // scalper. Require a meaningful fraction of the original SL distance first.
 #define AUTO_WRONG_DIRECTION_MIN_R 0.25
