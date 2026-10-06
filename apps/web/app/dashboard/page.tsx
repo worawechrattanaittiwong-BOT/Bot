@@ -270,7 +270,7 @@ const defaultSettings = {
   zeroGridStepPrice: 3,
   zeroGridLevelsPerSide: 10,
   zeroGridBaseLot: 0.03,
-  zeroGridMinNetProfitMoney: 0.5,
+  zeroGridMinNetProfitMoney: 1,
   zeroGridCloseReserveMoney: 0,
   entryMode: "AUTO_MOMENTUM"
 };
@@ -459,7 +459,7 @@ export default function DashboardPage() {
           nextSettings.zeroGridStepPrice = [0.5,1,2,3].includes(loadedZeroStep) ? loadedZeroStep : 3;
           nextSettings.zeroGridLevelsPerSide = Math.max(1, Math.min(30, Number(nextSettings.zeroGridLevelsPerSide) || 10));
           nextSettings.zeroGridBaseLot = normalizeZeroGridBaseLot(nextSettings.zeroGridBaseLot);
-          if (!Number.isFinite(Number(nextSettings.zeroGridMinNetProfitMoney)) || Number(nextSettings.zeroGridMinNetProfitMoney) <= 0.01) nextSettings.zeroGridMinNetProfitMoney = 0.5;
+          if (!Number.isFinite(Number(nextSettings.zeroGridMinNetProfitMoney)) || Number(nextSettings.zeroGridMinNetProfitMoney) <= 0.01) nextSettings.zeroGridMinNetProfitMoney = 1;
           nextSettings.zeroGridCloseReserveMoney = 0;
         }
         if (loadedControlMode === "COUNTER") {
@@ -6939,7 +6939,7 @@ function BotSettingsModal(props:any) {
       props.onEdit?.("zeroGridStepPrice",[0.5,1,2,3].includes(zeroGridStepPrice) ? zeroGridStepPrice : 3);
       props.onEdit?.("zeroGridLevelsPerSide",Math.max(1,Math.min(30,Number(props.settings?.zeroGridLevelsPerSide)||10)));
       props.onEdit?.("zeroGridBaseLot",normalizeZeroGridBaseLot(props.settings?.zeroGridBaseLot));
-      if (!Number.isFinite(Number(props.settings?.zeroGridMinNetProfitMoney)) || Number(props.settings?.zeroGridMinNetProfitMoney) <= 0.01) props.onEdit?.("zeroGridMinNetProfitMoney",0.5);
+      if (!Number.isFinite(Number(props.settings?.zeroGridMinNetProfitMoney)) || Number(props.settings?.zeroGridMinNetProfitMoney) <= 0.01) props.onEdit?.("zeroGridMinNetProfitMoney",1);
       props.onEdit?.("zeroGridCloseReserveMoney",0);
       return;
     }
@@ -7126,7 +7126,7 @@ function BotSettingsModal(props:any) {
                     <label className="cc-bot-v2-field">{settingHelpLabel("grid-step","ระยะห่างกริด","กำหนดระยะห่างระหว่างแต่ละระดับของกริด","layers")}<select className="input" value={String(selectedZeroGridStep)} onChange={e=>props.onEdit?.("zeroGridStepPrice",Number(e.target.value))}><option value="0.5">0.50</option><option value="1">1.00</option><option value="2">2.00</option><option value="3">3.00</option></select></label>
                     <label className="cc-bot-v2-field">{settingHelpLabel("grid-levels","จำนวนคำสั่งรอต่อฝั่ง","กำหนดจำนวน BUY STOP และ SELL STOP ต่อฝั่ง","layers")}<select className="input" value={String(Math.max(1,Math.min(30,Number(props.settings.zeroGridLevelsPerSide)||10)))} onChange={e=>props.onEdit?.("zeroGridLevelsPerSide",Number(e.target.value))}>{Array.from({length:30},(_,i)=>i+1).map(value=><option key={value} value={value}>{value} ระดับต่อฝั่ง</option>)}</select></label>
                     <label className="cc-bot-v2-field">{settingHelpLabel("grid-base-lot","Lot เริ่มต้น","กำหนดชุด Lot ตาม Level: 0.03→0.06→0.09, 0.06→0.12→0.18 หรือ 0.09→0.18→0.27","lot")}<select className="input" value={String(selectedZeroBaseLot)} onChange={e=>props.onEdit?.("zeroGridBaseLot",Number(e.target.value))}>{ZERO_GRID_BASE_LOT_OPTIONS.map(v=><option key={v} value={v}>Lot {v.toFixed(2)}</option>)}</select></label>
-                    <label className="cc-bot-v2-field">{settingHelpLabel("grid-profit","เป้ากำไรสุทธิ","กำไรรวมถึงยอดนี้ EA จะปิดทั้งรอบ","profit")}<MoneyInput value={props.settings.zeroGridMinNetProfitMoney || 0.5} currency={accountCurrency} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.("zeroGridMinNetProfitMoney",v)}/></label>
+                    <label className="cc-bot-v2-field">{settingHelpLabel("grid-profit","เป้ากำไรสุทธิ","กำไรรวมถึงยอดนี้ EA จะปิดทั้งรอบ","profit")}<MoneyInput value={props.settings.zeroGridMinNetProfitMoney || 1} currency={accountCurrency} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.("zeroGridMinNetProfitMoney",v)}/></label>
                   </> : controlMode==="COUNTER" ? <>
                     <label className="cc-bot-v2-field">{settingHelpLabel("lot-per-order","Lot ต่อไม้","กำหนดขนาด Lot ของแต่ละออเดอร์","lot")}<select className="input cc-bot-v19-two-thirds-control" value={String(activeLot)} onChange={e=>editModeSizing("lot",e.target.value)}>{[0.01,0.02,0.03,0.05,0.1,0.2,0.3,0.5,1].map(v=><option key={v} value={v}>{Number(v).toFixed(2)} Lot</option>)}</select></label>
                     <label className="cc-bot-v2-field">{settingHelpLabel("counter-max","จำนวนไม้รวม","EA แบ่งจำนวนไม้รวมเป็น BUY 50% / SELL 50% อัตโนมัติ","layers")}<select className="input cc-bot-v19-two-thirds-control" value={String(normalizeCounterTotalPositions(activeMaxPositions))} onChange={e=>editModeSizing("max",e.target.value)}>{Array.from({length:20},(_,i)=>(i+1)*10).map(v=><option key={v} value={v}>{v} ไม้ · BUY {v/2} / SELL {v/2}</option>)}</select></label>
@@ -7202,7 +7202,7 @@ function BotSettingsModal(props:any) {
                 <div><dt>คำสั่งรอ</dt><dd>{Math.max(1,Math.min(30,Number(props.settings.zeroGridLevelsPerSide)||10))} BUY + {Math.max(1,Math.min(30,Number(props.settings.zeroGridLevelsPerSide)||10))} SELL</dd></div>
                 <div><dt>ระยะห่างกริด</dt><dd>{selectedZeroGridStep.toFixed(2)}</dd></div>
                 <div><dt>Lot ตาม Level</dt><dd>{selectedZeroBaseLot.toFixed(2)} → {(selectedZeroBaseLot*2).toFixed(2)} → {(selectedZeroBaseLot*3).toFixed(2)}…</dd></div>
-                <div><dt>เป้ากำไรสุทธิ</dt><dd>{formatAccountMoney(props.settings.zeroGridMinNetProfitMoney||0.5,accountCurrency)} · ถึงแล้วปิดทันที</dd></div>
+                <div><dt>เป้ากำไรสุทธิ</dt><dd>{formatAccountMoney(props.settings.zeroGridMinNetProfitMoney||1,accountCurrency)} · ถึงแล้วปิดทันที</dd></div>
               </dl> : (
               <dl>
                 <div><dt>Symbol</dt><dd>{props.symbol || "—"}</dd></div>

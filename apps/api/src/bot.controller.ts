@@ -3979,7 +3979,7 @@ export class BotController {
       clean.zeroGridStepPrice = [0.5, 1, 2, 3].includes(zeroGridStepPrice) ? zeroGridStepPrice : 3;
       const zeroGridBaseLot = Number(clean.zeroGridBaseLot);
       clean.zeroGridBaseLot = [0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09].includes(zeroGridBaseLot) ? zeroGridBaseLot : 0.03;
-      if (body.zeroGridMinNetProfitMoney === undefined) clean.zeroGridMinNetProfitMoney = 0.5;
+      if (body.zeroGridMinNetProfitMoney === undefined) clean.zeroGridMinNetProfitMoney = 1;
       // ZERO closes exactly at zeroGridMinNetProfitMoney. Keep legacy reserve
       // field normalized to zero so old clients cannot add a hidden buffer.
       clean.zeroGridCloseReserveMoney = 0;
