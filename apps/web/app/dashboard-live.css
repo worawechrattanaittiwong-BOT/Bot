@@ -702,6 +702,34 @@
 .cc-v47 .cc-status-trigger.waiting .cc-status-trigger-bell{border-color:rgba(239,194,84,.42);background:rgba(150,110,28,.12);color:#ffe09a;box-shadow:0 0 18px rgba(235,183,65,.14)}
 .cc-v47 .cc-status-trigger.running .cc-status-trigger-bell{border-color:rgba(89,224,163,.34);background:rgba(35,137,97,.10);color:#a7f3cf;box-shadow:0 0 18px rgba(71,214,151,.12)}
 .cc-v47 .cc-status-trigger-bell em{position:absolute;top:-6px;right:-6px;display:grid;place-items:center;min-width:18px;height:18px;padding:0 4px;border:2px solid #111827;border-radius:9px;background:#f2c75e;color:#17150f;font-family:inherit;font-size:var(--ui-type-meta);font-weight:900;line-height:1;font-style:normal;box-shadow:0 0 12px rgba(242,199,94,.5)}
+
+/* Desktop: keep the amber status card at one fixed row height.
+   Long operation/status copy grows the card to the left instead of making it taller.
+   Short copy keeps the normal grid-cell width. Mobile/tablet wrapping is unchanged. */
+@media(min-width:1181px){
+  .cc-v47 .cc-status-trigger.waiting{
+    width:max-content!important;
+    min-width:100%!important;
+    max-width:min(620px,60vw)!important;
+    height:72px!important;
+    min-height:72px!important;
+    max-height:72px!important;
+    justify-self:end;
+    align-self:center;
+  }
+  .cc-v47 .cc-status-trigger.waiting .cc-status-trigger-copy{
+    min-width:0;
+    overflow:hidden;
+  }
+  .cc-v47 .cc-status-trigger.waiting .cc-status-trigger-copy b,
+  .cc-v47 .cc-status-trigger.waiting .cc-status-trigger-copy small{
+    display:block;
+    white-space:nowrap!important;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+}
+
 .cc-v47 .cc-status-dialog{
   position:fixed!important;
   inset:auto!important;
