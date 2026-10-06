@@ -40,6 +40,9 @@ export class ApiCredentialTesterService {
     const key = configKey.toUpperCase();
     const url = testUrl.toLowerCase();
 
+    if (key === "SCENOVA_AI_API_KEY" || url.includes("api.inceptionlabs.ai")) {
+      return { provider: "Inception Labs", from: key === "SCENOVA_AI_API_KEY" ? "config key" : "URL" };
+    }
     if (key.includes("ANTHROPIC") || /^sk-ant-/i.test(value) || url.includes("api.anthropic.com")) {
       return { provider: "Anthropic", from: key.includes("ANTHROPIC") ? "config key" : url ? "URL / key pattern" : "key pattern" };
     }
@@ -141,6 +144,31 @@ export class ApiCredentialTesterService {
     if (!value) throw new Error("กรุณาวาง API Key / Secret ก่อนทดสอบ");
 
     const inferred = this.infer(configKey, value, testUrl);
+
+    if (configKey === "SCENOVA_AI_API_KEY" || inferred.provider === "Inception Labs") {
+      const { response } = await this.request("https://api.inceptionlabs.ai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer " + value,
+          Accept: "application/json",
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model: "mercury-2.5",
+          messages: [{ role: "user", content: "Reply OK" }],
+          max_tokens: 1,
+          temperature: 0
+        })
+      });
+      return this.result(
+        response.ok,
+        response.ok ? "PASS" : "FAIL",
+        "Inception Labs",
+        "preset/config key",
+        response.ok ? "Inception Mercury API ตอบสำเร็จ" : `Inception ปฏิเสธคีย์ (HTTP ${response.status})`,
+        response.status
+      );
+    }
 
     if (configKey === "OPENAI_API_KEY" || inferred.provider === "OpenAI") {
       const { response } = await this.request("https://api.openai.com/v1/models", {

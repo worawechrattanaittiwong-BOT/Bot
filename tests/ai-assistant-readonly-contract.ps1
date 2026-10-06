@@ -21,6 +21,8 @@ $panel = Get-Content "apps/web/components/ai/ScenovaAiPanel.tsx" -Raw
 $dashboard = Get-Content "apps/web/app/dashboard/page.tsx" -Raw
 $deploy = Get-Content "scripts/deploy-hostinger.sh" -Raw
 $ownerSidebar = Get-Content "apps/web/components/OwnerSidebar.tsx" -Raw
+$serviceLinks = Get-Content "apps/web/app/admin/service-links/page.tsx" -Raw
+$credentialTester = Get-Content "apps/api/src/api-credential-tester.service.ts" -Raw
 
 Assert-Contains $controller '@Controller("ai-assistant")' "AI assistant customer controller missing"
 Assert-Contains $controller '@UseGuards(JwtGuard)' "AI assistant must require JWT"
@@ -62,6 +64,11 @@ Assert-Contains $provider "SCENOVA_AI_API_KEY" "AI provider key must be server-s
 Assert-Contains $provider "SCENOVA_AI_BASE_URL" "AI provider base URL must be server-side"
 Assert-Contains $provider "OPENAI_COMPATIBLE_CHAT" "Generic provider adapter missing compatible chat mode"
 Assert-Contains $provider "GEMINI" "Generic provider adapter missing Gemini-style mode"
+Assert-Contains $provider "https://api.inceptionlabs.ai/v1" "SCENOVA AI must default to Inception API base URL"
+Assert-Contains $provider "mercury-2.5" "SCENOVA AI must default to Mercury 2.5"
+Assert-Contains $serviceLinks "SCENOVA_AI_API_KEY" "Existing API & Service Links page must expose SCENOVA AI credential preset"
+Assert-Contains $credentialTester "Inception Labs" "API credential tester must recognize Inception"
+Assert-Contains $credentialTester "https://api.inceptionlabs.ai/v1/chat/completions" "Inception credential test must use the supported chat completion endpoint"
 Assert-Contains $provider "ANTHROPIC" "Generic provider adapter missing Anthropic-style mode"
 
 $webFiles = @(
