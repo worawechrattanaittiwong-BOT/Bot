@@ -108,6 +108,9 @@ foreach ($required in @(
   '.tone_bad',
   '.currencyPeriodRow{',
   'width:100%',
+  'flex-wrap:wrap',
+  'overflow:visible',
+  'grid-template-columns:minmax(90px,.72fr) repeat(5,minmax(0,1fr))',
   '.periodFilter{',
   '.dateField{'
 )) {

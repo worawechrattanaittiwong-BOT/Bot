@@ -175,20 +175,20 @@
 }
 .currencyStrip{
   display:flex;
+  flex-wrap:wrap;
   width:100%;
   min-width:0;
   gap:8px;
   margin-bottom:0;
-  overflow-x:auto;
-  padding-bottom:1px;
-  scrollbar-width:thin;
-  scrollbar-color:#3c356c transparent;
+  overflow:visible;
+  padding-bottom:0;
 }
 .currencyStrip article{
-  flex:1 0 100%;
-  min-width:420px;
+  flex:1 1 100%;
+  width:100%;
+  min-width:0;
   display:grid;
-  grid-template-columns:95px repeat(5,minmax(82px,1fr));
+  grid-template-columns:minmax(90px,.72fr) repeat(5,minmax(0,1fr));
   align-items:center;
   gap:0;
   border:1px solid #29294c;
@@ -520,7 +520,7 @@
   .toolbar{grid-template-columns:repeat(2,minmax(0,1fr))}
   .searchBox{grid-column:1/-1}
   .resultCount{grid-column:1/-1}
-  .currencyStrip article{flex-basis:560px}
+  .currencyStrip article{flex-basis:100%;min-width:0}
 }
 @media(max-width:960px){
   .main{padding:10px 10px 22px}
@@ -548,7 +548,7 @@
   .summaryGrid{gap:6px}
   .summaryGrid>div{min-height:70px;padding:9px}
   .summaryGrid b{font-size:16px}
-  .currencyStrip article{min-width:680px;flex-basis:680px}
+  .currencyStrip article{min-width:0;flex-basis:100%;grid-template-columns:80px repeat(5,minmax(0,1fr))}
   .toolbar{grid-template-columns:1fr}
   .searchBox,.resultCount{grid-column:auto}
   .cards{grid-template-columns:1fr}
