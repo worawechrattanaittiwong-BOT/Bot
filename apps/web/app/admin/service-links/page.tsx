@@ -44,6 +44,27 @@ type Connection = {
   detail: string;
 };
 
+type AiAdminSettings = {
+  enabled: boolean;
+  provider: string;
+  model: string;
+  dailyMessageLimit: number;
+  maxHistoryMessages: number;
+  maxOutputTokens: number;
+  systemNote: string;
+  configured: boolean;
+  apiKeyConfigured: boolean;
+};
+
+type AiSupportChannelAdmin = {
+  id: string;
+  channel_type: "LINE" | "FACEBOOK" | "TELEGRAM" | "OTHER";
+  label: string;
+  url: string;
+  enabled: boolean;
+  sort_order: number;
+};
+
 type PaymentAccount = {
   id: number;
   bankCode: string;
@@ -199,6 +220,10 @@ export default function AdminServiceLinksPage() {
   const [savingPaymentQr, setSavingPaymentQr] = useState(false);
   const [testingPaymentQr, setTestingPaymentQr] = useState(false);
   const [paymentQrTest, setPaymentQrTest] = useState<PaymentQrTest | null>(null);
+  const [aiSettings, setAiSettings] = useState<AiAdminSettings | null>(null);
+  const [aiContacts, setAiContacts] = useState<AiSupportChannelAdmin[]>([]);
+  const [savingAiSettings, setSavingAiSettings] = useState(false);
+  const [savingAiContact, setSavingAiContact] = useState("");
 
   const [linkForm, setLinkForm] = useState<LinkForm>(EMPTY_LINK);
   const [credentialForm, setCredentialForm] = useState<CredentialForm>(EMPTY_CREDENTIAL);
@@ -260,16 +285,20 @@ export default function AdminServiceLinksPage() {
     setLoading(true);
     setError("");
     try {
-      const [links, vault, qrSettings] = await Promise.all([
+      const [links, vault, qrSettings, assistantSettings, assistantContacts] = await Promise.all([
         adminApi("/admin/service-links"),
         adminApi("/admin/api-credentials"),
-        adminApi("/admin/payment-qr-settings")
+        adminApi("/admin/payment-qr-settings"),
+        adminApi("/admin/ai-assistant/settings"),
+        adminApi("/admin/ai-assistant/contacts")
       ]);
       setItems(Array.isArray(links?.items) ? links.items : []);
       setCredentials(Array.isArray(vault?.items) ? vault.items : []);
       setConnections(Array.isArray(vault?.connections) ? vault.connections : []);
       setPaymentQr(qrSettings as PaymentQrSettings);
       setPaymentQrMethod((qrSettings?.method || "AUTO") as PaymentQrMethod);
+      setAiSettings(assistantSettings as AiAdminSettings);
+      setAiContacts(Array.isArray(assistantContacts) ? assistantContacts : []);
       setMessage("พร้อมใช้งาน");
     } catch (err: any) {
       setError(String(err?.message || "โหลดข้อมูลไม่สำเร็จ"));
@@ -637,6 +666,57 @@ export default function AdminServiceLinksPage() {
     link.remove();
   }
 
+  async function saveAiAssistantSettings() {
+    if (!aiSettings || savingAiSettings) return;
+    setSavingAiSettings(true);
+    setError("");
+    try {
+      const result = await adminApi("/admin/ai-assistant/settings", {
+        method: "PUT",
+        body: JSON.stringify({
+          enabled: aiSettings.enabled,
+          provider: aiSettings.provider,
+          model: aiSettings.model,
+          dailyMessageLimit: aiSettings.dailyMessageLimit,
+          maxHistoryMessages: aiSettings.maxHistoryMessages,
+          maxOutputTokens: aiSettings.maxOutputTokens,
+          systemNote: aiSettings.systemNote
+        })
+      });
+      setAiSettings(current => current ? { ...current, ...result } : result as AiAdminSettings);
+      setMessage("บันทึกการตั้งค่า SCENOVA AI แล้ว");
+      await load();
+    } catch (err: any) {
+      setError(String(err?.message || "บันทึกการตั้งค่า SCENOVA AI ไม่สำเร็จ"));
+    } finally {
+      setSavingAiSettings(false);
+    }
+  }
+
+  async function saveAiContact(item: AiSupportChannelAdmin) {
+    if (savingAiContact) return;
+    setSavingAiContact(item.channel_type);
+    setError("");
+    try {
+      const result = await adminApi("/admin/ai-assistant/contacts", {
+        method: "PUT",
+        body: JSON.stringify({
+          type: item.channel_type,
+          label: item.label,
+          url: item.url,
+          enabled: item.enabled,
+          sortOrder: item.sort_order
+        })
+      });
+      setAiContacts(Array.isArray(result) ? result as AiSupportChannelAdmin[] : aiContacts);
+      setMessage("บันทึกช่องทาง " + item.label + " แล้ว");
+    } catch (err: any) {
+      setError(String(err?.message || "บันทึกช่องทางติดต่อไม่สำเร็จ"));
+    } finally {
+      setSavingAiContact("");
+    }
+  }
+
   return (
     <div className="app-wrap owner-app">
       <OwnerSidebar activeKey="service-links" onLogout={logout}/>
@@ -673,6 +753,177 @@ export default function AdminServiceLinksPage() {
               </div>
             ))}
           </section>
+
+          <div className={s.sectionHead}>
+            <div>
+              <span className={s.kicker}>SCENOVA AI / SUPPORT</span>
+              <h2>AI Assistant Settings</h2>
+            </div>
+            <span>
+              {aiSettings?.configured
+                ? "INCEPTION CONNECTED"
+                : aiSettings?.apiKeyConfigured
+                  ? "KEY SET · CHECK PROVIDER"
+                  : "API KEY NOT SET"}
+            </span>
+          </div>
+
+          {aiSettings ? (
+            <>
+              <section className={s.editor}>
+                <div className={s.field}>
+                  <label>Provider</label>
+                  <input value={aiSettings.provider} readOnly/>
+                </div>
+                <div className={s.field}>
+                  <label>Model</label>
+                  <input
+                    value={aiSettings.model}
+                    onChange={event => setAiSettings(current => current ? { ...current, model: event.target.value } : current)}
+                    placeholder="mercury-2.5"
+                    maxLength={120}
+                  />
+                </div>
+                <label className={s.activeToggle}>
+                  <input
+                    type="checkbox"
+                    checked={aiSettings.enabled}
+                    onChange={event => setAiSettings(current => current ? { ...current, enabled: event.target.checked } : current)}
+                  />
+                  เปิดใช้งาน SCENOVA AI
+                </label>
+
+                <div className={s.field}>
+                  <label>ข้อความ / User / วัน</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={1000}
+                    value={aiSettings.dailyMessageLimit}
+                    onChange={event => setAiSettings(current => current ? {
+                      ...current,
+                      dailyMessageLimit: Math.max(1, Math.min(1000, Number(event.target.value || 1)))
+                    } : current)}
+                  />
+                </div>
+                <div className={s.field}>
+                  <label>Conversation History</label>
+                  <input
+                    type="number"
+                    min={2}
+                    max={40}
+                    value={aiSettings.maxHistoryMessages}
+                    onChange={event => setAiSettings(current => current ? {
+                      ...current,
+                      maxHistoryMessages: Math.max(2, Math.min(40, Number(event.target.value || 2)))
+                    } : current)}
+                  />
+                </div>
+                <div className={s.field}>
+                  <label>Max Output Tokens</label>
+                  <input
+                    type="number"
+                    min={128}
+                    max={4000}
+                    value={aiSettings.maxOutputTokens}
+                    onChange={event => setAiSettings(current => current ? {
+                      ...current,
+                      maxOutputTokens: Math.max(128, Math.min(4000, Number(event.target.value || 128)))
+                    } : current)}
+                  />
+                </div>
+
+                <div className={`${s.field} ${s.fieldWide}`}>
+                  <label>System Note เพิ่มเติม</label>
+                  <textarea
+                    value={aiSettings.systemNote}
+                    onChange={event => setAiSettings(current => current ? { ...current, systemNote: event.target.value } : current)}
+                    placeholder="เว้นว่างได้ · ใช้เพิ่มกฎหรือข้อมูลภายในที่ต้องการให้ AI รู้"
+                    maxLength={6000}
+                  />
+                </div>
+
+                <div className={s.actions}>
+                  <div className={s.actionLeft}>
+                    Provider หลัก: Inception Labs · API Key จัดการใน API Key Vault ด้านล่าง
+                  </div>
+                  <div className={s.actionRight}>
+                    <button
+                      type="button"
+                      className={s.primary}
+                      disabled={savingAiSettings || !aiSettings.model.trim()}
+                      onClick={() => void saveAiAssistantSettings()}
+                    >
+                      {savingAiSettings ? "กำลังบันทึก..." : "บันทึก AI Settings"}
+                    </button>
+                  </div>
+                </div>
+              </section>
+
+              <div className={s.listHead}>
+                <div>
+                  <h2>ช่องทางติดต่อผู้พัฒนา</h2>
+                  <span>จะแสดงในหน้าต่าง SCENOVA AI เฉพาะช่องที่เปิดใช้งานและมี URL</span>
+                </div>
+              </div>
+
+              <section className={s.grid}>
+                {aiContacts.map((contact, index) => (
+                  <article className={s.card} key={contact.id || contact.channel_type}>
+                    <div className={s.cardTop}>
+                      <div>
+                        <h3>{contact.channel_type === "FACEBOOK" ? "Facebook" : contact.channel_type === "TELEGRAM" ? "Telegram" : contact.channel_type}</h3>
+                        <p className={s.purpose}>Developer Contact</p>
+                      </div>
+                      <span className={contact.enabled && contact.url.trim() ? s.activeBadge : s.inactiveBadge}>
+                        <i/> {contact.enabled && contact.url.trim() ? "ACTIVE" : "OFF"}
+                      </span>
+                    </div>
+
+                    <div className={s.field} style={{ marginTop: 12 }}>
+                      <label>ลิงก์</label>
+                      <input
+                        value={contact.url}
+                        placeholder={
+                          contact.channel_type === "LINE"
+                            ? "https://line.me/..."
+                            : contact.channel_type === "FACEBOOK"
+                              ? "https://m.me/..."
+                              : "https://t.me/..."
+                        }
+                        inputMode="url"
+                        onChange={event => setAiContacts(current => current.map((item, itemIndex) =>
+                          itemIndex === index ? { ...item, url: event.target.value } : item
+                        ))}
+                      />
+                    </div>
+
+                    <label className={s.activeToggle}>
+                      <input
+                        type="checkbox"
+                        checked={contact.enabled}
+                        onChange={event => setAiContacts(current => current.map((item, itemIndex) =>
+                          itemIndex === index ? { ...item, enabled: event.target.checked } : item
+                        ))}
+                      />
+                      แสดงใน AI Widget
+                    </label>
+
+                    <div className={s.cardActions}>
+                      <button
+                        type="button"
+                        className={s.smallButton}
+                        disabled={savingAiContact === contact.channel_type || (contact.enabled && !contact.url.trim())}
+                        onClick={() => void saveAiContact(contact)}
+                      >
+                        {savingAiContact === contact.channel_type ? "กำลังบันทึก..." : "บันทึก"}
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </section>
+            </>
+          ) : null}
 
           <div className={s.sectionHead}>
             <div>

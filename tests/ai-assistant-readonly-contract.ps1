@@ -34,6 +34,7 @@ Assert-Contains $migration "CREATE TABLE IF NOT EXISTS ai_messages" "AI messages
 Assert-Contains $migration "CREATE TABLE IF NOT EXISTS ai_knowledge_articles" "AI knowledge migration missing"
 Assert-Contains $migration "CREATE TABLE IF NOT EXISTS ai_usage_daily" "AI usage migration missing"
 Assert-Contains $migration "CREATE TABLE IF NOT EXISTS ai_support_channels" "AI support channels migration missing"
+Assert-Contains $migration "SET provider='INCEPTION',model='mercury-2.5'" "AI migration must upgrade generic provider defaults to Inception Mercury"
 Assert-Contains $migration "provider='CUSTOM' AND btrim(model)=''" "AI migration must upgrade the legacy CUSTOM/blank default safely"
 Assert-Contains $deploy "database/068_ai_assistant.sql" "Production deploy must apply AI assistant migration"
 
@@ -68,6 +69,9 @@ Assert-Contains $provider "GEMINI" "Generic provider adapter missing Gemini-styl
 Assert-Contains $provider "https://api.inceptionlabs.ai/v1" "SCENOVA AI must default to Inception API base URL"
 Assert-Contains $provider "mercury-2.5" "SCENOVA AI must default to Mercury 2.5"
 Assert-Contains $serviceLinks "SCENOVA_AI_API_KEY" "Existing API & Service Links page must expose SCENOVA AI credential preset"
+Assert-Contains $serviceLinks "AI Assistant Settings" "Existing API & Service Links page must expose AI assistant settings without adding a sidebar menu"
+Assert-Contains $serviceLinks "ช่องทางติดต่อผู้พัฒนา" "Existing API & Service Links page must manage AI support contacts"
+Assert-Contains $serviceLinks "/admin/ai-assistant/contacts" "Support contact editor must use isolated AI admin endpoint"
 Assert-Contains $credentialTester "Inception Labs" "API credential tester must recognize Inception"
 Assert-Contains $credentialTester "https://api.inceptionlabs.ai/v1/chat/completions" "Inception credential test must use the supported chat completion endpoint"
 Assert-Contains $provider "ANTHROPIC" "Generic provider adapter missing Anthropic-style mode"
