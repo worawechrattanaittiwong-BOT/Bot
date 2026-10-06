@@ -1347,6 +1347,12 @@ export class AdminController {
       metrics?.symbol ||
       "XAUUSD"
     ).trim();
+    // Admin exact selection is authoritative per Slot. A refresh/repair must
+    // never collapse broker-native symbols such as XAUUSDm/XAUUSDc back to
+    // the generic root, otherwise the next reload silently changes Symbol.
+    if (String(settings?.symbolResolutionMode || "").toUpperCase() === "EXACT") {
+      return raw || "XAUUSD";
+    }
     const upper = raw.toUpperCase();
     if (upper.includes("XAUUSD")) return "XAUUSD";
     if (upper.includes("BTCUSD") || upper.includes("XBTUSD")) return "BTCUSD";
@@ -1405,8 +1411,7 @@ export class AdminController {
     const pendingOrders = Math.max(0, Number(slot.pending_orders || 0));
     if (
       positions > 0 || pendingOrders > 0 ||
-      String(slot.actual_state || "").toUpperCase() === "RUNNING" ||
-      String(slot.desired_state || "").toUpperCase() === "RUNNING"
+      String(slot.actual_state || "").toUpperCase() === "RUNNING"
     ) {
       throw new ConflictException("กรุณาหยุดบอทและให้ Position / Pending Order เป็น 0 ก่อนเปลี่ยน Symbol");
     }
@@ -1474,6 +1479,21 @@ export class AdminController {
 
     let actionId: string | null = null;
     if (mode === "CLOUD") {
+      await this.db.query(
+        "UPDATE bot_commands SET status='ACKED',acked_at=COALESCE(acked_at,now()) WHERE bot_instance_id=$1 AND status IN ('PENDING','DELIVERED') AND command='START'",
+        [slot.instance_id]
+      );
+      await this.db.query(
+        `INSERT INTO bot_commands(bot_instance_id,command)
+         SELECT $1,'SAFE_STOP'
+         WHERE NOT EXISTS (
+           SELECT 1 FROM bot_commands
+           WHERE bot_instance_id=$1
+             AND command='SAFE_STOP'
+             AND status IN ('PENDING','DELIVERED')
+         )`,
+        [slot.instance_id]
+      );
       await this.db.query(
         `INSERT INTO worker_commands(runner_id,bot_instance_id,execution_generation,command,status)
          SELECT $1,$2,$3,'RELOAD_INSTANCE','PENDING'
@@ -1554,8 +1574,7 @@ export class AdminController {
     if (
       positions > 0 ||
       pendingOrders > 0 ||
-      String(slot.actual_state || "").toUpperCase() === "RUNNING" ||
-      String(slot.desired_state || "").toUpperCase() === "RUNNING"
+      String(slot.actual_state || "").toUpperCase() === "RUNNING"
     ) {
       throw new ConflictException(
         "กรุณาหยุดบอทและให้ Position / Pending Order เป็น 0 ก่อนโหลด Symbol ใหม่"
@@ -1624,6 +1643,21 @@ export class AdminController {
 
     let actionId: string | null = null;
     if (mode === "CLOUD") {
+      await this.db.query(
+        "UPDATE bot_commands SET status='ACKED',acked_at=COALESCE(acked_at,now()) WHERE bot_instance_id=$1 AND status IN ('PENDING','DELIVERED') AND command='START'",
+        [slot.instance_id]
+      );
+      await this.db.query(
+        `INSERT INTO bot_commands(bot_instance_id,command)
+         SELECT $1,'SAFE_STOP'
+         WHERE NOT EXISTS (
+           SELECT 1 FROM bot_commands
+           WHERE bot_instance_id=$1
+             AND command='SAFE_STOP'
+             AND status IN ('PENDING','DELIVERED')
+         )`,
+        [slot.instance_id]
+      );
       await this.db.query(
         `INSERT INTO worker_commands(
            runner_id,bot_instance_id,execution_generation,command,status
@@ -1713,8 +1747,7 @@ export class AdminController {
     if (
       positions > 0 ||
       pendingOrders > 0 ||
-      String(slot.actual_state || "").toUpperCase() === "RUNNING" ||
-      String(slot.desired_state || "").toUpperCase() === "RUNNING"
+      String(slot.actual_state || "").toUpperCase() === "RUNNING"
     ) {
       throw new ConflictException(
         "กรุณาหยุดบอทและให้ Position / Pending Order เป็น 0 ก่อนซ่อม MT5 / EA"
@@ -1762,6 +1795,21 @@ export class AdminController {
     const requestedAt = new Date().toISOString();
 
     await this.db.transaction(async tx => {
+      await tx.query(
+        "UPDATE bot_commands SET status='ACKED',acked_at=COALESCE(acked_at,now()) WHERE bot_instance_id=$1 AND status IN ('PENDING','DELIVERED') AND command='START'",
+        [slot.instance_id]
+      );
+      await tx.query(
+        `INSERT INTO bot_commands(bot_instance_id,command)
+         SELECT $1,'SAFE_STOP'
+         WHERE NOT EXISTS (
+           SELECT 1 FROM bot_commands
+           WHERE bot_instance_id=$1
+             AND command='SAFE_STOP'
+             AND status IN ('PENDING','DELIVERED')
+         )`,
+        [slot.instance_id]
+      );
       await tx.query(
         `UPDATE worker_commands
          SET status='CANCELLED',

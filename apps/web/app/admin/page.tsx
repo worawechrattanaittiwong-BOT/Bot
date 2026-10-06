@@ -1297,7 +1297,7 @@ export default function AdminPage() {
                                 <div>
                                   <b>Slot #{Number(slot.slot_number || 0)} · {slot.account_number?"MT5 "+slot.account_number:"รอเชื่อม MT5"}</b>
                                   <small>
-                                    {slot.mode==="LOCAL"?(slot.mt5_online?"ONLINE":"OFFLINE"):(String(slot.actual_state||"OFFLINE").toUpperCase()==="RUNNING"?"ONLINE":"OFFLINE")}
+                                    {slot.mt5_online?"ONLINE":"OFFLINE"}
                                     {slot.requested_symbol ? " · เลือก "+slot.requested_symbol : ""}
                                     {slot.active_symbol && String(slot.active_symbol).toUpperCase()!==String(slot.requested_symbol||"").toUpperCase() ? " · ใช้งานจริง "+slot.active_symbol : ""}
                                     {slot.provisioning_error ? " · "+slot.provisioning_error : ""}
@@ -1558,7 +1558,7 @@ export default function AdminPage() {
                                   <div>
                                     <b>Slot #{Number(slot.slot_number || 0)} · {slot.account_number?"MT5 "+slot.account_number:"รอเชื่อม MT5"}</b>
                                     <small>
-                                      {slot.mode==="LOCAL"?(slot.mt5_online?"ONLINE":"OFFLINE"):(String(slot.actual_state||"OFFLINE").toUpperCase()==="RUNNING"?"ONLINE":"OFFLINE")}
+                                      {slot.mt5_online?"ONLINE":"OFFLINE"}
                                       {slot.requested_symbol ? " · เลือก "+slot.requested_symbol : ""}
                                       {slot.active_symbol && String(slot.active_symbol).toUpperCase()!==String(slot.requested_symbol||"").toUpperCase() ? " · ใช้งานจริง "+slot.active_symbol : ""}
                                       {slot.provisioning_error ? " · "+slot.provisioning_error : ""}

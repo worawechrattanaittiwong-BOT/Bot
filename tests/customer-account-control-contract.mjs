@@ -135,6 +135,20 @@ assert.match(adminApi, /marketWatchSymbols/);
 assert.match(adminPage, /\/admin\/slots\/refresh-symbol/);
 assert.match(adminPage, /\/admin\/slots\/disconnect-mt5/);
 assert.match(adminPage, /โหลด Symbol ใหม่/);
+assert.match(adminPage, /slot\.mt5_online\?"ONLINE":"OFFLINE"/, "Admin Slot connection status must use per-Slot MT5 heartbeat, not bot RUNNING state");
+const selectSymbolStart = adminApi.indexOf('@Post("slots/select-symbol")');
+const refreshSymbolStart = adminApi.indexOf('@Post("slots/refresh-symbol")');
+const repairRuntimeStart = adminApi.indexOf('@Post("slots/repair-runtime")');
+const disconnectStart = adminApi.indexOf('@Post("slots/disconnect-mt5")');
+const selectSymbolBlock = adminApi.slice(selectSymbolStart, refreshSymbolStart);
+const refreshSymbolBlock = adminApi.slice(refreshSymbolStart, repairRuntimeStart);
+const repairRuntimeBlock = adminApi.slice(repairRuntimeStart, disconnectStart);
+for (const [name, block] of [["select", selectSymbolBlock], ["refresh", refreshSymbolBlock], ["repair", repairRuntimeBlock]]) {
+  assert.match(block, /String\(slot\.actual_state \|\| ""\)\.toUpperCase\(\) === "RUNNING"/, `${name} must block the selected Slot when its runtime is actually RUNNING`);
+  assert.doesNotMatch(block, /String\(slot\.desired_state \|\| ""\)\.toUpperCase\(\) === "RUNNING"/, `${name} must not let a stale pending START lock Slot maintenance forever`);
+  assert.match(block, /command='START'/, `${name} must supersede pending START only for the selected Slot`);
+}
+assert.match(adminApi, /symbolResolutionMode \|\| ""\)\.toUpperCase\(\) === "EXACT"\) \{\s*return raw \|\| "XAUUSD";/s, "Admin refresh must preserve exact broker-native Symbol suffixes");
 assert.match(adminPage, /ตัดการเชื่อมต่อ/);
 assert.match(fs.readFileSync("apps/web/app/dashboard/page.tsx","utf8"), /ตัดการเชื่อมต่อ MT5 เดิมแล้ว · พร้อมเชื่อมบัญชีใหม่/);
 assert.match(adminApi, /Local MT5 ใช้ได้ 1 Slot/);
