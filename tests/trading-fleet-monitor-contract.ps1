@@ -17,7 +17,6 @@ foreach ($required in @(
   '@Get()',
   '@Query("from")',
   '@Query("to")',
-  'request_range AS',
   "a.status='ACTIVE'",
   'JOIN mt5_accounts a ON a.id=bi.mt5_account_id',
   'OWN_ASSIGNED_SLOTS',
