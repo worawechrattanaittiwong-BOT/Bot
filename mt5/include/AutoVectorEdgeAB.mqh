@@ -1,12 +1,12 @@
-#ifndef SCENOVA_AUTO_VECTOR_EDGE_AB_V1_MQH
-#define SCENOVA_AUTO_VECTOR_EDGE_AB_V1_MQH
+#ifndef SCENOVA_AUTO_VECTOR_EDGE_AB_MQH
+#define SCENOVA_AUTO_VECTOR_EDGE_AB_MQH
 
 // Phase 3 counterfactual A/B observer.
-// Variant A = actual existing AUTO V20 entries.
+// Variant A = actual existing AUTO entries.
 // Variant B = hypothetical VECTOR EDGE filter over those actual entries.
 // B is filter-only and has no execution authority.
 
-#define VECTOR_EDGE_AB_V1_VERSION "1.2.0-actual-entry-counterfactual"
+#define VECTOR_EDGE_AB_BUILD "1.2.0-actual-entry-counterfactual"
 
 const bool VECTOR_EDGE_AB_EXECUTION_ENABLED = false;
 const double VECTOR_EDGE_AB_MIN_EDGE_RATIO = 40.0;
@@ -86,14 +86,14 @@ bool VectorEdgeABEvidenceReady()
 {
    // Preferred direction compares BUY vs SELL EV. Do not mix a historical win
    // probability on one side with an uncalibrated model-score proxy on the other.
-   return g_autoV20Buy.winSamples >= 20 && g_autoV20Sell.winSamples >= 20;
+   return g_autoBuy.winSamples >= 20 && g_autoSell.winSamples >= 20;
 }
 
 string VectorEdgeABSummaryJson()
 {
    return StringFormat(
       "{\"version\":\"%s\",\"executionEnabled\":false,\"actualAEntries\":%I64d,\"evaluatedEntries\":%I64d,\"variantBKeep\":%I64d,\"variantBBlock\":%I64d,\"directionMismatch\":%I64d,\"invalidSnapshots\":%I64d,\"insufficientEvidence\":%I64d}",
-      VECTOR_EDGE_AB_V1_VERSION,
+      VECTOR_EDGE_AB_BUILD,
       g_vectorEdgeABActualEntries,
       g_vectorEdgeABEvaluatedEntries,
       g_vectorEdgeABVariantBKeep,
@@ -106,7 +106,7 @@ string VectorEdgeABSummaryJson()
 
 void AutoVectorEdgeABObserveActualEntry(const int actualDirection)
 {
-   if(!AutoV20Enabled() || actualDirection == 0)
+   if(!AutoEnabled() || actualDirection == 0)
       return;
 
    g_vectorEdgeABActualEntries++;
@@ -135,7 +135,7 @@ void AutoVectorEdgeABObserveActualEntry(const int actualDirection)
       g_vectorEdgeABInsufficientEvidence++;
       PrintFormat(
          "VECTOR_EDGE_AB_ENTRY {\"version\":\"%s\",\"executionEnabled\":false,\"actualEntry\":true,\"evaluated\":false,\"decisionId\":%I64d,\"aDirection\":%d,\"probabilitySource\":\"%s\",\"bReason\":\"INSUFFICIENT_TWO_SIDE_HISTORY\"}",
-         VECTOR_EDGE_AB_V1_VERSION,g_autoV20DecisionId,actualDirection,
+         VECTOR_EDGE_AB_BUILD,g_autoDecisionId,actualDirection,
          g_vectorEdgeShadowProbabilitySource
       );
       return;
@@ -146,7 +146,7 @@ void AutoVectorEdgeABObserveActualEntry(const int actualDirection)
       g_vectorEdgeABInvalidSnapshots++;
       PrintFormat(
          "VECTOR_EDGE_AB_ENTRY {\"version\":\"%s\",\"executionEnabled\":false,\"actualEntry\":true,\"evaluated\":false,\"decisionId\":%I64d,\"aDirection\":%d,\"bReason\":\"VECTOR_INVALID\"}",
-         VECTOR_EDGE_AB_V1_VERSION,g_autoV20DecisionId,actualDirection
+         VECTOR_EDGE_AB_BUILD,g_autoDecisionId,actualDirection
       );
       return;
    }
@@ -164,11 +164,11 @@ void AutoVectorEdgeABObserveActualEntry(const int actualDirection)
 
    PrintFormat(
       "VECTOR_EDGE_AB_ENTRY {\"version\":\"%s\",\"executionEnabled\":false,\"actualEntry\":true,\"evaluated\":true,\"decisionId\":%I64d,\"decisionKind\":\"%s\",\"aDirection\":%d,\"aReason\":\"%s\",\"probabilitySource\":\"%s\",\"bWouldAllow\":%s,\"bReason\":\"%s\",\"vectorDirection\":%d,\"edgeRatio\":%.2f,\"entropy\":%.4f,\"agreement\":%.4f,\"buyEV\":%.4f,\"sellEV\":%.4f}",
-      VECTOR_EDGE_AB_V1_VERSION,
-      g_autoV20DecisionId,
-      g_autoV20DecisionKind,
+      VECTOR_EDGE_AB_BUILD,
+      g_autoDecisionId,
+      g_autoDecisionKind,
       actualDirection,
-      g_autoV20DecisionReason,
+      g_autoDecisionReason,
       g_vectorEdgeShadowProbabilitySource,
       ab.variantBWouldAllow ? "true" : "false",
       ab.variantBReason,
@@ -186,4 +186,4 @@ void AutoVectorEdgeABObserveActualEntry(const int actualDirection)
 
 #endif // VECTOR_EDGE_AB_PURE_ONLY
 
-#endif // SCENOVA_AUTO_VECTOR_EDGE_AB_V1_MQH
+#endif // SCENOVA_AUTO_VECTOR_EDGE_AB_MQH

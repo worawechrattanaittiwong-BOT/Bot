@@ -1,14 +1,14 @@
-# AUTO + VECTOR EDGE V1 — Isolation / Shadow / A-B Contract
+# AUTO + VECTOR EDGE — Isolation / Shadow / A-B Contract
 
 ## Goal
 
-VECTOR EDGE V1 is a mathematical decision-support module for `AUTO` only. It is introduced in isolated stages before any live decision integration.
+VECTOR EDGE is a mathematical decision-support module for `AUTO` only. It is introduced in isolated stages before any live decision integration.
 
 Phases 1–3 **must not change live trading behavior**.
 
 ## Non-negotiable isolation rules
 
-1. VECTOR EDGE V1 must not call any MT5 trade function.
+1. VECTOR EDGE must not call any MT5 trade function.
 2. It must not send, modify, cancel, or close orders.
 3. It must not change `AUTO`, `RACE`, `ZERO_GRID`, `ASSISTED`, or `MANUAL` ownership/state.
 4. It must not alter existing confidence gates, setup grades, rescue logic, ladder logic, profit defense, SL/TP, or sizing in Phases 1–3.
@@ -17,9 +17,9 @@ Phases 1–3 **must not change live trading behavior**.
 7. The production `mt5/FastBasketBot.mq5` remains unchanged during Phases 1–3.
 8. Variant B in Phase 3 is filter-only: it can never create a trade that Variant A did not already accept.
 
-## V1 outputs
+## Outputs
 
-`AutoVectorEdgeV1.mqh` returns:
+`AutoVectorEdge.mqh` returns:
 
 - `preferredDirection` — BUY / SELL / NONE diagnostic only
 - `entropy` — 0 = directional probability structure, 1 = near 50/50 uncertainty
@@ -49,7 +49,7 @@ Binary Shannon entropy is used as an uncertainty diagnostic over normalized BUY/
 - near `0` = one direction strongly dominates
 - near `1` = BUY/SELL probability is close to 50/50
 
-Entropy is not a live hard gate in V1.
+Entropy is not a live hard gate in AUTO.
 
 ### Motion agreement
 
@@ -57,13 +57,13 @@ Velocity and acceleration are combined only as diagnostics. They do not replace 
 
 ### Fractional Kelly
 
-Quarter-Kelly is calculated only as a diagnostic and hard-capped at `0.25`. V1 never uses it to size live orders.
+Quarter-Kelly is calculated only as a diagnostic and hard-capped at `0.25`. AUTO never uses it to size live orders.
 
 ## Phase 1 — DONE
 
 Files:
 
-- `mt5/include/AutoVectorEdgeV1.mqh`
+- `mt5/include/AutoVectorEdge.mqh`
 - this contract document
 
 Properties:
@@ -76,9 +76,9 @@ Properties:
 
 Files:
 
-- `mt5/include/AutoVectorEdgeShadowV1.mqh`
+- `mt5/include/AutoVectorEdgeShadow.mqh`
 - `mt5/FastBasketBot_VectorEdgeShadow.mq5`
-- `mt5/tests/AutoVectorEdgeV1SelfTest.mq5`
+- `mt5/tests/AutoVectorEdgeSelfTest.mq5`
 
 ### Phase 2 safety architecture
 
@@ -88,13 +88,13 @@ It uses the unchanged production EA source and renames only its `OnTimer` handle
 
 1. calls the original `ScenovaBaseOnTimer()` first;
 2. runs `AutoVectorEdgeShadowObserve()` afterward;
-3. reads AUTO V20 diagnostic state only;
+3. reads AUTO diagnostic state only;
 4. emits one JSON-line shadow record roughly every five seconds;
 5. never sends VECTOR EDGE output back into entry, exit, sizing, SL/TP, rescue, ladder, ownership, or any execution path.
 
 ### Scope gate
 
-Shadow evaluation runs only when `AutoV20Enabled()` is true, which requires:
+Shadow evaluation runs only when `AutoEnabled()` is true, which requires:
 
 - `engineMode == AUTO`
 - `controlMode == AUTO`
@@ -129,13 +129,13 @@ None of these source values are modified.
 
 Files:
 
-- `mt5/include/AutoVectorEdgeABV1.mqh`
+- `mt5/include/AutoVectorEdgeAB.mqh`
 - `mt5/FastBasketBot_VectorEdgeAB.mq5`
-- `mt5/tests/AutoVectorEdgeABV1SelfTest.mq5`
+- `mt5/tests/AutoVectorEdgeABSelfTest.mq5`
 
 ### A/B design
 
-- **Variant A** = existing AUTO V20 and remains the only real execution path.
+- **Variant A** = existing AUTO and remains the only real execution path.
 - **Variant B** = hypothetical VECTOR EDGE filter over decisions already accepted by Variant A.
 - Variant B has no order execution path.
 - `VECTOR_EDGE_AB_EXECUTION_ENABLED` is hard-coded `false`.
@@ -163,7 +163,7 @@ These are experiment thresholds only. They are **not production trading rules** 
 
 ### Decision-scoped logging
 
-The observer samples only when `g_autoV20DecisionId` changes. Each record includes:
+The observer samples only when `g_autoDecisionId` changes. Each record includes:
 
 - AUTO decision ID and FIRST/ADD kind
 - whether AUTO accepted the decision
@@ -203,7 +203,7 @@ Only if Phase 3 improves out-of-sample results:
 1. Production `mt5/FastBasketBot.mq5` remains unchanged.
 2. Existing `main` branch remains unchanged.
 3. RACE / ZERO GRID / ASSISTED / MANUAL code remains untouched.
-4. Shadow and A/B observers are hard-gated by `AutoV20Enabled()`.
+4. Shadow and A/B observers are hard-gated by `AutoEnabled()`.
 5. Original `OnTimer` executes before VECTOR EDGE observation.
 6. Negative EV never produces a positive edge classification.
 7. 50/50 probabilities produce high entropy.
@@ -219,9 +219,9 @@ Only if Phase 3 improves out-of-sample results:
 
 ## Manual validation sequence before any Phase 4 or live gate
 
-1. Compile `mt5/tests/AutoVectorEdgeV1SelfTest.mq5`; require zero compiler errors.
+1. Compile `mt5/tests/AutoVectorEdgeSelfTest.mq5`; require zero compiler errors.
 2. Run it; require `failed=0`.
-3. Compile `mt5/tests/AutoVectorEdgeABV1SelfTest.mq5`; require zero compiler errors.
+3. Compile `mt5/tests/AutoVectorEdgeABSelfTest.mq5`; require zero compiler errors.
 4. Run it; require `failed=0`.
 5. Compile `mt5/FastBasketBot_VectorEdgeShadow.mq5`; require zero compiler errors.
 6. Compile `mt5/FastBasketBot_VectorEdgeAB.mq5`; require zero compiler errors.
@@ -234,6 +234,6 @@ Only if Phase 3 improves out-of-sample results:
 
 ## Branch
 
-Development branch: `feature/auto-vector-edge-v1`
+Development branch: `refactor/auto-core-single`
 
 Do not merge to `main` until validation results are reviewed and an explicit merge is requested.

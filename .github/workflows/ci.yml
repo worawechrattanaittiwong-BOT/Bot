@@ -106,18 +106,18 @@ jobs:
         run: ./tests/mode-guide-video-contract.ps1
       - name: Cent account currency isolation contract
         run: node ./tests/cent-account-currency-isolation-contract.mjs
-      - name: AUTO V20 same-dataset policy regression
+      - name: AUTO same-dataset policy regression
         shell: pwsh
-        run: ./tests/auto-v20-policy-regression.ps1
+        run: ./tests/auto-policy-regression.ps1
       - name: AUTO strict ownership isolation contract
         shell: pwsh
         run: ./tests/auto-strict-isolation-contract.ps1
-      - name: AUTO V21 balanced exit and lot-safety contract
+      - name: AUTO balanced exit and lot-safety contract
         shell: pwsh
-        run: ./tests/auto-v21-balanced-exit-contract.ps1
-      - name: AUTO V22 safe-profit isolation contract
+        run: ./tests/auto-exit-contract.ps1
+      - name: AUTO safe-profit isolation contract
         shell: pwsh
-        run: ./tests/auto-v22-consistent-profit-contract.ps1
+        run: ./tests/auto-consistent-profit-contract.ps1
       - name: AUTO standard initial SL contract
         shell: pwsh
         run: ./tests/auto-standard-sl-contract.ps1

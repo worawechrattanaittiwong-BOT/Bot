@@ -26,7 +26,7 @@ foreach($entry in @(
   'FlipLockManage();',
   'ManageRaceBasket(momentum);',
   'ManageDynamicProtection();',
-  'AutoV20ManageOpenBasket(momentum)'
+  'AutoManageOpenBasket(momentum)'
 )){
   $idx=$onTick.IndexOf($entry)
   if($idx -lt 0 -or $accessGate -lt 0 -or $idx -gt $accessGate){

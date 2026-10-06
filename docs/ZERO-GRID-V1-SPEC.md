@@ -150,7 +150,7 @@ Rules:
 
 ZERO GRID must never alter the decision logic of other modes.
 
-- AUTO V20 functions and defaults remain unchanged.
+- AUTO functions and defaults remain unchanged.
 - RACE core remains unchanged.
 - ASSISTED and MANUAL legacy paths remain unchanged.
 - Adaptive Rescue is not a ZERO GRID entry/exit manager.

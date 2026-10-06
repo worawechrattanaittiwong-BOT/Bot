@@ -1,23 +1,23 @@
-// AUTO V22 swing-quality filter and R-based protection.
-// Scope contract: these helpers are called only from AUTO V20/V21 paths.
+// AUTO swing-quality filter and R-based protection.
+// Scope contract: these helpers are called only from AUTO paths.
 // They do not change RACE, COUNTER, ZERO_GRID, FLIP_LOCK or MANUAL behavior.
-#ifndef __SCENOVA_AUTO_V22_SWING_FILTER_MQH__
-#define __SCENOVA_AUTO_V22_SWING_FILTER_MQH__
+#ifndef __SCENOVA_AUTO_SWING_FILTER_MQH__
+#define __SCENOVA_AUTO_SWING_FILTER_MQH__
 
-#define AUTO_V22_NEWS_BEFORE_MINUTES 20
-#define AUTO_V22_NEWS_AFTER_MINUTES 15
+#define AUTO_NEWS_BEFORE_MINUTES 20
+#define AUTO_NEWS_AFTER_MINUTES 15
 
-int g_autoV22EmaH1_50 = INVALID_HANDLE;
-int g_autoV22EmaH1_100 = INVALID_HANDLE;
-int g_autoV22EmaH4_50 = INVALID_HANDLE;
-int g_autoV22EmaH4_100 = INVALID_HANDLE;
-double g_autoV22InitialRiskPoints = 0.0;
-string g_autoV22LastFilterReason = "INITIALIZING";
-datetime g_autoV22LastNewsCheckAt = 0;
-bool g_autoV22CachedNewsPause = false;
-string g_autoV22CachedNewsReason = "NONE";
+int g_autoEmaH1_50 = INVALID_HANDLE;
+int g_autoEmaH1_100 = INVALID_HANDLE;
+int g_autoEmaH4_50 = INVALID_HANDLE;
+int g_autoEmaH4_100 = INVALID_HANDLE;
+double g_autoInitialRiskPoints = 0.0;
+string g_autoLastFilterReason = "INITIALIZING";
+datetime g_autoLastNewsCheckAt = 0;
+bool g_autoCachedNewsPause = false;
+string g_autoCachedNewsReason = "NONE";
 
-string AutoV22RiskStateKey()
+string AutoRiskStateKey()
 {
    return StringFormat(
       "SCN_A22_R_%I64d_%s_%I64d",
@@ -27,38 +27,38 @@ string AutoV22RiskStateKey()
    );
 }
 
-void AutoV22ResetRiskState()
+void AutoResetRiskState()
 {
-   g_autoV22InitialRiskPoints=0.0;
-   string key=AutoV22RiskStateKey();
+   g_autoInitialRiskPoints=0.0;
+   string key=AutoRiskStateKey();
    if(GlobalVariableCheck(key))
       GlobalVariableDel(key);
 }
 
-void AutoV22SetInitialRisk(double entryPrice,double stopPrice)
+void AutoSetInitialRisk(double entryPrice,double stopPrice)
 {
-   if(g_autoV22InitialRiskPoints>0.0 || entryPrice<=0.0 || stopPrice<=0.0)
+   if(g_autoInitialRiskPoints>0.0 || entryPrice<=0.0 || stopPrice<=0.0)
       return;
    double risk=MathAbs(entryPrice-stopPrice)/MathMax(_Point,0.00000001);
    if(risk<=0.0)
       return;
-   g_autoV22InitialRiskPoints=risk;
-   GlobalVariableSet(AutoV22RiskStateKey(),risk);
+   g_autoInitialRiskPoints=risk;
+   GlobalVariableSet(AutoRiskStateKey(),risk);
 }
 
-double AutoV22InitialRisk()
+double AutoInitialRisk()
 {
-   if(g_autoV22InitialRiskPoints>0.0)
-      return g_autoV22InitialRiskPoints;
-   string key=AutoV22RiskStateKey();
+   if(g_autoInitialRiskPoints>0.0)
+      return g_autoInitialRiskPoints;
+   string key=AutoRiskStateKey();
    if(GlobalVariableCheck(key))
-      g_autoV22InitialRiskPoints=MathMax(0.0,GlobalVariableGet(key));
-   return g_autoV22InitialRiskPoints;
+      g_autoInitialRiskPoints=MathMax(0.0,GlobalVariableGet(key));
+   return g_autoInitialRiskPoints;
 }
 
-void AutoV22RecoverInitialRisk(int direction)
+void AutoRecoverInitialRisk(int direction)
 {
-   if(AutoV22InitialRisk()>0.0 || direction==0)
+   if(AutoInitialRisk()>0.0 || direction==0)
       return;
 
    double weighted=0.0;
@@ -71,7 +71,7 @@ void AutoV22RecoverInitialRisk(int direction)
       if(PositionGetString(POSITION_SYMBOL)!=_Symbol ||
          PositionGetInteger(POSITION_MAGIC)!=InpMagic)
          continue;
-      if(StringFind(PositionGetString(POSITION_COMMENT),AUTO_V20_LIVE_COMMENT)<0)
+      if(StringFind(PositionGetString(POSITION_COMMENT),AUTO_LIVE_COMMENT)<0)
          continue;
 
       long type=PositionGetInteger(POSITION_TYPE);
@@ -87,41 +87,41 @@ void AutoV22RecoverInitialRisk(int direction)
    }
 
    double entry=total>0.0 ? weighted/total : 0.0;
-   if(entry<=0.0 || g_autoV20BasketStopPrice<=0.0)
+   if(entry<=0.0 || g_autoBasketStopPrice<=0.0)
       return;
-   AutoV22SetInitialRisk(entry,g_autoV20BasketStopPrice);
+   AutoSetInitialRisk(entry,g_autoBasketStopPrice);
 }
 
-bool AutoV22EnsureEmaHandles()
+bool AutoEnsureEmaHandles()
 {
-   if(g_autoV22EmaH1_50==INVALID_HANDLE)
-      g_autoV22EmaH1_50=iMA(_Symbol,PERIOD_H1,50,0,MODE_EMA,PRICE_CLOSE);
-   if(g_autoV22EmaH1_100==INVALID_HANDLE)
-      g_autoV22EmaH1_100=iMA(_Symbol,PERIOD_H1,100,0,MODE_EMA,PRICE_CLOSE);
-   if(g_autoV22EmaH4_50==INVALID_HANDLE)
-      g_autoV22EmaH4_50=iMA(_Symbol,PERIOD_H4,50,0,MODE_EMA,PRICE_CLOSE);
-   if(g_autoV22EmaH4_100==INVALID_HANDLE)
-      g_autoV22EmaH4_100=iMA(_Symbol,PERIOD_H4,100,0,MODE_EMA,PRICE_CLOSE);
+   if(g_autoEmaH1_50==INVALID_HANDLE)
+      g_autoEmaH1_50=iMA(_Symbol,PERIOD_H1,50,0,MODE_EMA,PRICE_CLOSE);
+   if(g_autoEmaH1_100==INVALID_HANDLE)
+      g_autoEmaH1_100=iMA(_Symbol,PERIOD_H1,100,0,MODE_EMA,PRICE_CLOSE);
+   if(g_autoEmaH4_50==INVALID_HANDLE)
+      g_autoEmaH4_50=iMA(_Symbol,PERIOD_H4,50,0,MODE_EMA,PRICE_CLOSE);
+   if(g_autoEmaH4_100==INVALID_HANDLE)
+      g_autoEmaH4_100=iMA(_Symbol,PERIOD_H4,100,0,MODE_EMA,PRICE_CLOSE);
 
-   return g_autoV22EmaH1_50!=INVALID_HANDLE &&
-      g_autoV22EmaH1_100!=INVALID_HANDLE &&
-      g_autoV22EmaH4_50!=INVALID_HANDLE &&
-      g_autoV22EmaH4_100!=INVALID_HANDLE;
+   return g_autoEmaH1_50!=INVALID_HANDLE &&
+      g_autoEmaH1_100!=INVALID_HANDLE &&
+      g_autoEmaH4_50!=INVALID_HANDLE &&
+      g_autoEmaH4_100!=INVALID_HANDLE;
 }
 
-void AutoV22Release()
+void AutoRelease()
 {
-   if(g_autoV22EmaH1_50!=INVALID_HANDLE) IndicatorRelease(g_autoV22EmaH1_50);
-   if(g_autoV22EmaH1_100!=INVALID_HANDLE) IndicatorRelease(g_autoV22EmaH1_100);
-   if(g_autoV22EmaH4_50!=INVALID_HANDLE) IndicatorRelease(g_autoV22EmaH4_50);
-   if(g_autoV22EmaH4_100!=INVALID_HANDLE) IndicatorRelease(g_autoV22EmaH4_100);
-   g_autoV22EmaH1_50=INVALID_HANDLE;
-   g_autoV22EmaH1_100=INVALID_HANDLE;
-   g_autoV22EmaH4_50=INVALID_HANDLE;
-   g_autoV22EmaH4_100=INVALID_HANDLE;
+   if(g_autoEmaH1_50!=INVALID_HANDLE) IndicatorRelease(g_autoEmaH1_50);
+   if(g_autoEmaH1_100!=INVALID_HANDLE) IndicatorRelease(g_autoEmaH1_100);
+   if(g_autoEmaH4_50!=INVALID_HANDLE) IndicatorRelease(g_autoEmaH4_50);
+   if(g_autoEmaH4_100!=INVALID_HANDLE) IndicatorRelease(g_autoEmaH4_100);
+   g_autoEmaH1_50=INVALID_HANDLE;
+   g_autoEmaH1_100=INVALID_HANDLE;
+   g_autoEmaH4_50=INVALID_HANDLE;
+   g_autoEmaH4_100=INVALID_HANDLE;
 }
 
-bool AutoV22EmaValue(int handle,int shift,double &value)
+bool AutoEmaValue(int handle,int shift,double &value)
 {
    value=0.0;
    if(handle==INVALID_HANDLE)
@@ -134,7 +134,7 @@ bool AutoV22EmaValue(int handle,int shift,double &value)
    return value>0.0;
 }
 
-int AutoV22TrendDirection(
+int AutoTrendDirection(
    double closePrice,
    double ema50,
    double ema100,
@@ -151,7 +151,7 @@ int AutoV22TrendDirection(
    return 0;
 }
 
-bool AutoV22MajorNewsName(string name)
+bool AutoMajorNewsName(string name)
 {
    string upper=name;
    StringToUpper(upper);
@@ -170,7 +170,7 @@ bool AutoV22MajorNewsName(string name)
       StringFind(upper,"POWELL")>=0;
 }
 
-bool AutoV22MajorNewsPause(string &reasonOut)
+bool AutoMajorNewsPause(string &reasonOut)
 {
    reasonOut="NONE";
    if(MQLInfoInteger(MQL_TESTER))
@@ -179,15 +179,15 @@ bool AutoV22MajorNewsPause(string &reasonOut)
    datetime now=TimeTradeServer();
    if(now<=0) now=TimeCurrent();
 
-   if(g_autoV22LastNewsCheckAt>0 &&
-      now-g_autoV22LastNewsCheckAt<30)
+   if(g_autoLastNewsCheckAt>0 &&
+      now-g_autoLastNewsCheckAt<30)
    {
-      reasonOut=g_autoV22CachedNewsReason;
-      return g_autoV22CachedNewsPause;
+      reasonOut=g_autoCachedNewsReason;
+      return g_autoCachedNewsPause;
    }
-   g_autoV22LastNewsCheckAt=now;
-   g_autoV22CachedNewsPause=false;
-   g_autoV22CachedNewsReason="NONE";
+   g_autoLastNewsCheckAt=now;
+   g_autoCachedNewsPause=false;
+   g_autoCachedNewsReason="NONE";
 
    string currency=SymbolInfoString(_Symbol,SYMBOL_CURRENCY_PROFIT);
    if(currency=="") currency="USD";
@@ -206,13 +206,13 @@ bool AutoV22MajorNewsPause(string &reasonOut)
          continue;
       if(event.importance!=CALENDAR_IMPORTANCE_HIGH)
          continue;
-      if(!AutoV22MajorNewsName(event.name))
+      if(!AutoMajorNewsName(event.name))
          continue;
 
       int minutes=(int)MathRound((double)(values[i].time-now)/60.0);
       bool inside=minutes>=0
-         ? minutes<=AUTO_V22_NEWS_BEFORE_MINUTES
-         : MathAbs(minutes)<=AUTO_V22_NEWS_AFTER_MINUTES;
+         ? minutes<=AUTO_NEWS_BEFORE_MINUTES
+         : MathAbs(minutes)<=AUTO_NEWS_AFTER_MINUTES;
       if(!inside)
          continue;
 
@@ -227,16 +227,16 @@ bool AutoV22MajorNewsPause(string &reasonOut)
    if(nearest==1000000)
       return false;
 
-   g_autoV22CachedNewsPause=true;
-   g_autoV22CachedNewsReason="AUTO_V22_MAJOR_NEWS_"+nearestName;
-   reasonOut=g_autoV22CachedNewsReason;
+   g_autoCachedNewsPause=true;
+   g_autoCachedNewsReason="AUTO_MAJOR_NEWS_"+nearestName;
+   reasonOut=g_autoCachedNewsReason;
    return true;
 }
 
-int AutoV22ExecutionConfirmationCount(
+int AutoExecutionConfirmationCount(
    int direction,
    double momentum,
-   AUTO_V20_PULLBACK &pb
+   AUTO_PULLBACK &pb
 )
 {
    if(direction==0)
@@ -268,46 +268,46 @@ int AutoV22ExecutionConfirmationCount(
    return confirmations;
 }
 
-bool AutoV22StrongExecutionConfirmation(
+bool AutoStrongExecutionConfirmation(
    int direction,
    double momentum,
-   AUTO_V20_PULLBACK &pb
+   AUTO_PULLBACK &pb
 )
 {
-   return AutoV22ExecutionConfirmationCount(direction,momentum,pb)>0;
+   return AutoExecutionConfirmationCount(direction,momentum,pb)>0;
 }
 
-bool AutoV22SwingEntryAllowed(
+bool AutoSwingEntryAllowed(
    int direction,
    bool isAdd,
    bool sharedZoneFirst,
-   AUTO_V20_PULLBACK &pb,
-   AUTO_V20_LEVELS &levels,
+   AUTO_PULLBACK &pb,
+   AUTO_LEVELS &levels,
    double momentum,
    string &reasonOut
 )
 {
    reasonOut="NONE";
-   g_autoV22LastFilterReason="CHECKING";
+   g_autoLastFilterReason="CHECKING";
    if(direction==0)
    {
-      reasonOut="AUTO_V22_NO_DIRECTION";
-      g_autoV22LastFilterReason=reasonOut;
+      reasonOut="AUTO_NO_DIRECTION";
+      g_autoLastFilterReason=reasonOut;
       return false;
    }
 
    string newsReason="NONE";
-   if(AutoV22MajorNewsPause(newsReason))
+   if(AutoMajorNewsPause(newsReason))
    {
-      reasonOut="AUTO_V22_MAJOR_NEWS_WAIT";
-      g_autoV22LastFilterReason=newsReason;
+      reasonOut="AUTO_MAJOR_NEWS_WAIT";
+      g_autoLastFilterReason=newsReason;
       return false;
    }
 
-   if(!AutoV22EnsureEmaHandles())
+   if(!AutoEnsureEmaHandles())
    {
-      reasonOut="AUTO_V22_EMA_NOT_READY";
-      g_autoV22LastFilterReason=reasonOut;
+      reasonOut="AUTO_EMA_NOT_READY";
+      g_autoLastFilterReason=reasonOut;
       return false;
    }
 
@@ -318,43 +318,43 @@ bool AutoV22SwingEntryAllowed(
    if(CopyRates(_Symbol,PERIOD_H4,1,4,h4)<4 ||
       CopyRates(_Symbol,PERIOD_H1,1,4,h1)<4)
    {
-      reasonOut="AUTO_V22_HTF_DATA_NOT_READY";
-      g_autoV22LastFilterReason=reasonOut;
+      reasonOut="AUTO_HTF_DATA_NOT_READY";
+      g_autoLastFilterReason=reasonOut;
       return false;
    }
 
    double h4e50=0.0,h4e100=0.0,h4e100Past=0.0;
    double h1e50=0.0,h1e100=0.0,h1e100Past=0.0;
-   if(!AutoV22EmaValue(g_autoV22EmaH4_50,1,h4e50) ||
-      !AutoV22EmaValue(g_autoV22EmaH4_100,1,h4e100) ||
-      !AutoV22EmaValue(g_autoV22EmaH4_100,4,h4e100Past) ||
-      !AutoV22EmaValue(g_autoV22EmaH1_50,1,h1e50) ||
-      !AutoV22EmaValue(g_autoV22EmaH1_100,1,h1e100) ||
-      !AutoV22EmaValue(g_autoV22EmaH1_100,4,h1e100Past))
+   if(!AutoEmaValue(g_autoEmaH4_50,1,h4e50) ||
+      !AutoEmaValue(g_autoEmaH4_100,1,h4e100) ||
+      !AutoEmaValue(g_autoEmaH4_100,4,h4e100Past) ||
+      !AutoEmaValue(g_autoEmaH1_50,1,h1e50) ||
+      !AutoEmaValue(g_autoEmaH1_100,1,h1e100) ||
+      !AutoEmaValue(g_autoEmaH1_100,4,h1e100Past))
    {
-      reasonOut="AUTO_V22_EMA_BUFFER_NOT_READY";
-      g_autoV22LastFilterReason=reasonOut;
+      reasonOut="AUTO_EMA_BUFFER_NOT_READY";
+      g_autoLastFilterReason=reasonOut;
       return false;
    }
 
-   int h4Direction=AutoV22TrendDirection(h4[0].close,h4e50,h4e100,h4e100Past);
-   int h1Direction=AutoV22TrendDirection(h1[0].close,h1e50,h1e100,h1e100Past);
+   int h4Direction=AutoTrendDirection(h4[0].close,h4e50,h4e100,h4e100Past);
+   int h1Direction=AutoTrendDirection(h1[0].close,h1e50,h1e100,h1e100Past);
 
    // H4 is the hard directional anchor. AUTO cannot enter against it.
    if(h4Direction!=direction)
    {
       reasonOut=h4Direction==0
-         ? "AUTO_V22_H4_TREND_UNCLEAR"
-         : "AUTO_V22_H4_TREND_OPPOSITE";
-      g_autoV22LastFilterReason=reasonOut;
+         ? "AUTO_H4_TREND_UNCLEAR"
+         : "AUTO_H4_TREND_OPPOSITE";
+      g_autoLastFilterReason=reasonOut;
       return false;
    }
 
    MqlTick tick;
    if(!SymbolInfoTick(_Symbol,tick))
    {
-      reasonOut="AUTO_V22_NO_TICK";
-      g_autoV22LastFilterReason=reasonOut;
+      reasonOut="AUTO_NO_TICK";
+      g_autoLastFilterReason=reasonOut;
       return false;
    }
    double price=(tick.bid+tick.ask)*0.5;
@@ -364,8 +364,8 @@ bool AutoV22SwingEntryAllowed(
    bool correctSide100=direction>0 ? price>h1e100 : price<h1e100;
    if(!correctSide100 || h1Direction==-direction)
    {
-      reasonOut="AUTO_V22_H1_NOT_ALIGNED";
-      g_autoV22LastFilterReason=reasonOut;
+      reasonOut="AUTO_H1_NOT_ALIGNED";
+      g_autoLastFilterReason=reasonOut;
       return false;
    }
 
@@ -386,20 +386,20 @@ bool AutoV22SwingEntryAllowed(
 
    if(!setupLocation)
    {
-      reasonOut="AUTO_V22_WAIT_PULLBACK_VALUE";
-      g_autoV22LastFilterReason=reasonOut;
+      reasonOut="AUTO_WAIT_PULLBACK_VALUE";
+      g_autoLastFilterReason=reasonOut;
       return false;
    }
 
    int executionConfirmations=
-      AutoV22ExecutionConfirmationCount(direction,momentum,pb);
+      AutoExecutionConfirmationCount(direction,momentum,pb);
    int requiredExecutionConfirmations=1;
    if(executionConfirmations<requiredExecutionConfirmations)
    {
       reasonOut=isAdd
-         ? "AUTO_V22_WAIT_M5_M1_CONFIRM"
-         : "AUTO_V22_WAIT_MULTI_EXEC_CONFIRM";
-      g_autoV22LastFilterReason=reasonOut;
+         ? "AUTO_WAIT_M5_M1_CONFIRM"
+         : "AUTO_WAIT_MULTI_EXEC_CONFIRM";
+      g_autoLastFilterReason=reasonOut;
       return false;
    }
 
@@ -409,32 +409,32 @@ bool AutoV22SwingEntryAllowed(
       : levels.nearestSupportDistanceAtr;
    if(opposingRoomAtr>0.0 && opposingRoomAtr<0.20 && !roleFlip)
    {
-      reasonOut="AUTO_V22_OPPOSING_LEVEL_TOO_CLOSE";
-      g_autoV22LastFilterReason=reasonOut;
+      reasonOut="AUTO_OPPOSING_LEVEL_TOO_CLOSE";
+      g_autoLastFilterReason=reasonOut;
       return false;
    }
 
-   if(isAdd && !AutoV20ZoneStructureIntact(direction))
+   if(isAdd && !AutoZoneStructureIntact(direction))
    {
-      reasonOut="AUTO_V22_ADD_STRUCTURE_NOT_INTACT";
-      g_autoV22LastFilterReason=reasonOut;
+      reasonOut="AUTO_ADD_STRUCTURE_NOT_INTACT";
+      g_autoLastFilterReason=reasonOut;
       return false;
    }
 
-   g_autoV22LastFilterReason="AUTO_V22_QUALITY_CONFIRMED";
+   g_autoLastFilterReason="AUTO_QUALITY_CONFIRMED";
    return true;
 }
 
-double AutoV22AddRequiredProgressPoints(double atrPoints)
+double AutoAddRequiredProgressPoints(double atrPoints)
 {
    double required=MathMax(3.0,atrPoints*0.20);
-   double initialRisk=AutoV22InitialRisk();
+   double initialRisk=AutoInitialRisk();
    if(initialRisk>0.0)
       required=MathMax(required,initialRisk*0.35);
    return required;
 }
 
-double AutoV22StepProtectedStop(
+double AutoStepProtectedStop(
    int direction,
    double openPrice,
    double marketPrice,
@@ -444,7 +444,7 @@ double AutoV22StepProtectedStop(
    if(direction==0 || openPrice<=0.0 || marketPrice<=0.0)
       return currentSL;
 
-   double riskPoints=AutoV22InitialRisk();
+   double riskPoints=AutoInitialRisk();
    if(riskPoints<=0.0)
       return currentSL;
 

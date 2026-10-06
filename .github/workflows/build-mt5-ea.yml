@@ -82,9 +82,9 @@ jobs:
           "EA_SOURCE=$mq5Path" | Out-File -FilePath $env:GITHUB_ENV -Append
 
           foreach ($sentinel in @(
-            'bool AutoV20Enabled()',
+            'bool AutoEnabled()',
             'g_controlMode == "FLIP_LOCK"',
-            '#include "include\\AutoVectorEdgeLiveV1.mqh"',
+            '#include "include\\AutoVectorEdgeLive.mqh"',
             '#include "include\\FlipLockV1.mqh"',
             'AutoVectorEdgeLiveAllow',
             'FlipLockManage',
@@ -102,8 +102,8 @@ jobs:
           }
 
           foreach ($module in @(
-            'mt5\include\AutoVectorEdgeV1.mqh',
-            'mt5\include\AutoVectorEdgeLiveV1.mqh',
+            'mt5\include\AutoVectorEdge.mqh',
+            'mt5\include\AutoVectorEdgeLive.mqh',
             'mt5\include\FlipLockV1.mqh'
           )) {
             if (-not (Test-Path $module)) { throw "Required module missing: $module" }
@@ -136,8 +136,8 @@ jobs:
             buildId = $env:EA_BUILD_ID
             sourceCommit = "${{ github.sha }}"
             builtAt = (Get-Date).ToUniversalTime().ToString("o")
-            brain = "AUTO_VECTOR_EDGE_V1"
-            policy = "AUTO_VECTOR_EDGE_FLIP_LOCK_V1"
+            brain = "AUTO"
+            policy = "AUTO"
           } | ConvertTo-Json | Set-Content -Encoding UTF8 "$env:RUNNER_TEMP\FastBasketBot-manifest.json"
 
       - name: Publish compiled artifact on main

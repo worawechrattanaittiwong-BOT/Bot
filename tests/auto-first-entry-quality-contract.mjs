@@ -8,7 +8,7 @@ function assertContains(path, needle, message) {
 }
 
 const ea = "mt5/FastBasketBot.mq5";
-const swing = "mt5/include/AutoSwingFilterV22.mqh";
+const swing = "mt5/include/AutoSwingFilter.mqh";
 
 assertContains(ea, "#define AUTO_FIRST_ENTRY_START_WARMUP_SECONDS 5", "AUTO first entry must not fire immediately after Start");
 assertContains(ea, "#define AUTO_FIRST_ENTRY_STABLE_CONFIRM_SECONDS 2", "AUTO first entry must remain valid before execution");
@@ -20,8 +20,8 @@ assertContains(ea, "selected.rr<AUTO_FIRST_ENTRY_MIN_NET_RR", "RR must be a hard
 assertContains(ea, "initialRiskPoints*AUTO_WRONG_DIRECTION_MIN_R", "Wrong-direction exit must ignore tiny adverse noise relative to initial SL");
 assertContains(ea, "confirmations>=4", "Normal wrong-direction exit must require stronger multi-signal confirmation");
 
-assertContains(swing, "AutoV22ExecutionConfirmationCount", "AUTO must count independent execution confirmations");
+assertContains(swing, "AutoExecutionConfirmationCount", "AUTO must count independent execution confirmations");
 assertContains(swing, "int requiredExecutionConfirmations=1;", "AUTO entry must require one strong execution confirmation");
-assertContains(swing, "AUTO_V22_WAIT_MULTI_EXEC_CONFIRM", "AUTO must expose multi-confirmation wait state");
+assertContains(swing, "AUTO_WAIT_MULTI_EXEC_CONFIRM", "AUTO must expose multi-confirmation wait state");
 
 console.log("AUTO first-entry quality + balanced-loss contract PASS");

@@ -32,7 +32,7 @@ jobs:
           foreach ($sentinel in @(
             '#property version   "1.0.16"',
             '#define SCENOVA_EA_VERSION "1.0.16"',
-            'bool AutoV20Enabled()',
+            'bool AutoEnabled()',
             'int RaceHarvestProfitablePositions()',
             'RACE_PROFIT_FIRST_V116',
             'RACE_PROFIT_HARVEST',
@@ -97,8 +97,8 @@ jobs:
             eaVersion = "1.0.16"
             sourceCommit = "${{ github.sha }}"
             builtAt = (Get-Date).ToUniversalTime().ToString("o")
-            brain = "V20"
-            policy = "AUTO_V20_RACE_PROFIT_FIRST_ZERO_ATOMIC_PAIR_FREE_RUN_V116"
+            brain = "AUTO"
+            policy = "AUTO_RACE_PROFIT_FIRST_ZERO_ATOMIC_PAIR_FREE_RUN_V116"
           } | ConvertTo-Json | Set-Content -Encoding UTF8 "$env:RUNNER_TEMP\FastBasketBot-manifest.json"
 
       - name: Publish compiled v1.0.16 artifact
@@ -120,7 +120,7 @@ jobs:
             git add mt5/release/manifest.json
             git diff --cached --quiet
             if ($LASTEXITCODE -eq 0) { $published = $true; break }
-            git commit -m "build: publish EA Brain V20 v1.0.16 [skip ea build]"
+            git commit -m "build: publish EA AUTO 1.0.16 [skip ea build]"
             if ($LASTEXITCODE -ne 0) { throw "Could not commit v1.0.16 artifact" }
             git push origin HEAD:main
             if ($LASTEXITCODE -eq 0) { $published = $true; break }

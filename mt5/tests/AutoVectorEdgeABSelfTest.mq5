@@ -1,9 +1,9 @@
 #property strict
 #property script_show_inputs
 
-#include "..\include\AutoVectorEdgeV1.mqh"
+#include "..\include\AutoVectorEdge.mqh"
 #define VECTOR_EDGE_AB_PURE_ONLY
-#include "..\include\AutoVectorEdgeABV1.mqh"
+#include "..\include\AutoVectorEdgeAB.mqh"
 #undef VECTOR_EDGE_AB_PURE_ONLY
 
 int g_abTestPassed = 0;

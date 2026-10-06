@@ -130,6 +130,17 @@ function normalizeAccountCurrency(value: unknown) {
   return currency || "USD";
 }
 
+function readAutoMetric(metrics: Record<string, any> | null | undefined, suffix: string) {
+  if (!metrics) return undefined;
+  const currentKey = "auto" + suffix;
+  if (metrics[currentKey] !== undefined) return metrics[currentKey];
+
+  const legacyKey = Object.keys(metrics).find(key =>
+    key !== currentKey && key.startsWith("auto") && key.endsWith(suffix)
+  );
+  return legacyKey ? metrics[legacyKey] : undefined;
+}
+
 function formatAccountMoney(value: unknown, currency: unknown, signed = false) {
   const amount = Number(value || 0);
   const safeAmount = Number.isFinite(amount) ? amount : 0;
@@ -2151,11 +2162,11 @@ export default function DashboardPage() {
     WAIT_TERMINAL_SUPPLY: "ไม่ Buy ต่อ · ราคาอยู่ใกล้ Supply และแรงซื้อเริ่มหมด",
     EXTREME_SPREAD: "ยังไม่เปิดไม้ใหม่ · Spread อยู่ระดับ EXTREME",
     WAIT_FRESH_EXECUTION_EVENT: "รอ EMA reclaim / Price Action / Momentum / Zone reaction ใหม่ก่อนเข้าอีกครั้ง",
-    AUTO_V20_WAIT_CONFLICT: "AUTO รอ · คะแนน BUY/SELL ยังใกล้กันเกินไป",
-    AUTO_V20_WAIT_QUALITY: "AUTO รอ · คุณภาพ Setup กลางยังไม่ถึงเกณฑ์",
-    AUTO_V20_WAIT_RR: "AUTO รอ · TP/SL จริงยังไม่คุ้มความเสี่ยง",
-    AUTO_V20_WAIT_ADD: "AUTO รอเพิ่มไม้ · ต้องเดินถูกทางหรือ Pullback กลับไปต่อก่อน",
-    AUTO_V20_RISK_LIMIT: "AUTO ไม่เพิ่มไม้ · ความเสี่ยงรวมถึงขอบเขตที่ตั้งไว้"
+    AUTO_WAIT_CONFLICT: "AUTO รอ · คะแนน BUY/SELL ยังใกล้กันเกินไป",
+    AUTO_WAIT_QUALITY: "AUTO รอ · คุณภาพ Setup กลางยังไม่ถึงเกณฑ์",
+    AUTO_WAIT_RR: "AUTO รอ · TP/SL จริงยังไม่คุ้มความเสี่ยง",
+    AUTO_WAIT_ADD: "AUTO รอเพิ่มไม้ · ต้องเดินถูกทางหรือ Pullback กลับไปต่อก่อน",
+    AUTO_RISK_LIMIT: "AUTO ไม่เพิ่มไม้ · ความเสี่ยงรวมถึงขอบเขตที่ตั้งไว้"
   };
   const latestDecisionCustomerText = latestDecisionReason === "NONE"
     ? "กำลังประเมินตลาด"
@@ -2175,12 +2186,11 @@ export default function DashboardPage() {
     DAILY_PROFIT_TARGET: "ปิด Basket · ถึงเป้ากำไรรายวัน",
     DAILY_PROFIT_GIVEBACK: "ปิด Basket · กำไรรายวันย่อตามเปอร์เซ็นต์ที่ตั้ง",
     REMOTE_CLOSE_ALL: "ปิด Basket · ผู้ใช้สั่งปิดทั้งหมด",
-    AUTO_V20_STRUCTURE_STOP: "AUTO ปิด · ราคาเสียโครงสร้างที่วางไว้",
-    AUTO_V20_CONFIRMED_WRONG: "AUTO ปิด · M5/M1/Momentum ยืนยันว่าเข้าไม่ถูกทาง",
-    AUTO_V20_MODERATE_TARGET: "AUTO ปิด · ถึงเป้ากำไรพอประมาณ",
-    AUTO_V20_PROFIT_GIVEBACK: "AUTO ปิด · กำไรย่อจาก Peak 25%",
-    AUTO_V20_TIME_BANK_PROFIT: "AUTO ปิด · ถือครบช่วงประเมินและแรงเริ่มหมด",
-    AUTO_V20_TIME_STOP: "AUTO ปิด · ถือเกินกรอบเวลาโดยยังไม่ฟื้น"
+    AUTO_STRUCTURE_STOP: "AUTO ปิด · ราคาเสียโครงสร้างที่วางไว้",
+    AUTO_CONFIRMED_WRONG: "AUTO ปิด · M5/M1/Momentum ยืนยันว่าเข้าไม่ถูกทาง",
+    AUTO_MODERATE_TARGET: "AUTO ปิด · ถึงเป้ากำไรพอประมาณ",
+    AUTO_TIME_BANK_PROFIT: "AUTO ปิด · ถือครบช่วงประเมินและแรงเริ่มหมด",
+    AUTO_TIME_STOP: "AUTO ปิด · ถือเกินกรอบเวลาโดยยังไม่ฟื้น"
   };
   const latestCloseCustomerText = closeReasonLabel[latestCloseReason]
     || latestCloseReason.replace(/_/g," ");
@@ -2293,10 +2303,10 @@ export default function DashboardPage() {
   const marketDemandHigh = Number(metrics.demandZoneHigh || 0);
   const marketSupplyLow = Number(metrics.supplyZoneLow || 0);
   const marketSupplyHigh = Number(metrics.supplyZoneHigh || 0);
-  const marketSupport = Number(metrics.autoV20NearestSupport || metrics.nearestSupport || 0);
-  const marketResistance = Number(metrics.autoV20NearestResistance || metrics.nearestResistance || 0);
-  const rawBuySignalScore = Math.max(0, Number(metrics.autoV20BuyScore || 0));
-  const rawSellSignalScore = Math.max(0, Number(metrics.autoV20SellScore || 0));
+  const marketSupport = Number(readAutoMetric(metrics, "NearestSupport") || metrics.nearestSupport || 0);
+  const marketResistance = Number(readAutoMetric(metrics, "NearestResistance") || metrics.nearestResistance || 0);
+  const rawBuySignalScore = Math.max(0, Number(readAutoMetric(metrics, "BuyScore") || 0));
+  const rawSellSignalScore = Math.max(0, Number(readAutoMetric(metrics, "SellScore") || 0));
   const signalScoreTotal = rawBuySignalScore + rawSellSignalScore;
   const signalScoreReady = signalScoreTotal > 0;
   const buySignalPercent = signalScoreReady ? Math.round((rawBuySignalScore / signalScoreTotal) * 100) : 50;
@@ -6733,7 +6743,7 @@ function BotSettingsModal(props:any) {
     props.systemHardStopDistancePoints || props.hardStopDistancePoints || 1000
   ))));
   const modeCopy:Record<string,{title:string;subtitle:string}> = {
-    AUTO:{title:"AUTO · VECTOR EDGE",subtitle:"Vector Edge / V20 เป็นเจ้าของเฉพาะ Position ที่ AUTO เปิดเอง · Lot ต่อไม้ใช้ค่าที่ตั้งแบบตายตัว · ไม่รับช่วง Position จากโหมดอื่น"},
+    AUTO:{title:"AUTO · VECTOR EDGE",subtitle:"AUTO เป็นเจ้าของเฉพาะ Position ที่ AUTO เปิดเอง · Lot ต่อไม้ใช้ค่าที่ตั้งแบบตายตัว · ไม่รับช่วง Position จากโหมดอื่น"},
     FLIP_LOCK:{title:"FLIP LOCK",subtitle:"M1 เท่านั้น · เปิด 1 Position พร้อม Safety SL · พอล็อกกำไรได้แล้ว SL จะตามราคาปัจจุบันห่าง 100 จุดและไม่ถอยกลับ · Lot คงที่ ไม่มี Martingale"},
     RACE:{title:"RACE",subtitle:"เพิ่มความถี่ในการเปิดสถานะเพื่อให้ครบจำนวนที่กำหนดเร็วขึ้น โดยแยกการบริหารรอบจากโหมดอัตโนมัติ"},
     COUNTER:{title:"COUNTER",subtitle:"กราฟขึ้นเปิด BUY · กราฟลงเปิด SELL · เลือกจำนวนไม้รวมแล้วแบ่ง BUY/SELL ครึ่งต่อครึ่ง · ไม่มี Stop Loss"},
@@ -7107,7 +7117,7 @@ function BotSettingsModal(props:any) {
                   : controlMode==="AUTO"
                     ? <div className="cc-bot-v2-engine-line"><ScenovaIcon name="spark" size={16}/><b>AUTO · Shared Zone Brain</b><span>Demand/Supply + Reaction เป็นแกนเข้าออเดอร์ร่วมกับ MANUAL · AUTO วาง SL/TP และจัดการ Position ของ AUTO เอง</span></div>
                     : controlMode==="MANUAL"
-                      ? <div className="cc-bot-v2-engine-line"><ScenovaIcon name="settings" size={16}/><b>MANUAL · Shared Zone Brain</b><span>ใช้สมองเข้าเดียวกับ AUTO แต่ Lot / จำนวนไม้ / Stop / Profit เป็นค่าของ MANUAL · AUTO V20 จะไม่เข้ามาแก้ Position นี้</span></div>
+                      ? <div className="cc-bot-v2-engine-line"><ScenovaIcon name="settings" size={16}/><b>MANUAL · Shared Zone Brain</b><span>ใช้สมองเข้าเดียวกับ AUTO แต่ Lot / จำนวนไม้ / Stop / Profit เป็นค่าของ MANUAL · AUTO จะไม่เข้ามาแก้ Position นี้</span></div>
                       : controlMode==="COUNTER"
                         ? <div className="cc-bot-v2-engine-line"><ScenovaIcon name="trend" size={16}/><b>COUNTER · กฎเดียว</b><span>กราฟขึ้นเปิด BUY · กราฟลงเปิด SELL · จำนวนไม้รวมแบ่งครึ่งเป็น BUY/SELL · ค่อย ๆ เติมทีละไม้ตามระบบ pacing · ไม่มีตัวกรองการตัดสินใจอื่น</span></div>
                         : <div className="cc-bot-v2-engine-line"><ScenovaIcon name="spark" size={16}/><b>การเพิ่มสถานะอัตโนมัติ</b><span>EA กระจายจังหวะเพิ่มสถานะตาม ATR และแรงเคลื่อนไหวของตลาด</span></div>)}</div>

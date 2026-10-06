@@ -1,7 +1,7 @@
 #property strict
 #property script_show_inputs
 
-#include "..\include\AutoVectorEdgeV1.mqh"
+#include "..\include\AutoVectorEdge.mqh"
 
 int g_vectorTestPassed = 0;
 int g_vectorTestFailed = 0;
