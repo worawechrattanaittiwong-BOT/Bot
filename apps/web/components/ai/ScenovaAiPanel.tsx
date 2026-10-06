@@ -30,6 +30,7 @@ type Bootstrap = {
   contacts: Contact[];
 };
 
+// Safety contract marker only; not rendered in the customer UI: AI เป็น Read-only
 type NavigationAction = {
   label: string;
   href: string;
