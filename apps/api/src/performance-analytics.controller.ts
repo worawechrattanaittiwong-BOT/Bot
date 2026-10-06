@@ -336,6 +336,9 @@ export class PerformanceAnalyticsController {
   ) {
     const { from, to } = this.range(fromRaw, toRaw);
     const selectedStrategyModes = this.strategyModes(strategyModesRaw);
+    const zeroGridOnly =
+      selectedStrategyModes.length === 1 &&
+      selectedStrategyModes[0] === "ZERO_GRID";
     const includeControlMode = (value: unknown) => {
       const mode = String(value || "AUTO").trim().toUpperCase() || "AUTO";
       return selectedStrategyModes.includes(mode);
@@ -756,6 +759,36 @@ export class PerformanceAnalyticsController {
         : computed.summary.netProfit>0 ? 999 : null;
     }
 
+    // ZERO GRID Capital Growth is a basket/cycle view, not a per-position view.
+    // Keep all Performance money/risk statistics unchanged; only the chart
+    // samples move to one point per completed ZERO GRID bot round.
+    const completedZeroGridRoundNet = zeroGridOnly
+      ? selectedBaskets.reduce((sum,row)=>sum+Number(row.net_profit || 0),0)
+      : 0;
+    if(derivedStart !== null && zeroGridOnly){
+      let roundBalance=derivedStart;
+      const rounds=[...selectedBaskets].sort(
+        (a,b)=>new Date(a.created_at).getTime()-new Date(b.created_at).getTime()
+      );
+      computed.curve=[{
+        time:effectiveFrom.toISOString(),
+        tradeNumber:0,
+        balance:Number(roundBalance.toFixed(2)),
+        equity:Number(roundBalance.toFixed(2)),
+        drawdownPercent:0
+      }];
+      rounds.forEach((round,index)=>{
+        roundBalance+=Number(round.net_profit || 0);
+        computed.curve.push({
+          time:round.created_at,
+          tradeNumber:index+1,
+          balance:Number(roundBalance.toFixed(2)),
+          equity:Number(roundBalance.toFixed(2)),
+          drawdownPercent:0
+        });
+      });
+    }
+
     const positionProfits=selectedPositions.map((position)=>Number(position.net_profit || 0));
     const positivePositions=positionProfits.filter((value)=>value>0);
     const negativePositions=positionProfits.filter((value)=>value<0);
@@ -919,10 +952,13 @@ export class PerformanceAnalyticsController {
     const rangeEnd = derivedStart === null
       ? null
       : Number((derivedStart + selectedRealizedNet).toFixed(2));
-    if(rangeEnd !== null && computed.curve.length>0){
-      // Keep the visual endpoint identical to the money cards. This also
-      // absorbs entry-side commission from an unfinished position without
-      // inventing another closed-trade number on the X axis.
+    const zeroGridRoundsMatchLedger =
+      !zeroGridOnly ||
+      Math.abs(completedZeroGridRoundNet-selectedRealizedNet) <= 0.01;
+    if(rangeEnd !== null && computed.curve.length>0 && zeroGridRoundsMatchLedger){
+      // Keep the visual endpoint identical to the money cards only when the
+      // chart basis fully represents the realized ledger. For ZERO GRID, an
+      // unfinished cycle must not be folded into the last completed Bot Round.
       computed.curve[computed.curve.length-1].balance=rangeEnd;
       computed.curve[computed.curve.length-1].equity=
         to.getTime()>Date.now()-5*60*1000 && currentEquity>0
@@ -1009,6 +1045,7 @@ export class PerformanceAnalyticsController {
         } : null
       },
       ...computed,
+      curveBasis: zeroGridOnly ? "BOT_ROUNDS" : "CLOSED_POSITIONS",
       summary: { ...computed.summary, runtimeSeconds },
       modeBreakdown,
       lotDistribution,

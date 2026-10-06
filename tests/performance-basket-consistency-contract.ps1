@@ -37,6 +37,10 @@ foreach ($required in @(
   'event_at',
   'selectedStrategyModes',
   'strategyModes: selectedStrategyModes',
+  'zeroGridOnly',
+  'completedZeroGridRoundNet',
+  'curveBasis: zeroGridOnly ? "BOT_ROUNDS" : "CLOSED_POSITIONS"',
+  'one point per completed ZERO GRID bot round',
   'lotDistribution',
   'resolveJournalControlMode(row)'
 )) {
@@ -57,6 +61,8 @@ foreach ($required in @(
   'const [selectedStrategies,setSelectedStrategies]=useState<StrategyMode[]>([...STRATEGY_OPTIONS]);',
   'tradeNumber:index+1',
   'Closed Positions',
+  'Bot Rounds',
+  'xAxisLabel',
   'Capital Growth',
   'Strategy Portfolio',
   'ZERO_GRID',

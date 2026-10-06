@@ -215,7 +215,7 @@ function LotDistributionChart({rows,total}:{rows:any[];total:number}) {
   );
 }
 
-function SummaryChart({points}:{points:any[]}) {
+function SummaryChart({points,xAxisLabel="Closed Positions"}:{points:any[];xAxisLabel?:string}) {
   const validPoints=(points||[]).filter((point:any)=>Number.isFinite(Number(point?.balance)));
   if(!validPoints.length) return <div className={styles.emptyChart}>ยังไม่มีข้อมูลกราฟในช่วงเวลานี้</div>;
   const width=1000,height=136,left=52,right=18,top=12,bottom=30;
@@ -258,7 +258,7 @@ function SummaryChart({points}:{points:any[]}) {
       <path d={area} fill="url(#perf-area)"/>
       <path d={line} fill="none" stroke="url(#perf-line)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
       <circle cx={last.x} cy={last.y} r="4" className={styles.endDot}/>
-      <text x={width/2} y={height-5} textAnchor="middle" className={styles.chartLabel}>Closed Positions</text>
+      <text x={width/2} y={height-5} textAnchor="middle" className={styles.chartLabel}>{xAxisLabel}</text>
     </svg>
   );
 }
@@ -1011,7 +1011,7 @@ export default function PerformanceDashboardPage() {
                 </div>
                 <div className={styles.chartCard}>
                   <div className={styles.chartHead}><div><ScenovaIcon name="trend" size={15}/><b>Capital Growth</b></div><span>End Balance: {money(endBalance,currency)}</span></div>
-                  <SummaryChart points={reliableCurve}/>
+                  <SummaryChart points={reliableCurve} xAxisLabel={mode==="LIVE"&&report?.curveBasis==="BOT_ROUNDS"?"Bot Rounds":"Closed Positions"}/>
                 </div>
               </div>
             </>
