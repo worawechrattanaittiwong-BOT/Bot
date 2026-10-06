@@ -3349,18 +3349,24 @@ export class BotController {
             Math.trunc(Number.isFinite(requestedRaw) ? requestedRaw : 3)
           )
         );
+        const requestedBaseLotRaw = Number(savedSettings.zeroGridBaseLot ?? 0.03);
+        const requestedBaseLot = [0.03, 0.06, 0.09].includes(requestedBaseLotRaw) ? requestedBaseLotRaw : 0.03;
         const appliedLevels = Number(metrics.zeroGridConfiguredLevelsPerSide);
+        const appliedBaseLot = Number(metrics.zeroGridConfiguredBaseLot);
         const appliedMax = Number(metrics.zeroGridMaxLevelsPerSide);
         const appliedMode = String(metrics.controlMode || "").toUpperCase();
         if (
           appliedMode !== "ZERO_GRID" ||
           !Number.isInteger(appliedLevels) ||
           appliedLevels !== requestedLevels ||
+          !Number.isFinite(appliedBaseLot) ||
+          Math.abs(appliedBaseLot - requestedBaseLot) > 0.000001 ||
           appliedMax !== ZERO_GRID_MAX_LEVELS_PER_SIDE
         ) {
           throw new ConflictException(
             "ZERO GRID ยังไม่พร้อมเริ่ม: ตั้งไว้ " + requestedLevels +
-            " Pending ต่อฝั่ง แต่ EA ที่กำลังรันยังไม่ยืนยันค่านี้ · กรุณารอ Heartbeat ถัดไป 5–10 วินาที แล้วกดเริ่มอีกครั้ง"
+            " Pending ต่อฝั่ง · Base Lot " + requestedBaseLot.toFixed(2) +
+            " แต่ EA ที่กำลังรันยังไม่ยืนยันค่าชุดนี้ · กรุณารอ Heartbeat ถัดไป 5–10 วินาที แล้วกดเริ่มอีกครั้ง"
           );
         }
       }
@@ -3686,8 +3692,13 @@ export class BotController {
       clean.zeroGridStepPrice = zeroGridStepPrice;
     }
     numberSetting("zeroGridLevelsPerSide", 1, 30, true);
-    numberSetting("zeroGridBaseLot", 0.01, 100);
-    clean.zeroGridBaseLot = 0.03;
+    if (body.zeroGridBaseLot !== undefined) {
+      const zeroGridBaseLot = Number(body.zeroGridBaseLot);
+      if (![0.03, 0.06, 0.09].includes(zeroGridBaseLot)) {
+        throw new BadRequestException("ZERO GRID Lot เริ่มต้นต้องเป็น 0.03, 0.06 หรือ 0.09 เท่านั้น");
+      }
+      clean.zeroGridBaseLot = zeroGridBaseLot;
+    }
     numberSetting("zeroGridMinNetProfitMoney", 0.01, maxAccountMoney);
     numberSetting("zeroGridCloseReserveMoney", 0, maxAccountMoney);
     booleanSetting("raceCloseAllProfitEnabled");
@@ -3966,7 +3977,8 @@ export class BotController {
     if (zeroGridSelected) {
       const zeroGridStepPrice = Number(clean.zeroGridStepPrice);
       clean.zeroGridStepPrice = [0.5, 1, 2, 3].includes(zeroGridStepPrice) ? zeroGridStepPrice : 3;
-      clean.zeroGridBaseLot = 0.03;
+      const zeroGridBaseLot = Number(clean.zeroGridBaseLot);
+      clean.zeroGridBaseLot = [0.03, 0.06, 0.09].includes(zeroGridBaseLot) ? zeroGridBaseLot : 0.03;
       if (body.zeroGridMinNetProfitMoney === undefined) clean.zeroGridMinNetProfitMoney = 0.5;
       // ZERO closes exactly at zeroGridMinNetProfitMoney. Keep legacy reserve
       // field normalized to zero so old clients cannot add a hidden buffer.

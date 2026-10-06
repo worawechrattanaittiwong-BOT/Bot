@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.1.26"
-#define SCENOVA_EA_VERSION "1.1.26"
-#define SCENOVA_PRODUCT_VERSION "1.1.26"
+#property version   "1.1.27"
+#define SCENOVA_EA_VERSION "1.1.27"
+#define SCENOVA_PRODUCT_VERSION "1.1.27"
 #define SCENOVA_BUILD_ID "SOURCE"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_CONFIGURED_LOSS_ONLY_V1"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
@@ -243,14 +243,14 @@ input double          InpCounterPerPositionProfitMoney = 0.50;
 // ZERO GRID is isolated from AUTO/RACE and requires an MT5 Hedging account.
 #define ZERO_GRID_MAX_LEVELS 30
 #define ZERO_GRID_DEFAULT_LEVELS 3
-#define ZERO_GRID_LOCKED_BASE_LOT 0.03
+#define ZERO_GRID_DEFAULT_BASE_LOT 0.03
 #define ZERO_GRID_LOW_VOL_FIRST_GAP 2.00
 #define ZERO_GRID_LOW_VOL_STEP_PRICE 1.00
 #define ZERO_GRID_PENDING_REQUEST_GUARD_MS 10000
 #define ZERO_GRID_FLAT_CONFIRM_MS 1500
 input double          InpZeroGridStepPrice     = 3.0;
 input int             InpZeroGridLevelsPerSide = ZERO_GRID_DEFAULT_LEVELS;
-input double          InpZeroGridBaseLot       = ZERO_GRID_LOCKED_BASE_LOT; // compatibility input; runtime is locked to 0.03
+input double          InpZeroGridBaseLot       = ZERO_GRID_DEFAULT_BASE_LOT; // allowed: 0.03 / 0.06 / 0.09
 input double          InpZeroGridMinNetProfitMoney = 0.50;
 input double          InpZeroGridCloseReserveMoney = 0.20;
 
@@ -392,7 +392,7 @@ string g_controlMode = "LEGACY";
 bool   g_settingsSynchronized = false;
 double g_zeroGridStepPrice = 3.0;
 int    g_zeroGridLevelsPerSide = ZERO_GRID_DEFAULT_LEVELS;
-double g_zeroGridBaseLot = ZERO_GRID_LOCKED_BASE_LOT;
+double g_zeroGridBaseLot = ZERO_GRID_DEFAULT_BASE_LOT;
 double g_zeroGridMinNetProfitMoney = 0.50;
 double g_zeroGridCloseReserveMoney = 0.20;
 double g_zeroGridCenter = 0.0;
@@ -1870,7 +1870,7 @@ int OnInit()
       g_engineMode = "AUTO";
    g_zeroGridStepPrice = ZeroGridAllowedStep(InpZeroGridStepPrice);
    g_zeroGridLevelsPerSide = (int)MathMax(1.0,MathMin((double)ZERO_GRID_MAX_LEVELS,(double)InpZeroGridLevelsPerSide));
-   g_zeroGridBaseLot = ZERO_GRID_LOCKED_BASE_LOT;
+   g_zeroGridBaseLot = ZeroGridAllowedBaseLot(InpZeroGridBaseLot);
    g_zeroGridMinNetProfitMoney = MathMax(0.01, InpZeroGridMinNetProfitMoney);
    g_zeroGridCloseReserveMoney = MathMax(0.0, InpZeroGridCloseReserveMoney);
    g_adaptiveEngine = InpAdaptiveEngine;
@@ -2209,6 +2209,14 @@ double ZeroGridAllowedStep(double requested)
    if(MathAbs(requested-1.0)<0.000001) return 1.0;
    if(MathAbs(requested-2.0)<0.000001) return 2.0;
    return 3.0;
+}
+
+double ZeroGridAllowedBaseLot(double requested)
+{
+   if(MathAbs(requested-0.03)<0.000001) return 0.03;
+   if(MathAbs(requested-0.06)<0.000001) return 0.06;
+   if(MathAbs(requested-0.09)<0.000001) return 0.09;
+   return ZERO_GRID_DEFAULT_BASE_LOT;
 }
 
 bool ZeroGridAccountIsHedging()
@@ -2562,7 +2570,7 @@ int ZeroGridEffectiveLevelsPerSide()
 double ZeroGridEffectiveBaseLot()
 {
    double source=g_zeroGridCycleBaseLot>0.0 ? g_zeroGridCycleBaseLot : g_zeroGridBaseLot;
-   return MathMax(0.0001,source);
+   return ZeroGridAllowedBaseLot(source);
 }
 
 bool ZeroGridEffectiveLowVolatilityEnabled()
@@ -2609,7 +2617,7 @@ bool ZeroGridRequestedConfigChanged()
    double requestedStep=MathMax(g_zeroGridStepPrice,tick);
    requestedStep=NormalizeDouble(MathCeil((requestedStep/tick)-1e-10)*tick,_Digits);
    int requestedLevels=(int)MathMax(1.0,MathMin((double)ZERO_GRID_MAX_LEVELS,(double)g_zeroGridLevelsPerSide));
-   double requestedLot=MathMax(0.0001,g_zeroGridBaseLot);
+   double requestedLot=ZeroGridAllowedBaseLot(g_zeroGridBaseLot);
    return MathAbs(requestedStep-ZeroGridEffectiveStepPrice())>tick*0.5 ||
           requestedLevels!=ZeroGridEffectiveLevelsPerSide() ||
           MathAbs(requestedLot-ZeroGridEffectiveBaseLot())>0.0000001;
@@ -3282,7 +3290,7 @@ bool StartZeroGridCycle()
       g_zeroGridCycleLowVolatility=0;
       g_zeroGridCycleStepPrice=MathMax(ZeroGridTickSize(),ZeroGridAllowedStep(g_zeroGridStepPrice));
       g_zeroGridCycleLevelsPerSide=(int)MathMax(1.0,MathMin((double)ZERO_GRID_MAX_LEVELS,(double)g_zeroGridLevelsPerSide));
-      g_zeroGridCycleBaseLot=ZERO_GRID_LOCKED_BASE_LOT;
+      g_zeroGridCycleBaseLot=ZeroGridAllowedBaseLot(g_zeroGridBaseLot);
       g_orderWindowStart=TimeCurrent();
       g_ordersInWindow=0;
       SaveZeroGridCycleState();
@@ -7837,7 +7845,7 @@ void SendHeartbeat()
       string marketAskText = marketTickReady ? DoubleToString(marketTick.ask, marketDigits) : "0";
       string marketMidText = marketTickReady ? DoubleToString((marketTick.bid + marketTick.ask) * 0.5, marketDigits) : "0";
       string marketSessionDiagnostics = StringFormat(
-         ",\"marketSessionState\":\"%s\",\"marketSessionOpen\":%s,\"marketBid\":%s,\"marketAsk\":%s,\"marketMid\":%s,\"executionPriceSource\":\"MT5_LOCAL_TICK\",\"serverPriceControl\":false,\"runtimeContract\":\"%s\",\"zeroGridConfiguredLevelsPerSide\":%d,\"zeroGridEffectiveLevelsPerSide\":%d,\"zeroGridMaxLevelsPerSide\":%d,\"zeroGridCycleActive\":%s}}",
+         ",\"marketSessionState\":\"%s\",\"marketSessionOpen\":%s,\"marketBid\":%s,\"marketAsk\":%s,\"marketMid\":%s,\"executionPriceSource\":\"MT5_LOCAL_TICK\",\"serverPriceControl\":false,\"runtimeContract\":\"%s\",\"zeroGridConfiguredLevelsPerSide\":%d,\"zeroGridConfiguredBaseLot\":%.2f,\"zeroGridEffectiveLevelsPerSide\":%d,\"zeroGridMaxLevelsPerSide\":%d,\"zeroGridCycleActive\":%s}}",
          marketSessionState,
          marketSessionState == "OPEN" ? "true" : "false",
          marketBidText,
@@ -7845,6 +7853,7 @@ void SendHeartbeat()
          marketMidText,
          SCENOVA_RUNTIME_CONTRACT,
          g_zeroGridLevelsPerSide,
+         g_zeroGridBaseLot,
          ZeroGridEffectiveLevelsPerSide(),
          ZERO_GRID_MAX_LEVELS,
          g_zeroGridCycleStartedAt > 0 ? "true" : "false"
@@ -9184,7 +9193,7 @@ void ApplySettings(string json)
 
    g_zeroGridStepPrice = ZeroGridAllowedStep(JsonNumber(json, "zeroGridStepPrice", g_zeroGridStepPrice));
    g_zeroGridLevelsPerSide = (int)MathMax(1.0,MathMin((double)ZERO_GRID_MAX_LEVELS,MathRound(JsonNumber(json, "zeroGridLevelsPerSide", g_zeroGridLevelsPerSide))));
-   g_zeroGridBaseLot = ZERO_GRID_LOCKED_BASE_LOT;
+   g_zeroGridBaseLot = ZeroGridAllowedBaseLot(JsonNumber(json, "zeroGridBaseLot", g_zeroGridBaseLot));
    g_zeroGridMinNetProfitMoney = MathMax(0.01, JsonNumber(json, "zeroGridMinNetProfitMoney", g_zeroGridMinNetProfitMoney));
    g_zeroGridCloseReserveMoney = MathMax(0.0, JsonNumber(json, "zeroGridCloseReserveMoney", g_zeroGridCloseReserveMoney));
 

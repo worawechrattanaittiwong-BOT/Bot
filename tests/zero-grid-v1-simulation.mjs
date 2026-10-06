@@ -92,6 +92,8 @@ assert.match(ea, /ZERO_SIMPLE_STABLE_V117/, "ZERO must use the simple stable pen
 assert.doesNotMatch(ea, /InpZeroGridLowVolatilityEnabled/, "removed low-volatility switch must not remain as a new-cycle input");
 assert.match(ea, /double ZeroGridAllowedStep\(double requested\)[\s\S]*requested-0\.5[\s\S]*requested-1\.0[\s\S]*requested-2\.0[\s\S]*return 3\.0;/, "ZERO must allow 0.50 / 1.00 / 2.00 / 3.00 steps");
 assert.match(ea, /ZeroGridEffectiveLevelLot\(int level\)/, "ZERO must isolate cycle lot calculation");
+assert.match(ea, /ZeroGridAllowedBaseLot\(double requested\)[\s\S]*requested-0\.03[\s\S]*requested-0\.06[\s\S]*requested-0\.09/, "ZERO must allow only 0.03 / 0.06 / 0.09 base lots");
+assert.match(ea, /g_zeroGridCycleBaseLot=ZeroGridAllowedBaseLot\(g_zeroGridBaseLot\)/, "ZERO must snapshot the selected base lot only when a new cycle starts");
 assert.doesNotMatch(web, /กริดตลาดความผันผวนต่ำ|const zeroGridLowVolatilityEnabled/, "removed low-volatility control must not remain in Control Center");
 assert.doesNotMatch(api, /zeroGridLowVolatilityEnabled/, "removed low-volatility setting must not remain in API persistence");
 assert.match(web, /<option value="0\.5">0\.50<\/option>[\s\S]*<option value="1">1\.00<\/option>[\s\S]*<option value="2">2\.00<\/option>[\s\S]*<option value="3">3\.00<\/option>/, "ZERO UI must expose all four grid steps");
@@ -110,13 +112,13 @@ assert.match(ea, /pending=ZeroGridPendingCount\(\);[\s\S]*if\(positions<=0 && pe
 assert.match(ea, /for\(int level=1;level<=levels;level\+\+\)/, "flat ZERO must validate every configured level pair");
 console.log("ZERO GRID standard + low-volatility geometry, paired staging and real-net regression passed");
 
-assert.match(ea, /#define ZERO_GRID_LOCKED_BASE_LOT 0\.03/, "ZERO base lot must be hard-locked to 0.03");
+assert.match(ea, /#define ZERO_GRID_DEFAULT_BASE_LOT 0\.03/, "ZERO base lot must default to 0.03");
 assert.match(ea, /#define ZERO_GRID_PENDING_REQUEST_GUARD_MS 10000/, "ZERO async duplicate guard must cover delayed broker acknowledgements");
 assert.match(ea, /#define ZERO_GRID_FLAT_CONFIRM_MS 1500/, "ZERO must require a stable flat window before rearm");
 assert.match(ea, /bool ZeroGridFlatConfirmedForReset\(\)/, "ZERO stable-flat confirmation helper must exist");
 assert.match(ea, /ZERO_GRID_EXISTING_CYCLE_GUARD/, "ZERO must hard-block a fresh cycle while old ZERO exposure still exists");
 assert.match(ea, /ZERO_GRID_WAIT_FLAT_CONFIRM/, "ZERO must wait through transient async flat snapshots");
 assert.match(web, /zeroGridBaseLot: 0\.03/, "ZERO UI default lot must be 0.03");
-assert.match(web, /<b>0\.03 Lot<\/b>/, "ZERO UI lot must be read-only at 0.03");
+assert.match(web, /ZERO_GRID_BASE_LOT_OPTIONS = \[0\.03,0\.06,0\.09\]/, "ZERO UI must expose 0.03 / 0.06 / 0.09 base lot choices");
 
 assert.match(web, /zeroGridStepPrice: 3/, "ZERO default step must remain 3.00");
