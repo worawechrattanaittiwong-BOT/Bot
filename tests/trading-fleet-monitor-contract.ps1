@@ -107,7 +107,7 @@ foreach ($required in @(
   '.tone_warn',
   '.tone_bad',
   '.currencyPeriodRow{',
-  'width:min(100%,640px)',
+  'width:100%',
   '.periodFilter{',
   '.dateField{'
 )) {

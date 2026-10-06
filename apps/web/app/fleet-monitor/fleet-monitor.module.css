@@ -175,7 +175,7 @@
 }
 .currencyStrip{
   display:flex;
-  width:min(100%,640px);
+  width:100%;
   min-width:0;
   gap:8px;
   margin-bottom:0;
