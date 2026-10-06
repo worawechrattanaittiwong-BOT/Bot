@@ -238,7 +238,7 @@ const defaultSettings = {
   dailyProfitDrawdownPercent: 20,
   // Profit targets are remembered independently by mode.
   autoProfitTargetMoney: 0,
-  manualBasketProfitTargetMoney: 0,
+  manualBasketProfitTargetMoney: 1,
   manualPerPositionProfitMoney: 0,
   // Legacy/runtime mirror populated from the active mode on save.
   basketProfitTargetMoney: 0,
@@ -264,8 +264,8 @@ const defaultSettings = {
   engineMode: "AUTO",
   raceCloseAllProfitEnabled: false,
   raceProfitTargetMode: "POSITION",
-  raceCloseAllProfitMoney: 0.5,
-  racePerPositionProfitMoney: 0.5,
+  raceCloseAllProfitMoney: 1,
+  racePerPositionProfitMoney: 1,
   counterPerPositionProfitMoney: 1,
   zeroGridStepPrice: 3,
   zeroGridLevelsPerSide: 10,
@@ -475,8 +475,8 @@ export default function DashboardPage() {
                   ? "OFF"
                   : "POSITION");
           nextSettings.raceCloseAllProfitEnabled = nextSettings.raceProfitTargetMode === "BASKET";
-          if (!Number.isFinite(Number(nextSettings.raceCloseAllProfitMoney)) || Number(nextSettings.raceCloseAllProfitMoney) <= 0) nextSettings.raceCloseAllProfitMoney = 0.5;
-          if (!Number.isFinite(Number(nextSettings.racePerPositionProfitMoney)) || Number(nextSettings.racePerPositionProfitMoney) <= 0) nextSettings.racePerPositionProfitMoney = 0.5;
+          if (!Number.isFinite(Number(nextSettings.raceCloseAllProfitMoney)) || Number(nextSettings.raceCloseAllProfitMoney) <= 0) nextSettings.raceCloseAllProfitMoney = 1;
+          if (!Number.isFinite(Number(nextSettings.racePerPositionProfitMoney)) || Number(nextSettings.racePerPositionProfitMoney) <= 0) nextSettings.racePerPositionProfitMoney = 1;
         }
 
         // One-time migration from the old shared target. Only the currently
@@ -490,11 +490,17 @@ export default function DashboardPage() {
         }
         if (storedSettings.manualBasketProfitTargetMoney === undefined) {
           nextSettings.manualBasketProfitTargetMoney =
-            loadedControlMode === "MANUAL" && legacyProfitMode === "MANUAL" ? legacyBasketProfit : 0;
+            loadedControlMode === "MANUAL" && legacyProfitMode === "MANUAL" ? legacyBasketProfit : 1;
         }
         if (storedSettings.manualPerPositionProfitMoney === undefined) {
           nextSettings.manualPerPositionProfitMoney =
             loadedControlMode === "MANUAL" && legacyProfitMode === "MANUAL" ? legacyPerPositionProfit : 0;
+        }
+        if (
+          storedSettings.manualBasketProfitTargetMoney === undefined &&
+          Number(nextSettings.manualPerPositionProfitMoney || 0) > 0
+        ) {
+          nextSettings.manualBasketProfitTargetMoney = 0;
         }
         setSettings(nextSettings);
       }
@@ -6956,8 +6962,8 @@ function BotSettingsModal(props:any) {
       props.onEdit?.("profitTargetMode","OFF");
       const raceMode = String(props.settings?.raceProfitTargetMode || "POSITION").toUpperCase();
       props.onEdit?.("raceProfitTargetMode",["BASKET","POSITION","OFF"].includes(raceMode) ? raceMode : "POSITION");
-      if (!Number.isFinite(Number(props.settings?.raceCloseAllProfitMoney)) || Number(props.settings?.raceCloseAllProfitMoney) <= 0) props.onEdit?.("raceCloseAllProfitMoney",0.5);
-      if (!Number.isFinite(Number(props.settings?.racePerPositionProfitMoney)) || Number(props.settings?.racePerPositionProfitMoney) <= 0) props.onEdit?.("racePerPositionProfitMoney",0.5);
+      if (!Number.isFinite(Number(props.settings?.raceCloseAllProfitMoney)) || Number(props.settings?.raceCloseAllProfitMoney) <= 0) props.onEdit?.("raceCloseAllProfitMoney",1);
+      if (!Number.isFinite(Number(props.settings?.racePerPositionProfitMoney)) || Number(props.settings?.racePerPositionProfitMoney) <= 0) props.onEdit?.("racePerPositionProfitMoney",1);
       return;
     }
     props.onEdit?.("engineMode","AUTO");
@@ -6976,7 +6982,7 @@ function BotSettingsModal(props:any) {
     props.onEdit?.("profitTargetMode","MANUAL");
     if (Number(props.settings?.manualBasketProfitTargetMoney || 0) <= 0 &&
         Number(props.settings?.manualPerPositionProfitMoney || 0) <= 0) {
-      props.onEdit?.("manualBasketProfitTargetMoney",10);
+      props.onEdit?.("manualBasketProfitTargetMoney",1);
     }
     // Keep MANUAL Stop Loss exactly as the user left it. Zero means OFF;
     // switching away and back must never silently re-enable a suggested ATR/point stop.
@@ -6992,8 +6998,8 @@ function BotSettingsModal(props:any) {
         : "บังคับทิศตามที่เลือกจนกว่าจะเปลี่ยนค่า");
   const raceProfitTargetMode = String(props.settings?.raceProfitTargetMode || "POSITION").toUpperCase();
   const raceCloseAllProfitEnabled = raceProfitTargetMode === "BASKET";
-  const raceCloseAllProfitMoney = Number(props.settings?.raceCloseAllProfitMoney || 0.5);
-  const racePerPositionProfitMoney = Number(props.settings?.racePerPositionProfitMoney || 0.5);
+  const raceCloseAllProfitMoney = Number(props.settings?.raceCloseAllProfitMoney || 1);
+  const racePerPositionProfitMoney = Number(props.settings?.racePerPositionProfitMoney || 1);
   const counterPerPositionProfitMoney = Number(props.settings?.counterPerPositionProfitMoney || 1);
   const manualStopEnabled = Number(props.settings?.manualStopLossPoints || 0) > 0;
   const updateOptionalValue = (key:string,value:any) => props.onEdit?.(key,value);
@@ -7164,8 +7170,8 @@ function BotSettingsModal(props:any) {
                   <div className="cc-bot-v2-field cc-bot-profit-kind-field">
                     {settingHelpLabel("profit-kind","รูปแบบกำไร","เลือกปิดกำไรรวมทั้งชุด หรือปิดทีละไม้","profit")}
                     <div className="cc-bot-v2-choice-row cc-bot-v2-choice-inline">
-                      <button type="button" className={profitKind==="BASKET"?"active":""} onClick={()=>{props.onEdit?.("manualBasketProfitTargetMoney",Number(props.settings.manualBasketProfitTargetMoney||10));props.onEdit?.("manualPerPositionProfitMoney",0)}}><ScenovaIcon name="profit" size={16}/><span><b>ทั้งชุด</b></span></button>
-                      <button type="button" className={profitKind==="POSITION"?"active":""} onClick={()=>{props.onEdit?.("manualPerPositionProfitMoney",Number(props.settings.manualPerPositionProfitMoney||2));props.onEdit?.("manualBasketProfitTargetMoney",0)}}><ScenovaIcon name="orders" size={16}/><span><b>ต่อไม้</b></span></button>
+                      <button type="button" className={profitKind==="BASKET"?"active":""} onClick={()=>{props.onEdit?.("manualBasketProfitTargetMoney",Number(props.settings.manualBasketProfitTargetMoney||1));props.onEdit?.("manualPerPositionProfitMoney",0)}}><ScenovaIcon name="profit" size={16}/><span><b>ทั้งชุด</b></span></button>
+                      <button type="button" className={profitKind==="POSITION"?"active":""} onClick={()=>{props.onEdit?.("manualPerPositionProfitMoney",Number(props.settings.manualPerPositionProfitMoney||1));props.onEdit?.("manualBasketProfitTargetMoney",0)}}><ScenovaIcon name="orders" size={16}/><span><b>ต่อไม้</b></span></button>
                     </div>
                   </div>
                   <label className="cc-bot-v2-field">{settingHelpLabel("manual-profit-target",profitKind==="BASKET"?"เป้ากำไร MANUAL ทั้งชุด":"เป้ากำไร MANUAL ต่อไม้",profitKind==="BASKET"?"กำไรรวมถึงยอดนี้ EA จะปิดทั้งชุด":"ไม้ไหนกำไรถึงยอดนี้ EA จะปิดไม้นั้น","profit")}<MoneyInput value={profitKind==="BASKET"?props.settings.manualBasketProfitTargetMoney:props.settings.manualPerPositionProfitMoney} currency={accountCurrency} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.(profitKind==="BASKET"?"manualBasketProfitTargetMoney":"manualPerPositionProfitMoney",v)}/><small>ใช้เฉพาะ MANUAL · ไม่เปลี่ยนค่า AUTO/RACE/COUNTER/ZERO</small></label>

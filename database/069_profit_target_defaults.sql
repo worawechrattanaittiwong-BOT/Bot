@@ -1,5 +1,6 @@
--- Requested per-mode defaults for newly created bot_settings rows only.
--- Existing rows are intentionally untouched so saved customer settings remain unchanged.
+-- Profit-target defaults for newly created bot_settings rows only.
+-- Configurable trade-profit targets default to 1. Existing saved customer settings remain untouched.
+-- AUTO and FLIP LOCK have no direct configurable trade-profit target, so their behavior is unchanged.
 ALTER TABLE bot_settings
   ALTER COLUMN settings
   SET DEFAULT '{

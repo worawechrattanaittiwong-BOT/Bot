@@ -3839,7 +3839,9 @@ export class BotController {
         ? requestedBasketProfit
         : undefined) ??
       currentSettings.manualBasketProfitTargetMoney ??
-      (storedControlMode === "MANUAL" && storedProfitMode === "MANUAL" ? storedLegacyBasket : 0)
+      (storedControlMode === "MANUAL" && storedProfitMode === "MANUAL"
+        ? storedLegacyBasket
+        : (Number(currentSettings.manualPerPositionProfitMoney || 0) > 0 ? 0 : 1))
     ));
     const manualPerPositionProfitMoney = Math.max(0, Number(
       clean.manualPerPositionProfitMoney ??
@@ -4013,10 +4015,10 @@ export class BotController {
       clean.raceCloseAllProfitEnabled = raceMode === "BASKET";
       if (body.raceCloseAllProfitMoney === undefined &&
           currentSettings.raceCloseAllProfitMoney === undefined)
-        clean.raceCloseAllProfitMoney = 0.5;
+        clean.raceCloseAllProfitMoney = 1;
       if (body.racePerPositionProfitMoney === undefined &&
           currentSettings.racePerPositionProfitMoney === undefined)
-        clean.racePerPositionProfitMoney = 0.5;
+        clean.racePerPositionProfitMoney = 1;
     }
 
     const counterSelected =

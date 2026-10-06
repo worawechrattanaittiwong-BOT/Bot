@@ -75,12 +75,12 @@ Need $api '["BASKET", "POSITION", "OFF"]' 'API RACE target mode choices missing'
 Need $api 'clean.raceCloseAllProfitEnabled = raceMode === "BASKET"' 'Legacy RACE switch must mirror Basket mode only'
 
 Need $web 'raceProfitTargetMode: "POSITION"' 'Dashboard default RACE target mode must be per-position'
-Need $web 'racePerPositionProfitMoney: 0.5' 'Dashboard default RACE per-position target missing'
+Need $web 'racePerPositionProfitMoney: 1' 'Dashboard default RACE per-position target must be 1'
 Need $web 'settingHelpLabel("profit-kind","รูปแบบกำไร"' 'RACE profit selector must be visible with tap help'
 Need $web 'เป้ากำไรต่อไม้' 'RACE per-position target input missing'
 Need $web 'เป้ากำไรทั้งชุด' 'RACE Basket target input missing'
 
 Need $db '"raceProfitTargetMode":"POSITION"' 'New accounts must default RACE target mode to per-position'
-Need $db '"racePerPositionProfitMoney":0.5' 'New accounts must default RACE per-position target'
+Need $db '"racePerPositionProfitMoney":1.0' 'New accounts must default RACE per-position target to 1'
 
 Write-Host 'RACE hard Basket target + per-position strict target contract: PASS'
