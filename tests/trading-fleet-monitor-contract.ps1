@@ -22,6 +22,7 @@ foreach ($required in @(
   'OWN_ASSIGNED_SLOTS',
   'ALL_SLOTS',
   'AND ls.assigned_user_id=$1',
+  'const params = elevated ? [] : [actor.sub];',
   'AND a.user_id=$1',
   'own_account.user_id=$1',
   'trade_journal',

@@ -59,7 +59,7 @@ export class FleetMonitorController {
       [actor.sub]
     );
 
-    const params = [actor.sub];
+    const params = elevated ? [] : [actor.sub];
     const customerSlotScope = elevated ? "" : "AND ls.assigned_user_id=$1";
     const instanceOwnershipGuard = elevated
       ? ""
