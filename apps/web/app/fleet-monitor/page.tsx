@@ -485,32 +485,6 @@ export default function FleetMonitorPage() {
             ))}
           </div>
 
-          <div className={styles.periodBar}>
-            <div className={styles.periodIntro}>
-              <ScenovaIcon name="report" size={16}/>
-              <span><b>ช่วงเวลาผลงาน</b><small>เวลาไทย (Asia/Bangkok) · ใช้กับ P/L, Win Rate, Baskets, Entries และ Drawdown</small></span>
-            </div>
-            <select value={rangeMode} onChange={(event) => setRangeMode(event.target.value as RangeMode)}>
-              <option value="ALL">ทั้งหมด</option>
-              <option value="TODAY">วันนี้</option>
-              <option value="7D">7 วันที่ผ่านมา</option>
-              <option value="30D">30 วันที่ผ่านมา</option>
-              <option value="CUSTOM">กำหนดวัน/เวลาเอง</option>
-            </select>
-            {rangeMode === "CUSTOM" ? (
-              <>
-                <label className={styles.dateField}>
-                  <span>เริ่ม</span>
-                  <input type="datetime-local" value={customFrom} onChange={(event) => setCustomFrom(event.target.value)}/>
-                </label>
-                <label className={styles.dateField}>
-                  <span>สิ้นสุด</span>
-                  <input type="datetime-local" value={customTo} onChange={(event) => setCustomTo(event.target.value)}/>
-                </label>
-              </>
-            ) : null}
-            <span className={styles.periodApplied}>กำลังแสดง: <b>{selectedRangeLabel}</b></span>
-          </div>
         </section>
 
         <section className={styles.toolbar}>
@@ -522,6 +496,30 @@ export default function FleetMonitorPage() {
               placeholder={data.elevated ? "ค้นหา User / Slot / MT5 / Broker / Server..." : "ค้นหา Slot / MT5 / Broker / Server..."}
             />
           </label>
+
+          <label className={styles.periodFilter}>
+            <span>ช่วงเวลาผลงาน</span>
+            <select value={rangeMode} onChange={(event) => setRangeMode(event.target.value as RangeMode)}>
+              <option value="ALL">ทั้งหมด</option>
+              <option value="TODAY">วันนี้</option>
+              <option value="7D">7 วัน</option>
+              <option value="30D">30 วัน</option>
+              <option value="CUSTOM">กำหนดเอง</option>
+            </select>
+          </label>
+
+          {rangeMode === "CUSTOM" ? (
+            <>
+              <label className={styles.dateField}>
+                <span>เริ่ม</span>
+                <input type="datetime-local" value={customFrom} onChange={(event) => setCustomFrom(event.target.value)}/>
+              </label>
+              <label className={styles.dateField}>
+                <span>สิ้นสุด</span>
+                <input type="datetime-local" value={customTo} onChange={(event) => setCustomTo(event.target.value)}/>
+              </label>
+            </>
+          ) : null}
 
           <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}>
             <option value="ALL">ทุกสถานะ</option>

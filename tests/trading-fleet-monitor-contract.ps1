@@ -81,7 +81,7 @@ foreach ($required in @(
   'Ping',
   'Deposit/Withdraw',
   'ช่วงเวลาผลงาน',
-  'กำหนดวัน/เวลาเอง',
+  'กำหนดเอง',
   'type="datetime-local"',
   'Asia/Bangkok',
   'บัญชีที่เชื่อมต่อ',
@@ -107,10 +107,9 @@ foreach ($required in @(
   '.tone_warn',
   '.tone_bad',
   '.currencyPeriodRow{',
-  'grid-template-columns:minmax(430px,32%) minmax(0,1fr)',
-  '.periodBar{',
-  '.dateField{',
-  '.periodApplied{'
+  'width:min(100%,640px)',
+  '.periodFilter{',
+  '.dateField{'
 )) {
   if (-not $css.Contains($required)) {
     throw "Fleet monitor compact card layout missing: $required"

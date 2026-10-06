@@ -170,14 +170,12 @@
 .bad{color:#ff6978!important}
 .warn{color:#f2c96d!important}
 .currencyPeriodRow{
-  display:grid;
-  grid-template-columns:minmax(430px,32%) minmax(0,1fr);
-  gap:8px;
-  align-items:stretch;
+  display:block;
   margin-bottom:9px;
 }
 .currencyStrip{
   display:flex;
+  width:min(100%,640px);
   min-width:0;
   gap:8px;
   margin-bottom:0;
@@ -218,60 +216,15 @@
 .currencyStrip article>div:last-child{border-right:0}
 .currencyStrip article span{font-size:var(--ui-type-caption);color:#7e8ba6}
 .currencyStrip article b{margin-top:2px;font-size:var(--ui-type-caption);color:#edf1ff}
-.periodBar{
-  display:flex;
-  align-items:center;
-  gap:8px;
-  min-width:0;
-  min-height:46px;
-  margin-bottom:0;
-  padding:7px 9px;
-  border:1px solid #273654;
-  border-radius:10px;
-  background:linear-gradient(180deg,rgba(12,20,37,.94),rgba(7,13,25,.96));
-}
-.periodIntro{
-  min-width:280px;
-  display:flex;
-  align-items:center;
-  gap:8px;
-  color:#8e80ff;
-}
-.periodIntro>span{min-width:0}
-.periodIntro b,.periodIntro small{
-  display:block;
-}
-.periodIntro b{
-  color:#e7e2ff;
-  font-size:12px;
-}
-.periodIntro small{
-  margin-top:2px;
-  color:#7d8ba5;
-  font-size:var(--ui-type-caption);
-  line-height:1.3;
-}
-.periodBar>select{
-  width:170px;
-  height:34px;
-  flex:0 0 auto;
-  border:1px solid #334363;
-  border-radius:8px;
-  background:#080f1d;
-  color:#d8e0f1;
-  padding:0 9px;
-  font-size:var(--ui-type-caption);
-  font-weight:750;
-  outline:none;
-}
 .dateField{
-  height:34px;
+  height:36px;
   display:flex;
   align-items:center;
   gap:6px;
+  min-width:0;
   padding:0 8px;
   border:1px solid #334363;
-  border-radius:8px;
+  border-radius:9px;
   background:#080f1d;
 }
 .dateField span{
@@ -281,7 +234,8 @@
   white-space:nowrap;
 }
 .dateField input{
-  width:170px;
+  width:155px;
+  min-width:0;
   border:0;
   outline:0;
   background:transparent;
@@ -289,17 +243,39 @@
   font-size:var(--ui-type-caption);
   color-scheme:dark;
 }
-.periodApplied{
-  margin-left:auto;
-  color:#8391aa;
+.periodFilter{
+  height:36px;
+  min-width:0;
+  display:flex;
+  align-items:center;
+  gap:6px;
+  padding:0 7px 0 9px;
+  border:1px solid #334363;
+  border-radius:9px;
+  background:#080f1d;
+}
+.periodFilter>span{
+  color:#8d9ab5;
   font-size:var(--ui-type-caption);
+  font-weight:750;
   white-space:nowrap;
 }
-.periodApplied b{color:#d9d2ff}
+.periodFilter select{
+  width:86px;
+  min-width:0;
+  height:30px;
+  border:0;
+  outline:0;
+  background:transparent;
+  color:#d8e0f1;
+  padding:0 2px;
+  font-size:var(--ui-type-caption);
+  font-weight:800;
+}
 
 .toolbar{
   display:grid;
-  grid-template-columns:minmax(250px,1.7fr) repeat(4,minmax(125px,.7fr)) auto;
+  grid-template-columns:minmax(250px,1.7fr) minmax(185px,.8fr) repeat(4,minmax(120px,.65fr)) auto;
   gap:7px;
   align-items:center;
   margin-bottom:10px;
@@ -534,18 +510,12 @@
 
 @media(max-width:1500px){
   .summaryGrid{grid-template-columns:repeat(4,minmax(0,1fr))}
-  .currencyPeriodRow{grid-template-columns:minmax(410px,38%) minmax(0,1fr)}
-  .periodIntro{min-width:220px}
   .cards{grid-template-columns:repeat(3,minmax(0,1fr))}
-  .toolbar{grid-template-columns:minmax(240px,1.5fr) repeat(2,minmax(130px,.7fr)) repeat(2,minmax(120px,.65fr))}
+  .toolbar{grid-template-columns:minmax(240px,1.45fr) minmax(185px,.8fr) repeat(4,minmax(115px,.62fr))}
   .resultCount{grid-column:1/-1;text-align:right}
 }
 @media(max-width:1180px){
-  .currencyPeriodRow{grid-template-columns:1fr}
   .currencyStrip article{flex-basis:100%}
-  .periodBar{flex-wrap:wrap}
-  .periodIntro{width:100%;min-width:0}
-  .periodApplied{margin-left:0}
   .cards{grid-template-columns:repeat(2,minmax(0,1fr))}
   .toolbar{grid-template-columns:repeat(2,minmax(0,1fr))}
   .searchBox{grid-column:1/-1}
@@ -566,11 +536,10 @@
 }
 @media(max-width:680px){
   .main{padding:8px 8px 18px}
-  .periodBar{align-items:stretch;flex-direction:column}
-  .periodBar>select{width:100%;height:40px}
   .dateField{height:40px;justify-content:space-between}
-  .dateField input{width:min(220px,68vw)}
-  .periodApplied{white-space:normal}
+  .dateField input{width:min(220px,58vw)}
+  .periodFilter{height:40px;justify-content:space-between}
+  .periodFilter select{width:110px}
   .pageHead h1{font-size:23px}
   .headActions .refreshState{display:none}
   .scopeBadge,.accountTypePicker{max-width:100%}
