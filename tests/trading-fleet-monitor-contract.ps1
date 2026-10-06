@@ -19,7 +19,7 @@ foreach ($required in @(
   '@Query("to")',
   '@Query("accountType")',
   'accountTypeFilter: accountType',
-  "accountType === \"ALL\"",
+  'accountType === "ALL"',
   '["ALL", "REAL", "DEMO"].includes(accountType)',
   'String(row.account_type || "REAL").toUpperCase() === accountType',
   "a.status='ACTIVE'",
