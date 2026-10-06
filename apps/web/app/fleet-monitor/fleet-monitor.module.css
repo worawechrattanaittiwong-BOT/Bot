@@ -174,8 +174,8 @@
   margin-bottom:9px;
 }
 .currencyStrip{
-  display:flex;
-  flex-wrap:wrap;
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
   width:100%;
   min-width:0;
   gap:8px;
@@ -184,7 +184,6 @@
   padding-bottom:0;
 }
 .currencyStrip article{
-  flex:1 1 100%;
   width:100%;
   min-width:0;
   display:grid;
@@ -195,6 +194,9 @@
   border-radius:10px;
   background:linear-gradient(90deg,#10122a,#0a1020);
   overflow:hidden;
+}
+.currencyStrip article:only-child{
+  grid-column:1/-1;
 }
 .currencyStrip header,.currencyStrip article>div{
   min-width:0;
@@ -515,14 +517,13 @@
   .resultCount{grid-column:1/-1;text-align:right}
 }
 @media(max-width:1180px){
-  .currencyStrip article{flex-basis:100%}
   .cards{grid-template-columns:repeat(2,minmax(0,1fr))}
   .toolbar{grid-template-columns:repeat(2,minmax(0,1fr))}
   .searchBox{grid-column:1/-1}
   .resultCount{grid-column:1/-1}
-  .currencyStrip article{flex-basis:100%;min-width:0}
 }
 @media(max-width:960px){
+  .currencyStrip{grid-template-columns:1fr}
   .main{padding:10px 10px 22px}
   .mobileHead{
     display:block;
@@ -548,7 +549,7 @@
   .summaryGrid{gap:6px}
   .summaryGrid>div{min-height:70px;padding:9px}
   .summaryGrid b{font-size:16px}
-  .currencyStrip article{min-width:0;flex-basis:100%;grid-template-columns:80px repeat(5,minmax(0,1fr))}
+  .currencyStrip article{min-width:0;grid-template-columns:80px repeat(5,minmax(0,1fr))}
   .toolbar{grid-template-columns:1fr}
   .searchBox,.resultCount{grid-column:auto}
   .cards{grid-template-columns:1fr}
