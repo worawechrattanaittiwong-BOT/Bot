@@ -61,6 +61,9 @@ jobs:
       - name: Trading Fleet Monitor read-only scope contract
         shell: pwsh
         run: ./tests/trading-fleet-monitor-contract.ps1
+      - name: SCENOVA AI assistant read-only contract
+        shell: pwsh
+        run: ./tests/ai-assistant-readonly-contract.ps1
       - name: Cloud rollback same-version Build ID contract
         shell: pwsh
         run: ./tests/cloud-rollback-build-identity-contract.ps1

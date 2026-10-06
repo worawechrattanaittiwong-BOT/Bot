@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
+import { ScenovaAiPanel } from "../ai/ScenovaAiPanel";
 import { ScenovaRobotCanvas } from "./ScenovaRobotCanvas";
 import styles from "./ScenovaMascot.module.css";
 
@@ -10,10 +11,17 @@ type Props = {
   error?: string;
 };
 
+type PanelView = "MENU" | "AI";
+
+const ACTIVE_SLOT_STORAGE_KEY = "scenova_ai_active_slot_id";
+const ACTIVE_SLOT_EVENT = "scenova:active-slot";
+
 export function ScenovaMascotLauncher({ className = "", onConnectMobile, error }: Props) {
   const [open, setOpen] = useState(false);
+  const [view, setView] = useState<PanelView>("MENU");
   const [hovered, setHovered] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [activeSlotId, setActiveSlotId] = useState("");
   const busyRef = useRef(false);
   const mountedRef = useRef(true);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -27,14 +35,43 @@ export function ScenovaMascotLauncher({ className = "", onConnectMobile, error }
   }, []);
 
   useEffect(() => {
-    if (!open) return;
-    actionRef.current?.focus();
+    const read = () => {
+      try {
+        setActiveSlotId(String(localStorage.getItem(ACTIVE_SLOT_STORAGE_KEY) || ""));
+      } catch {
+        setActiveSlotId("");
+      }
+    };
+    const onActiveSlot = (event: Event) => {
+      const custom = event as CustomEvent<{ slotId?: string }>;
+      const slotId = String(custom.detail?.slotId || "");
+      setActiveSlotId(slotId);
+    };
+    read();
+    window.addEventListener(ACTIVE_SLOT_EVENT, onActiveSlot as EventListener);
+    window.addEventListener("storage", read);
+    return () => {
+      window.removeEventListener(ACTIVE_SLOT_EVENT, onActiveSlot as EventListener);
+      window.removeEventListener("storage", read);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!open) {
+      setView("MENU");
+      return;
+    }
+    if (view === "MENU") actionRef.current?.focus();
     const outside = (event: PointerEvent) => {
       if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
     };
     const escape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       event.preventDefault();
+      if (view === "AI") {
+        setView("MENU");
+        return;
+      }
       setOpen(false);
       triggerRef.current?.focus();
     };
@@ -44,7 +81,7 @@ export function ScenovaMascotLauncher({ className = "", onConnectMobile, error }
       document.removeEventListener("pointerdown", outside);
       document.removeEventListener("keydown", escape);
     };
-  }, [open]);
+  }, [open, view]);
 
   async function connect() {
     if (busyRef.current) return;
@@ -59,47 +96,109 @@ export function ScenovaMascotLauncher({ className = "", onConnectMobile, error }
     }
   }
 
+  const close = () => {
+    setOpen(false);
+    setView("MENU");
+    triggerRef.current?.focus();
+  };
+
   return (
-    <div ref={rootRef} className={`${styles.launcher} ${className}`} data-open={open}
+    <div
+      ref={rootRef}
+      className={`${styles.launcher} ${className}`}
+      data-open={open}
+      data-view={view.toLowerCase()}
       onBlur={event => {
         if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget as Node)) setOpen(false);
-      }}>
+      }}
+    >
       {open && (
-        <section id={id} className={styles.card} role="dialog" aria-labelledby={`${id}-title`}>
+        <section
+          id={id}
+          className={`${styles.card} ${view === "AI" ? styles.cardAi : ""}`}
+          role="dialog"
+          aria-labelledby={view === "MENU" ? `${id}-title` : undefined}
+        >
           <div className={styles.cardGlow} />
-          <header className={styles.header}>
-            <div className={styles.sparkle} aria-hidden="true">✦</div>
-            <div>
-              <h2 id={`${id}-title`}>SCENOVA</h2>
-            </div>
-            <button type="button" className={styles.close} aria-label="ปิดเมนูมาสคอต"
-              onClick={() => { setOpen(false); triggerRef.current?.focus(); }}>×</button>
-          </header>
-          <p className={styles.greeting}>สวัสดีครับ วันนี้ให้ผมช่วยอะไรดี?</p>
-          <button ref={actionRef} type="button" className={styles.action} onClick={() => void connect()}
-            disabled={busy} aria-busy={busy}>
-            <span className={styles.actionIcon} aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <rect x="6" y="2.5" width="12" height="19" rx="3" /><path d="M10 5h4M11 18.5h2" />
-              </svg>
-            </span>
-            <span className={styles.actionText}>
-              <strong>{busy ? "กำลังเตรียมการเชื่อมต่อ…" : "เชื่อมต่อหน้าจอมือถือ"}</strong>
-              <small>สแกน QR เพื่อเปิด Mobile Mirror</small>
-            </span>
-            <span className={styles.arrow} aria-hidden="true">↗</span>
-          </button>
-          {error && <p className={styles.error} role="alert">{error}</p>}
-          <footer className={styles.footer}><span aria-hidden="true" /> พร้อมอยู่ข้างคุณ</footer>
+          {view === "AI" ? (
+            <ScenovaAiPanel
+              slotId={activeSlotId || undefined}
+              onBack={() => setView("MENU")}
+              onClose={close}
+            />
+          ) : (
+            <>
+              <header className={styles.header}>
+                <div className={styles.sparkle} aria-hidden="true">✦</div>
+                <div>
+                  <h2 id={`${id}-title`}>SCENOVA</h2>
+                </div>
+                <button
+                  type="button"
+                  className={styles.close}
+                  aria-label="ปิดเมนูมาสคอต"
+                  onClick={close}
+                >
+                  ×
+                </button>
+              </header>
+
+              <p className={styles.greeting}>สวัสดีครับ วันนี้ให้ผมช่วยอะไรดี?</p>
+
+              <button
+                ref={actionRef}
+                type="button"
+                className={`${styles.action} ${styles.aiAction}`}
+                onClick={() => setView("AI")}
+              >
+                <span className={styles.actionIcon} aria-hidden="true">✦</span>
+                <span className={styles.actionText}>
+                  <strong>ถาม SCENOVA AI</strong>
+                  <small>โหมด · การตั้งค่า · MT5/EA · Broker · ความเสี่ยง</small>
+                </span>
+                <span className={styles.arrow} aria-hidden="true">→</span>
+              </button>
+
+              <button
+                type="button"
+                className={styles.action}
+                onClick={() => void connect()}
+                disabled={busy}
+                aria-busy={busy}
+              >
+                <span className={styles.actionIcon} aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <rect x="6" y="2.5" width="12" height="19" rx="3" /><path d="M10 5h4M11 18.5h2" />
+                  </svg>
+                </span>
+                <span className={styles.actionText}>
+                  <strong>{busy ? "กำลังเตรียมการเชื่อมต่อ…" : "เชื่อมต่อหน้าจอมือถือ"}</strong>
+                  <small>สแกน QR เพื่อเปิด Mobile Mirror</small>
+                </span>
+                <span className={styles.arrow} aria-hidden="true">↗</span>
+              </button>
+
+              {error && <p className={styles.error} role="alert">{error}</p>}
+              <footer className={styles.footer}><span aria-hidden="true" /> พร้อมอยู่ข้างคุณ</footer>
+            </>
+          )}
         </section>
       )}
-      <button ref={triggerRef} type="button" className={styles.trigger}
+
+      <button
+        ref={triggerRef}
+        type="button"
+        className={styles.trigger}
         aria-label={open ? "ปิดเมนู SCENOVA" : "เปิดเมนู SCENOVA"}
-        aria-expanded={open} aria-controls={open ? id : undefined} aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-controls={open ? id : undefined}
+        aria-haspopup="dialog"
         onPointerEnter={event => { if (event.pointerType !== "touch") setHovered(true); }}
         onPointerLeave={() => setHovered(false)}
-        onFocus={() => setHovered(true)} onBlur={() => setHovered(false)}
-        onClick={() => setOpen(current => !current)}>
+        onFocus={() => setHovered(true)}
+        onBlur={() => setHovered(false)}
+        onClick={() => setOpen(current => !current)}
+      >
         <span className={styles.halo} aria-hidden="true" />
         <ScenovaRobotCanvas engaged={hovered || open} />
         <span className={styles.hint} aria-hidden="true">แตะเพื่อเปิดเมนู</span>

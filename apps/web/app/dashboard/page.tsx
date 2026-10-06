@@ -540,7 +540,11 @@ export default function DashboardPage() {
 
     // Legacy unscoped operation state could belong to another SCENOVA login.
     // Never restore it; current operation persistence is keyed by user id below.
-    try { localStorage.removeItem("scenova-mt5-operation-v1"); } catch {}
+    try {
+      localStorage.removeItem("scenova-mt5-operation-v1");
+      localStorage.removeItem("scenova_ai_active_slot_id");
+    } catch {}
+    window.dispatchEvent(new CustomEvent("scenova:active-slot", { detail: { slotId: "" } }));
 
     load("");
     api("/runtime-migration/status")
@@ -587,6 +591,15 @@ export default function DashboardPage() {
     }, 5000);
     return () => clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    const slotId = String(data?.selectedSlot?.id || selectedSlotId || "");
+    try {
+      if (slotId) localStorage.setItem("scenova_ai_active_slot_id", slotId);
+      else localStorage.removeItem("scenova_ai_active_slot_id");
+    } catch {}
+    window.dispatchEvent(new CustomEvent("scenova:active-slot", { detail: { slotId } }));
+  }, [data?.selectedSlot?.id, selectedSlotId]);
 
   useEffect(() => {
     const userId = String(data?.user?.id || "");
@@ -4027,6 +4040,7 @@ export default function DashboardPage() {
 
   function logout() {
     localStorage.removeItem("bot_token");
+    localStorage.removeItem("scenova_ai_active_slot_id");
     window.location.href = "/login";
   }
 

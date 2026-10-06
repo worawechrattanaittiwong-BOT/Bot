@@ -28,6 +28,13 @@ import { PerformanceActionsController, SharedPerformanceController } from "./per
 import { DashboardLiveController } from "./dashboard-live.controller";
 import { MobileMirrorController } from "./mobile-mirror.controller";
 import { FleetMonitorController } from "./fleet-monitor.controller";
+import { AiAssistantController, AdminAiAssistantController } from "./ai-assistant/ai-assistant.controller";
+import { AiAssistantService } from "./ai-assistant/ai-assistant.service";
+import { AiContextService } from "./ai-assistant/ai-context.service";
+import { AiKnowledgeService } from "./ai-assistant/ai-knowledge.service";
+import { AiProviderService } from "./ai-assistant/ai-provider.service";
+import { AiSafetyService } from "./ai-assistant/ai-safety.service";
+import { AiStoreService } from "./ai-assistant/ai-store.service";
 import { PartnerController } from "./partner.controller";
 import { PartnerService } from "./partner.service";
 import { ReferralController } from "./referral.controller";
@@ -83,8 +90,14 @@ import { ExnessPartnershipApiService } from "./brokers/exness-partnership-api.se
       signOptions: { expiresIn: "7d" }
     })
   ],
-  controllers: [AdminBrokerAutomationController, AdminBrokerFinanceController, BrokerRebateController, AdminBrokerController, BrokerController, PublicBrokerController, ModeGuideVideoAdminController, ModeGuideVideoController, AdminPaymentQrSettingsController, InAppCampaignAssetController, InAppCampaignAdminController, InAppCampaignController, RuntimeEventWorkerController, RuntimeEventStreamController, ServerSoftwareUpdateAdminController, ServerSoftwareUpdateWorkerController, CloudUpdateAdminController, CloudUpdateWorkerController, CloudServerAdminController, ServerEnrollmentController, OwnerManagementController, OwnerMobileController, CommissionPayoutWorkerController, AdminCommissionWithdrawalsController, CommissionWalletWithdrawalController, AdminApiCredentialsController, AdminServiceLinksController, ProductionHardeningController, RuntimeMigrationController, RuntimeMigrationAgentController, RuntimeSafetyController, CloudTestController, CloudAdminController, CloudCustomerController, CloudPaymentController, LocalPackageCustomerController, LocalPackageAdminController, RootController, CatalogController, AuthController, AccountSecurityController, TrialCouponController, BotController, DashboardLiveController, MobileMirrorController, FleetMonitorController, PartnerController, ReferralController, ManualMt5Controller, TradingSymbolController, EaTradingSymbolController, AdminController, EaController, AgentActionController, InstallerController, BacktestController, PerformanceController, PerformanceAnalyticsController, PerformanceActionsController, SharedPerformanceController, HealthController, WorkerController],
+  controllers: [AdminBrokerAutomationController, AdminBrokerFinanceController, BrokerRebateController, AdminBrokerController, BrokerController, PublicBrokerController, ModeGuideVideoAdminController, ModeGuideVideoController, AdminPaymentQrSettingsController, InAppCampaignAssetController, InAppCampaignAdminController, InAppCampaignController, RuntimeEventWorkerController, RuntimeEventStreamController, ServerSoftwareUpdateAdminController, ServerSoftwareUpdateWorkerController, CloudUpdateAdminController, CloudUpdateWorkerController, CloudServerAdminController, ServerEnrollmentController, OwnerManagementController, OwnerMobileController, CommissionPayoutWorkerController, AdminCommissionWithdrawalsController, CommissionWalletWithdrawalController, AdminApiCredentialsController, AdminServiceLinksController, ProductionHardeningController, RuntimeMigrationController, RuntimeMigrationAgentController, RuntimeSafetyController, CloudTestController, CloudAdminController, CloudCustomerController, CloudPaymentController, LocalPackageCustomerController, LocalPackageAdminController, RootController, CatalogController, AuthController, AccountSecurityController, TrialCouponController, BotController, DashboardLiveController, MobileMirrorController, FleetMonitorController, AiAssistantController, AdminAiAssistantController, PartnerController, ReferralController, ManualMt5Controller, TradingSymbolController, EaTradingSymbolController, AdminController, EaController, AgentActionController, InstallerController, BacktestController, PerformanceController, PerformanceAnalyticsController, PerformanceActionsController, SharedPerformanceController, HealthController, WorkerController],
   providers: [
+    AiAssistantService,
+    AiContextService,
+    AiKnowledgeService,
+    AiProviderService,
+    AiSafetyService,
+    AiStoreService,
     BrokerAutomationService,
     ExnessPartnershipApiService,
     BrokerFinanceService,
