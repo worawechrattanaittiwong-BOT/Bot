@@ -17,7 +17,7 @@
 .userMessage,.aiMessage{max-width:88%;padding:9px 10px;border-radius:13px}
 .userMessage{align-self:flex-end;background:linear-gradient(135deg,rgba(113,87,255,.35),rgba(76,130,255,.18));border:1px solid rgba(135,124,255,.28)}
 .aiMessage{max-width:100%;background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.08)}
-.userMessage small,.aiMessage small{display:block;margin-bottom:4px;color:#8d9ab5;font-size:10px}
+.userMessage small,.aiMessage small{display:block;margin-bottom:4px;color:#8d9ab5;font-size:11px}
 .userMessage p,.aiMessage p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font-size:11px;line-height:1.65}
 .typing{padding:8px 10px;border:1px solid rgba(255,255,255,.06);border-radius:11px;background:rgba(255,255,255,.035);color:#9cabca;font-size:11px}
 .messageActions{display:grid;gap:6px;margin-top:9px}

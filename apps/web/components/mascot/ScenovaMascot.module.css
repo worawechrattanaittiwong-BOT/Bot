@@ -90,7 +90,7 @@
 .actionIcon { display: grid; place-items: center; width: 33px; height: 35px; flex: 0 0 auto; border-radius: 10px; background: #a48aff14; color: #bcaeff; }
 .actionText { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .actionText strong { font-size: 12px; line-height: 1.4; font-weight: 700; }
-.actionText small { font-size: 10.5px; line-height: 1.45; color: #a4aec5; }
+.actionText small { font-size: 11px; line-height: 1.45; color: #a4aec5; }
 .arrow { margin-left: auto; color: #8edfff; font-size: 19px; }
 .footer { display: flex; align-items: center; gap: 6px; margin-top: 13px; color: #8f9ab6; font-size: 11px; }
 .footer > span { width: 5px; height: 5px; border-radius: 50%; background: #80e3cb; box-shadow: 0 0 8px #80e3cb55; }
