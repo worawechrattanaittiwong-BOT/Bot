@@ -11,7 +11,8 @@ internal sealed record PreparedInstance(
     string PresetPath,
     string StartupPath,
     string Symbol,
-    string FallbackSymbol);
+    string FallbackSymbol,
+    IReadOnlyList<string> StartupSymbols);
 
 internal sealed class Mt5Runtime
 {
@@ -427,7 +428,8 @@ internal sealed class Mt5Runtime
             presetPath,
             startupPath,
             job.Symbol,
-            job.FallbackSymbol);
+            job.FallbackSymbol,
+            job.StartupSymbolCandidates);
     }
 
     public EaApplyOutcome ApplyEaUpdate(
@@ -911,7 +913,7 @@ internal sealed class Mt5Runtime
             "Files",
             "scenova-ea-ready.txt");
 
-        var startupSymbols = new[] { prepared.Symbol, prepared.FallbackSymbol }
+        var startupSymbols = prepared.StartupSymbols
             .Where(symbol => !string.IsNullOrWhiteSpace(symbol))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
@@ -1012,7 +1014,8 @@ internal sealed class Mt5Runtime
             Path.Combine(instancePath, "MQL5", "Presets", "SCENOVA-Cloud.set"),
             Path.Combine(instancePath, "cloud-start.ini"),
             job.Symbol,
-            job.FallbackSymbol);
+            job.FallbackSymbol,
+            job.StartupSymbolCandidates);
 
         if (TryMaximizeChart(prepared))
             _maximizedProcessByInstance[job.InstanceId] = terminal.Pid;

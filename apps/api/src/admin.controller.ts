@@ -1409,9 +1409,13 @@ export class AdminController {
 
     const positions = Math.max(0, Number(slot.positions || 0));
     const pendingOrders = Math.max(0, Number(slot.pending_orders || 0));
+    const firstConnectPrimePending = slot.settings?.firstConnectPrimePending === true;
     if (
       positions > 0 || pendingOrders > 0 ||
-      String(slot.actual_state || "").toUpperCase() === "RUNNING"
+      (
+        String(slot.actual_state || "").toUpperCase() === "RUNNING" &&
+        !firstConnectPrimePending
+      )
     ) {
       throw new ConflictException("กรุณาหยุดบอทและให้ Position / Pending Order เป็น 0 ก่อนเปลี่ยน Symbol");
     }
@@ -1571,10 +1575,14 @@ export class AdminController {
 
     const positions = Math.max(0, Number(slot.positions || 0));
     const pendingOrders = Math.max(0, Number(slot.pending_orders || 0));
+    const firstConnectPrimePending = slot.settings?.firstConnectPrimePending === true;
     if (
       positions > 0 ||
       pendingOrders > 0 ||
-      String(slot.actual_state || "").toUpperCase() === "RUNNING"
+      (
+        String(slot.actual_state || "").toUpperCase() === "RUNNING" &&
+        !firstConnectPrimePending
+      )
     ) {
       throw new ConflictException(
         "กรุณาหยุดบอทและให้ Position / Pending Order เป็น 0 ก่อนโหลด Symbol ใหม่"
@@ -1744,10 +1752,14 @@ export class AdminController {
 
     const positions = Math.max(0, Number(slot.positions || 0));
     const pendingOrders = Math.max(0, Number(slot.pending_orders || 0));
+    const firstConnectPrimePending = slot.settings?.firstConnectPrimePending === true;
     if (
       positions > 0 ||
       pendingOrders > 0 ||
-      String(slot.actual_state || "").toUpperCase() === "RUNNING"
+      (
+        String(slot.actual_state || "").toUpperCase() === "RUNNING" &&
+        !firstConnectPrimePending
+      )
     ) {
       throw new ConflictException(
         "กรุณาหยุดบอทและให้ Position / Pending Order เป็น 0 ก่อนซ่อม MT5 / EA"

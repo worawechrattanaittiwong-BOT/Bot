@@ -90,6 +90,13 @@ internal static class ProvisioningSelfTest
                     !string.Equals(exnessJob.FallbackSymbol, "XAUUSD", StringComparison.Ordinal))
                     throw new InvalidOperationException("Exness Gold bootstrap fallback was not prepared");
 
+                var goldCandidates = exnessJob.StartupSymbolCandidates.ToArray();
+                foreach (var required in new[] { "XAUUSDm", "XAUUSD", "XAUUSDc", "XAUUSC" })
+                {
+                    if (!goldCandidates.Contains(required, StringComparer.OrdinalIgnoreCase))
+                        throw new InvalidOperationException("Gold bootstrap candidate missing: " + required);
+                }
+
                 using (var exactSettings = JsonDocument.Parse("{\"startupSymbol\":\"XAUUSD\",\"symbolResolutionMode\":\"EXACT\"}"))
                 {
                     var exactJob = new CloudJob
@@ -103,6 +110,9 @@ internal static class ProvisioningSelfTest
                     if (!string.Equals(exactJob.Symbol, "XAUUSD", StringComparison.Ordinal) ||
                         !string.IsNullOrWhiteSpace(exactJob.FallbackSymbol))
                         throw new InvalidOperationException("exact symbol selection must not be rewritten or fallback");
+                    if (exactJob.StartupSymbolCandidates.Count != 1 ||
+                        !string.Equals(exactJob.StartupSymbolCandidates[0], "XAUUSD", StringComparison.Ordinal))
+                        throw new InvalidOperationException("exact symbol selection must not probe alternative symbols");
                 }
 
                 var genericJob = new CloudJob

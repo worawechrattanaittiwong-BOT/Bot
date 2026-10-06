@@ -146,6 +146,8 @@ const repairRuntimeBlock = adminApi.slice(repairRuntimeStart, disconnectStart);
 for (const [name, block] of [["select", selectSymbolBlock], ["refresh", refreshSymbolBlock], ["repair", repairRuntimeBlock]]) {
   assert.match(block, /String\(slot\.actual_state \|\| ""\)\.toUpperCase\(\) === "RUNNING"/, `${name} must block the selected Slot when its runtime is actually RUNNING`);
   assert.doesNotMatch(block, /String\(slot\.desired_state \|\| ""\)\.toUpperCase\(\) === "RUNNING"/, `${name} must not let a stale pending START lock Slot maintenance forever`);
+  assert.match(block, /firstConnectPrimePending/, `${name} must recognize the no-entry first-connect prime as maintenance-safe`);
+  assert.match(block, /!firstConnectPrimePending/, `${name} must permit per-Slot Symbol recovery during the no-entry first-connect prime`);
   assert.match(block, /command='START'/, `${name} must supersede pending START only for the selected Slot`);
 }
 assert.match(adminApi, /symbolResolutionMode \|\| ""\)\.toUpperCase\(\) === "EXACT"\) \{\s*return raw \|\| "XAUUSD";/s, "Admin refresh must preserve exact broker-native Symbol suffixes");

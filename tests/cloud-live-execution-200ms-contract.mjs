@@ -144,7 +144,7 @@ assert.equal(eaVersion, promotedEa, "EA source and promoted API version must mat
 const workerVersion = workerLoop.match(/Version = "([^"]+)"/)?.[1];
 const projectVersion = workerProject.match(/<Version>([^<]+)<\/Version>/)?.[1];
 const promotedWorker = cloudRelease.match(/workerVersion: "([^"]+)"/)?.[1];
-assert.equal(workerVersion, "2.2.32", "Cloud 200ms requires Worker 2.2.32");
+assert.equal(workerVersion, "2.2.33", "Cloud 200ms requires Worker 2.2.33");
 assert.equal(workerVersion, projectVersion, "Worker source/project versions must match");
 assert.equal(workerVersion, promotedWorker, "Worker source/promoted versions must match");
 
