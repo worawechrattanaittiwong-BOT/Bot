@@ -703,7 +703,7 @@ internal sealed class Mt5Runtime
                     "MQL5",
                     "Experts",
                     "FastBasketBot.ex5");
-                var templateProbe = Path.Combine(
+                var templateProbeSource = Path.Combine(
                     _templatePath,
                     "MQL5",
                     "Experts",
@@ -711,7 +711,7 @@ internal sealed class Mt5Runtime
 
                 Directory.CreateDirectory(Path.GetDirectoryName(brokerEa)!);
                 File.Copy(templateEa, brokerEa, overwrite: true);
-                File.Copy(templateProbe, brokerProbe, overwrite: true);
+                File.Copy(templateProbeSource, brokerProbe, overwrite: true);
             }
             else
             {
@@ -812,8 +812,8 @@ internal sealed class Mt5Runtime
                 "symbol-probe.attempts"
             })
             {
-                var marker = Path.Combine(instancePath, name);
-                if (File.Exists(marker)) File.Delete(marker);
+                var cleanupMarker = Path.Combine(instancePath, name);
+                if (File.Exists(cleanupMarker)) File.Delete(cleanupMarker);
             }
         }
         catch { }
