@@ -53,7 +53,7 @@ Need $flipManage 'Server state controls only NEW exposure.' 'FLIP 1.2.0 must use
 Need $flipManage 'tightening its broker SL from the local MT5 quote even during Stop/offline.' 'existing FLIP leg must keep local Broker SL protection during SaaS latency or stop state'
 Need $flipSync 'SymbolInfoDouble(_Symbol,SYMBOL_TRADE_TICK_SIZE)' 'FLIP profit trailing SL must follow broker tick increments'
 Need $flip 'FLIP_LOCK_STOP_SYNC_MIN_MS 250' 'FLIP 1.2.0 broker SL updates must keep bounded local sync pacing'
-Need $flip 'FLIP_LOCK_TRAIL_DISTANCE_POINTS 100.0' 'FLIP 1.2.0 must keep the fixed 100-point local profit trail'
+Need $flip 'FLIP_LOCK_GOLD_TRAIL_PRICE 1.50' 'FLIP 1.3.0 must keep a 1.50 XAU quote-price local profit trail'
 Need $flipSync 'nowMs-g_flipLockLastStopSyncMs>=FLIP_LOCK_STOP_SYNC_MIN_MS' 'FLIP 1.2.0 local Broker SL updates must use the bounded stop-sync cadence'
 
 $flipTimer=$onTimer.IndexOf('FlipLockManage();')

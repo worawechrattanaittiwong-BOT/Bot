@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.1.29"
-#define SCENOVA_EA_VERSION "1.1.29"
-#define SCENOVA_PRODUCT_VERSION "1.1.29"
+#property version   "1.1.30"
+#define SCENOVA_EA_VERSION "1.1.30"
+#define SCENOVA_PRODUCT_VERSION "1.1.30"
 #define SCENOVA_BUILD_ID "SOURCE"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_CONFIGURED_LOSS_ONLY_V1"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"

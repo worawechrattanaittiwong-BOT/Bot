@@ -1,18 +1,23 @@
 #ifndef SCENOVA_FLIP_LOCK_V1_MQH
 #define SCENOVA_FLIP_LOCK_V1_MQH
 
-// FLIP LOCK 1.2.0 - M1 one-position protected-profit engine.
-// A live FLIP position starts with the existing wide Safety SL. Once price has
-// moved far enough into profit for a broker-legal stop beyond entry, the SL
-// jumps to protected profit and then trails the executable market price at a
-// fixed 100-point distance. The SL only tightens; it never moves backward.
+// FLIP LOCK 1.3.0 - M1 one-position protected-net-profit engine.
+// An XAU position starts with the wide broker-side Safety SL. Only arm its
+// profit trail when the projected net money at the new stop covers $1 USD
+// (including observed opening fees, swap and estimated closing fees).
+// Once armed, trail the executable market price by $1.50 of XAU quote price,
+// independent of _Point and the broker's symbol digits. SL never retreats.
+// BTC keeps its pre-existing 100-point trail, but shares the $1 net gate.
 // No opposite pending baton is used.
-#define FLIP_LOCK_V1_VERSION "1.2.0"
+#define FLIP_LOCK_V1_VERSION "1.3.0"
 #define FLIP_LOCK_PENDING_COMMENT "SCNFlipLock"
 #define FLIP_LOCK_LIVE_COMMENT "SCNFlipLockLive"
 #define FLIP_LOCK_UNARMED_RESTART_COOLDOWN_SECONDS 5
 #define FLIP_LOCK_STOP_SYNC_MIN_MS 250
-#define FLIP_LOCK_TRAIL_DISTANCE_POINTS 100.0
+#define FLIP_LOCK_LEGACY_BTC_TRAIL_POINTS 100.0
+#define FLIP_LOCK_GOLD_TRAIL_PRICE 1.50
+#define FLIP_LOCK_MIN_NET_PROFIT_USD 1.00
+#define FLIP_LOCK_EXIT_FEE_RESERVE_USD_PER_LOT 10.0
 
 int g_flipLockDirection=0;
 double g_flipLockPeakPrice=0.0;
@@ -26,6 +31,13 @@ string g_flipLockReason="IDLE";
 ulong g_flipLockLastStopSyncMs=0;
 int g_flipLockPendingDirection=0;
 double g_flipLockPendingTriggerPrice=0.0;
+// Cache fee history by broker position ID; quote-driven trailing stays local
+// and does not query MT5 deal history on every price tick.
+ulong g_flipLockFeePositionId=0;
+double g_flipLockFeePositionVolume=0.0;
+double g_flipLockEntryFees=0.0;
+double g_flipLockExpectedExitFees=0.0;
+ulong g_flipLockFeeScanMs=0;
 
 bool FlipLockModeEnabled()
 {
@@ -59,6 +71,11 @@ void FlipLockResetTracking(const bool resetCounter)
    g_flipLockLastStopSyncMs=0;
    g_flipLockPendingDirection=0;
    g_flipLockPendingTriggerPrice=0.0;
+   g_flipLockFeePositionId=0;
+   g_flipLockFeePositionVolume=0.0;
+   g_flipLockEntryFees=0.0;
+   g_flipLockExpectedExitFees=0.0;
+   g_flipLockFeeScanMs=0;
    g_flipLockReason="IDLE";
    if(resetCounter) g_flipLockFlipCount=0;
 }
@@ -422,36 +439,134 @@ bool FlipLockOpenStarter(const int forcedDirection=0)
    return sent;
 }
 
+bool FlipLockIsGoldQuote()
+{
+   string symbol=_Symbol;
+   StringToUpper(symbol);
+   return StringFind(symbol,"XAUUSD")==0 || StringFind(symbol,"XAUUSC")==0;
+}
+
+double FlipLockDollarToAccountMoney(const double dollars)
+{
+   string currency=AccountInfoString(ACCOUNT_CURRENCY);
+   StringToUpper(currency);
+   // Account P/L and OrderCalcProfit() are in cent units for USD-cent MT5.
+   if(currency=="USC" || currency=="USDC" || StringFind(currency,"CENT")>=0)
+      return dollars*100.0;
+   // The XAUUSD trading profiles are USD based. On an unusual non-USD
+   // account this is a one-unit account-currency target, not an FX conversion.
+   return dollars;
+}
+
+bool FlipLockEntryAndExitFees(
+   const ulong positionId,
+   const double positionVolume,
+   double &entryFees,
+   double &estimatedExitFees
+)
+{
+   entryFees=0.0;
+   estimatedExitFees=0.0;
+   if(positionId==0 || positionVolume<=0.0) return false;
+
+   ulong nowMs=GetTickCount64();
+   if(g_flipLockFeePositionId==positionId &&
+      MathAbs(g_flipLockFeePositionVolume-positionVolume)<1e-8 &&
+      g_flipLockFeeScanMs>0 &&
+      nowMs-g_flipLockFeeScanMs<10000)
+   {
+      entryFees=g_flipLockEntryFees;
+      estimatedExitFees=g_flipLockExpectedExitFees;
+      return true;
+   }
+
+   // Only count actual broker entry deals belonging to THIS position.
+   // If MT5 has not downloaded their history, retain the existing Safety SL.
+   if(!HistorySelectByPosition(positionId)) return false;
+   double openedVolume=0.0;
+   double observedFees=0.0;
+   for(int i=0;i<HistoryDealsTotal();i++)
+   {
+      ulong deal=HistoryDealGetTicket(i);
+      if(deal==0) continue;
+      if(HistoryDealGetString(deal,DEAL_SYMBOL)!=_Symbol ||
+         HistoryDealGetInteger(deal,DEAL_MAGIC)!=InpMagic)
+         continue;
+      long entry=HistoryDealGetInteger(deal,DEAL_ENTRY);
+      if(entry!=DEAL_ENTRY_IN && entry!=DEAL_ENTRY_INOUT) continue;
+      double dealVolume=HistoryDealGetDouble(deal,DEAL_VOLUME);
+      if(dealVolume<=0.0) continue;
+      openedVolume+=dealVolume;
+      // Rebates are not treated as assured profit at a future exit.
+      observedFees+=MathAbs(HistoryDealGetDouble(deal,DEAL_COMMISSION));
+      observedFees+=MathAbs(HistoryDealGetDouble(deal,DEAL_FEE));
+   }
+   if(openedVolume<=0.0) return false;
+
+   // Closing commission is unknown until execution. Use the measured entry
+   // fee per lot, or a conservative $10/lot reserve if it is larger. The
+   // projected stop is an estimate, not a guarantee against gap/slippage.
+   double reservedExitFees=MathMax(
+      (observedFees/openedVolume)*positionVolume,
+      FlipLockDollarToAccountMoney(FLIP_LOCK_EXIT_FEE_RESERVE_USD_PER_LOT)*positionVolume
+   );
+   g_flipLockFeePositionId=positionId;
+   g_flipLockFeePositionVolume=positionVolume;
+   g_flipLockEntryFees=observedFees;
+   g_flipLockExpectedExitFees=reservedExitFees;
+   g_flipLockFeeScanMs=nowMs;
+   entryFees=observedFees;
+   estimatedExitFees=reservedExitFees;
+   return true;
+}
+
+bool FlipLockProjectedNetAtStop(
+   const ulong positionTicket,
+   const int direction,
+   const double positionVolume,
+   const double openPrice,
+   const double stopPrice,
+   double &projectedNet
+)
+{
+   projectedNet=0.0;
+   if(!PositionSelectByTicket(positionTicket)) return false;
+   double entryFees=0.0,estimatedExitFees=0.0;
+   if(!FlipLockEntryAndExitFees(
+      (ulong)PositionGetInteger(POSITION_IDENTIFIER),
+      positionVolume,entryFees,estimatedExitFees)) return false;
+
+   double gross=0.0;
+   ENUM_ORDER_TYPE orderType=direction>0 ? ORDER_TYPE_BUY : ORDER_TYPE_SELL;
+   if(!OrderCalcProfit(orderType,_Symbol,positionVolume,openPrice,stopPrice,gross))
+      return false;
+   projectedNet=gross+PositionGetDouble(POSITION_SWAP)
+      -entryFees-estimatedExitFees;
+   return true;
+}
+
 double FlipLockProfitLockPrice(
    const int direction,
    const double openPrice,
    const MqlTick &tick
 )
 {
-   if(direction==0 || openPrice<=0.0)
-      return 0.0;
+   if(direction==0 || openPrice<=0.0) return 0.0;
 
-   double trailPoints=MathMax(
-      FLIP_LOCK_TRAIL_DISTANCE_POINTS,
-      FlipLockBrokerMinDistancePoints()
+   double quoteTrail=FlipLockIsGoldQuote()
+      ? FLIP_LOCK_GOLD_TRAIL_PRICE
+      : FLIP_LOCK_LEGACY_BTC_TRAIL_POINTS*_Point;
+   double distance=MathMax(
+      quoteTrail,
+      FlipLockBrokerMinDistancePoints()*_Point
    );
    double executablePrice=direction>0 ? tick.bid : tick.ask;
    double target=direction>0
-      ? executablePrice-trailPoints*_Point
-      : executablePrice+trailPoints*_Point;
+      ? executablePrice-distance
+      : executablePrice+distance;
 
-   // Do not replace the wide Safety SL until the fixed-distance trail itself
-   // sits on the profitable side of entry. Broker Stops/Freeze legality is
-   // already included in trailPoints above.
-   if(direction>0)
-   {
-      if(target<=openPrice) return 0.0;
-   }
-   else
-   {
-      if(target>=openPrice) return 0.0;
-   }
-
+   if(direction>0 && target<=openPrice) return 0.0;
+   if(direction<0 && target>=openPrice) return 0.0;
    return NormalizeStopPriceToTick(target,direction);
 }
 
@@ -487,12 +602,27 @@ bool FlipLockSyncProfitLock(
       tick
    );
 
-   // Until the 100-point trailing stop can sit beyond entry legally, leave the
-   // original wide Safety SL untouched.
+   // Until the quote-distance trail can sit legally beyond entry, keep the
+   // original wide Safety SL. A separate net-money gate follows below.
    if(target<=0.0 || !FlipLockProfitStopIsLegal(direction,target,openPrice,tick))
    {
       g_flipLockReason="WAIT_PROFIT_LOCK_DISTANCE";
       g_executionStatus="FLIP_LOCK_WAIT_PROFIT_LOCK";
+      return true;
+   }
+
+   double projectedNet=0.0;
+   if(!FlipLockProjectedNetAtStop(
+      positionTicket,direction,positionVolume,openPrice,target,projectedNet))
+   {
+      g_flipLockReason="WAIT_ENTRY_FEE_HISTORY";
+      g_executionStatus="FLIP_LOCK_WAIT_FEE_HISTORY";
+      return true;
+   }
+   if(projectedNet+1e-8<FlipLockDollarToAccountMoney(FLIP_LOCK_MIN_NET_PROFIT_USD))
+   {
+      g_flipLockReason="WAIT_MIN_NET_PROFIT_USD";
+      g_executionStatus="FLIP_LOCK_WAIT_MIN_NET_PROFIT";
       return true;
    }
 
@@ -530,7 +660,7 @@ bool FlipLockSyncProfitLock(
    g_flipLockLastStopSyncMs=nowMs;
    g_flipLockTriggerPrice=target;
    g_flipLockArmed=true;
-   g_flipLockReason="LOCAL_100_POINT_PROFIT_TRAIL";
+   g_flipLockReason="LOCAL_NET_1USD_GOLD_1_50_TRAIL";
    g_executionStatus=direction>0
       ? "FLIP_LOCK_BUY_PROFIT_LOCK"
       : "FLIP_LOCK_SELL_PROFIT_LOCK";
@@ -750,7 +880,7 @@ void FlipLockManage()
       return;
    }
 
-   // 1.2.0 has no opposite pending baton. Clean any stale order from 1.1.0.
+   // 1.3.0 has no opposite pending baton. Clean any stale order from 1.1.0.
    FlipLockRemoveAllPending();
 
    int totalCount=BasketPositionCount();
