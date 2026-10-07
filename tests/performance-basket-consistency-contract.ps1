@@ -11,7 +11,7 @@ $page = [System.IO.File]::ReadAllText((Resolve-Path 'apps/web/app/dashboard/page
 $backtest = [System.IO.File]::ReadAllText((Resolve-Path 'apps/api/src/backtest.controller.ts'))
 
 foreach ($required in @(
-  'reconstructCompletedJournal(rows)',
+  'reconstructCompletedJournal(reconstructionRows)',
   'const performance = summarizeBaskets(modeBaskets);',
   'activityEntries: entries',
   'tradeJournal.today = summarizeBaskets(basketRows);',
@@ -42,7 +42,7 @@ foreach ($required in @(
   'curveBasis: zeroGridOnly ? "BOT_ROUNDS" : "CLOSED_POSITIONS"',
   'one point per completed ZERO GRID bot round',
   'lotDistribution',
-  'resolveJournalControlMode(row)'
+  'resolveJournalControlModeWithOwner(row,ownerModes)'
 )) {
   if (-not $analytics.Contains($required)) { throw "Performance analytics actual-deal contract missing: $required" }
 }
