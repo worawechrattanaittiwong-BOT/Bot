@@ -27,9 +27,9 @@ $selfTest = Read-Text 'tools/windows-cloud-worker/Worker/ProvisioningSelfTest.cs
 # Connection is credential-first. There must be no USD/USDc or guessed Symbol selection.
 Assert-Contains $bot "'symbolResolutionMode','DISCOVERY'" 'Cloud connect enters discovery mode'
 Assert-Contains $bot "'symbolDiscoveryState','SCANNING'" 'Cloud connect records discovery progress'
-Assert-Contains $bot "symbolDiscoveryPending: mode === \"CLOUD\"" 'Cloud connect tells Web that discovery is pending'
+Assert-Contains $bot 'symbolDiscoveryPending: mode === "CLOUD"' 'Cloud connect tells Web that discovery is pending'
 Assert-Contains $bot "firstConnectPrimeArmed: false" 'Cloud connect cannot auto-start trading before customer Symbol confirmation'
-Assert-Contains $bot "symbolResolutionMode !== \"EXACT\"" 'Start is blocked until an exact customer-confirmed Symbol exists'
+Assert-Contains $bot 'symbolResolutionMode !== "EXACT"' 'Start is blocked until an exact customer-confirmed Symbol exists'
 Assert-NotContains $bot 'startupSymbolForAccountType' 'server-side startup Symbol guessing'
 Assert-NotContains $bot 'normalizeSymbolAccountType' 'USD/USDc Symbol profile guessing'
 Assert-NotContains $dashboard 'ประเภท Symbol ของบัญชี' 'Symbol/account-type picker on MT5 connection form'
