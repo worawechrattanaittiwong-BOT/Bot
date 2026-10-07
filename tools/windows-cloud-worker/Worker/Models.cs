@@ -102,20 +102,19 @@ internal sealed class CloudJob
     {
         get
         {
-            var requested = "XAUUSD";
-
             if (Settings.ValueKind == JsonValueKind.Object &&
                 Settings.TryGetProperty("startupSymbol", out var startupSymbol) &&
                 startupSymbol.ValueKind == JsonValueKind.String &&
                 !string.IsNullOrWhiteSpace(startupSymbol.GetString()))
-                requested = startupSymbol.GetString()!.Trim();
-            else if (Settings.ValueKind == JsonValueKind.Object &&
-                     Settings.TryGetProperty("symbol", out var symbol) &&
-                     symbol.ValueKind == JsonValueKind.String &&
-                     !string.IsNullOrWhiteSpace(symbol.GetString()))
-                requested = symbol.GetString()!.Trim();
+                return startupSymbol.GetString()!.Trim();
 
-            return requested;
+            if (Settings.ValueKind == JsonValueKind.Object &&
+                Settings.TryGetProperty("symbol", out var symbol) &&
+                symbol.ValueKind == JsonValueKind.String &&
+                !string.IsNullOrWhiteSpace(symbol.GetString()))
+                return symbol.GetString()!.Trim();
+
+            return "";
         }
     }
 
@@ -123,122 +122,23 @@ internal sealed class CloudJob
     {
         get
         {
-            if (
-                Settings.ValueKind == JsonValueKind.Object &&
+            if (Settings.ValueKind == JsonValueKind.Object &&
                 Settings.TryGetProperty("symbolResolutionMode", out var mode) &&
-                mode.ValueKind == JsonValueKind.String
-            )
+                mode.ValueKind == JsonValueKind.String)
                 return (mode.GetString() ?? "").Trim().ToUpperInvariant();
             return "";
         }
     }
 
-    public bool ExactSymbolRequested =>
-        string.Equals(SymbolResolutionMode, "EXACT", StringComparison.Ordinal);
+    public bool HasConfirmedSymbol =>
+        string.Equals(SymbolResolutionMode, "EXACT", StringComparison.Ordinal) &&
+        !string.IsNullOrWhiteSpace(RequestedSymbol);
 
-    public string Symbol =>
-        ExactSymbolRequested
-            ? RequestedSymbol
-            : ResolveBrokerSymbol(RequestedSymbol, Broker, BrokerServer);
+    public bool SymbolDiscoveryPending => !HasConfirmedSymbol;
 
-    public string FallbackSymbol =>
-        !ExactSymbolRequested &&
-        !string.Equals(Symbol, RequestedSymbol, StringComparison.OrdinalIgnoreCase)
-            ? RequestedSymbol
-            : "";
-
-    public IReadOnlyList<string> StartupSymbolCandidates
-    {
-        get
-        {
-            var candidates = new List<string>();
-            void Add(string? value)
-            {
-                var clean = (value ?? "").Trim();
-                if (string.IsNullOrWhiteSpace(clean)) return;
-                if (candidates.Any(item =>
-                    string.Equals(item, clean, StringComparison.OrdinalIgnoreCase))) return;
-                candidates.Add(clean);
-            }
-
-            Add(Symbol);
-            Add(FallbackSymbol);
-
-            // Exact user/admin selection is authoritative and must never be
-            // rewritten. ACCOUNT_PROFILE bootstrap, however, happens before
-            // the EA can publish the real Market Watch. Probe the known Gold/
-            // BTC broker-native variants so a wrong bootstrap suffix cannot
-            // prevent FastBasketBot from attaching on a brand-new Slot.
-            if (!ExactSymbolRequested)
-            {
-                var requested = RequestedSymbol.Trim().ToUpperInvariant();
-                if (requested.StartsWith("XAUUSD", StringComparison.Ordinal) ||
-                    requested == "XAUUSC")
-                {
-                    var centFirst =
-                        requested == "XAUUSC" ||
-                        requested.EndsWith("C", StringComparison.Ordinal) ||
-                        requested.EndsWith("CENT", StringComparison.Ordinal);
-                    if (centFirst)
-                    {
-                        Add("XAUUSDc");
-                        Add("XAUUSC");
-                        Add("XAUUSDm");
-                        Add("XAUUSD");
-                    }
-                    else
-                    {
-                        Add("XAUUSDm");
-                        Add("XAUUSD");
-                        Add("XAUUSDc");
-                        Add("XAUUSC");
-                    }
-                }
-                else if (requested.StartsWith("BTCUSD", StringComparison.Ordinal) ||
-                         requested.StartsWith("XBTUSD", StringComparison.Ordinal) ||
-                         requested is "BTCUSC" or "XBTUSC")
-                {
-                    Add("BTCUSDm");
-                    Add("BTCUSD");
-                    Add("XBTUSDm");
-                    Add("XBTUSD");
-                    Add("BTCUSDc");
-                    Add("BTCUSC");
-                    Add("XBTUSC");
-                }
-            }
-
-            return candidates;
-        }
-    }
-
-    internal static string ResolveBrokerSymbol(
-        string requested,
-        string? broker,
-        string? brokerServer)
-    {
-        var symbol = (requested ?? "").Trim();
-        if (string.IsNullOrWhiteSpace(symbol))
-            symbol = "XAUUSD";
-
-        var isExness =
-            (broker ?? "").Contains("exness", StringComparison.OrdinalIgnoreCase) ||
-            (brokerServer ?? "").StartsWith("Exness-", StringComparison.OrdinalIgnoreCase);
-        if (!isExness)
-            return symbol;
-
-        // Bootstrap only: this gives MT5 a likely valid first chart.
-        // FastBasketBot receives RequestedSymbol separately and resolves the
-        // actual tradable suffix from the newly logged-in account before it
-        // publishes its Cloud-ready marker.
-        if (string.Equals(symbol, "XAUUSD", StringComparison.OrdinalIgnoreCase))
-            return "XAUUSDm";
-        if (string.Equals(symbol, "BTCUSD", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(symbol, "XBTUSD", StringComparison.OrdinalIgnoreCase))
-            return "BTCUSDm";
-
-        return symbol;
-    }
+    // A customer-confirmed broker-native symbol is the only symbol authority.
+    // The Worker must never add, remove or guess a suffix.
+    public string Symbol => HasConfirmedSymbol ? RequestedSymbol : "";
 }
 
 internal sealed class CloudInstanceDiagnostic
@@ -259,6 +159,7 @@ internal sealed class CloudInstanceDiagnostic
     public string LatestJournalLog { get; set; } = "";
     public string BrokerPlatform { get; set; } = "";
     public string BrokerPlatformError { get; set; } = "";
+    public IReadOnlyList<string> DiscoveredXauSymbols { get; set; } = Array.Empty<string>();
 }
 
 internal sealed class WorkerTelemetry

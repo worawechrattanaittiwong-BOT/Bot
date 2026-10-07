@@ -10,9 +10,7 @@ internal sealed record PreparedInstance(
     string TerminalPath,
     string PresetPath,
     string StartupPath,
-    string Symbol,
-    string FallbackSymbol,
-    IReadOnlyList<string> StartupSymbols);
+    string Symbol);
 
 internal sealed class Mt5Runtime
 {
@@ -47,6 +45,8 @@ internal sealed class Mt5Runtime
     private readonly HashSet<string> _provisioningHealthyReported =
         new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _maximizedProcessByInstance =
+        new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, (DateTimeOffset At, IReadOnlyList<string> Symbols)> _xauDiscoveryCache =
         new(StringComparer.OrdinalIgnoreCase);
 
     public Mt5Runtime(WorkerConfig config)
@@ -183,6 +183,9 @@ internal sealed class Mt5Runtime
 
             var expertLogDir = Path.Combine(instancePath, "MQL5", "Logs");
             var journalLogDir = Path.Combine(instancePath, "logs");
+            var startupConfigPath = Path.Combine(instancePath, "cloud-start.ini");
+            var discoveryMarkerPath = Path.Combine(instancePath, "symbol-discovery.started");
+            var discoveryPending = terminalRunning && File.Exists(discoveryMarkerPath);
             result.Add(new CloudInstanceDiagnostic
             {
                 InstanceId = instanceId,
@@ -191,7 +194,7 @@ internal sealed class Mt5Runtime
                 ChartHasFastBasketBot = chartHasFastBasketBot || attachMarkerMatches,
                 EaSha256 = eaSha256,
                 EaBytes = eaBytes,
-                StartupConfigExists = File.Exists(Path.Combine(instancePath, "cloud-start.ini")),
+                StartupConfigExists = File.Exists(startupConfigPath),
                 PresetCloudRelayEnabled = presetCloudRelayEnabled,
                 RelayRequestFiles = relayRequestFiles,
                 RelayResponseFiles = relayResponseFiles,
@@ -201,11 +204,188 @@ internal sealed class Mt5Runtime
                 LatestJournalLog = LatestMt5LogSignal(journalLogDir),
                 BrokerPlatform = _brokerPlatforms.InstalledPlatform(instancePath),
                 BrokerPlatformError = ReadSmallText(
-                    Path.Combine(instancePath, "broker-platform-error.txt"))
+                    Path.Combine(instancePath, "broker-platform-error.txt")),
+                DiscoveredXauSymbols = discoveryPending
+                    ? DiscoverXauSymbols(instancePath)
+                    : Array.Empty<string>()
             });
         }
 
         return result.Take(50).ToArray();
+    }
+
+    private void ResetSymbolDiscoveryCache(string instancePath)
+    {
+        _xauDiscoveryCache.Remove(instancePath);
+    }
+
+    private IReadOnlyList<string> DiscoverXauSymbols(string instancePath)
+    {
+        if (_xauDiscoveryCache.TryGetValue(instancePath, out var cached) &&
+            DateTimeOffset.UtcNow - cached.At < TimeSpan.FromSeconds(15))
+            return cached.Symbols;
+
+        var found = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var basesPath = Path.Combine(instancePath, "bases");
+        var discoveryStartedAt = DateTimeOffset.MinValue;
+        try
+        {
+            var marker = Path.Combine(instancePath, "symbol-discovery.started");
+            if (File.Exists(marker))
+                DateTimeOffset.TryParse(File.ReadAllText(marker).Trim(), out discoveryStartedAt);
+        }
+        catch { }
+
+        if (!Directory.Exists(basesPath))
+        {
+            var empty = Array.Empty<string>();
+            _xauDiscoveryCache[instancePath] = (DateTimeOffset.UtcNow, empty);
+            return empty;
+        }
+
+        static bool IsSymbolChar(byte value) =>
+            (value >= (byte)'A' && value <= (byte)'Z') ||
+            (value >= (byte)'a' && value <= (byte)'z') ||
+            (value >= (byte)'0' && value <= (byte)'9') ||
+            value == (byte)'.' ||
+            value == (byte)'_' ||
+            value == (byte)'#' ||
+            value == (byte)'-';
+
+        void AddCandidate(string raw)
+        {
+            var value = raw.Trim('\0', ' ', '\t', '\r', '\n');
+            if (value.Length < 6 || value.Length > 32) return;
+            if (!value.StartsWith("XAU", StringComparison.OrdinalIgnoreCase)) return;
+            if (!value.All(ch =>
+                    char.IsLetterOrDigit(ch) ||
+                    ch is '.' or '_' or '#' or '-')) return;
+            found.Add(value);
+        }
+
+        void ScanFile(string path)
+        {
+            byte[] data;
+            try
+            {
+                var info = new FileInfo(path);
+                if (!info.Exists || info.Length <= 0 || info.Length > 32L * 1024L * 1024L)
+                    return;
+                data = File.ReadAllBytes(path);
+            }
+            catch
+            {
+                return;
+            }
+
+            // Broker symbol caches can contain ANSI/UTF-8 symbol strings.
+            for (var i = 0; i < data.Length;)
+            {
+                if (!IsSymbolChar(data[i]))
+                {
+                    i++;
+                    continue;
+                }
+
+                var start = i;
+                while (i < data.Length && IsSymbolChar(data[i]) && i - start < 64) i++;
+                if (i - start >= 6)
+                    AddCandidate(Encoding.ASCII.GetString(data, start, i - start));
+            }
+
+            // MT5 also stores symbol names as UTF-16LE in several cache formats.
+            for (var parity = 0; parity < 2; parity++)
+            {
+                for (var i = parity; i + 1 < data.Length;)
+                {
+                    if (!IsSymbolChar(data[i]) || data[i + 1] != 0)
+                    {
+                        i += 2;
+                        continue;
+                    }
+
+                    var chars = new StringBuilder();
+                    while (i + 1 < data.Length &&
+                           IsSymbolChar(data[i]) &&
+                           data[i + 1] == 0 &&
+                           chars.Length < 64)
+                    {
+                        chars.Append((char)data[i]);
+                        i += 2;
+                    }
+
+                    if (chars.Length >= 6) AddCandidate(chars.ToString());
+                }
+            }
+        }
+
+        try
+        {
+            // Authoritative source order:
+            // 1) symbol files written/synchronized by this MT5 session;
+            // 2) if MT5 did not rewrite them, fall back to its own broker cache.
+            // No broker/suffix name is ever fabricated.
+            var symbolFiles = Directory.EnumerateFiles(basesPath, "*", SearchOption.AllDirectories)
+                .Where(path =>
+                {
+                    var name = Path.GetFileName(path);
+                    return name.Contains("symbol", StringComparison.OrdinalIgnoreCase);
+                })
+                .Select(path => new
+                {
+                    Path = path,
+                    UpdatedAt = SafeLastWriteTimeUtc(path)
+                })
+                .Where(item => item.UpdatedAt != DateTime.MinValue)
+                .OrderByDescending(item => item.UpdatedAt)
+                .Take(64)
+                .ToArray();
+
+            var freshFiles = symbolFiles
+                .Where(item =>
+                    discoveryStartedAt == DateTimeOffset.MinValue ||
+                    item.UpdatedAt >= discoveryStartedAt.UtcDateTime.AddSeconds(-5))
+                .Take(24)
+                .ToArray();
+
+            foreach (var item in freshFiles)
+                ScanFile(item.Path);
+
+            // Some MT5 builds reuse an already synchronized symbols.raw/symbols.sel
+            // without touching its timestamp on every login. After the live session
+            // has had time to synchronize, inspect those real MT5 broker-cache files
+            // as a fallback instead of guessing XAUUSD/XAUUSDm/XAUUSDc.
+            var discoveryAge = discoveryStartedAt == DateTimeOffset.MinValue
+                ? TimeSpan.MaxValue
+                : DateTimeOffset.UtcNow - discoveryStartedAt;
+            if (found.Count == 0 && discoveryAge >= TimeSpan.FromSeconds(12))
+            {
+                foreach (var item in symbolFiles.Take(32))
+                    ScanFile(item.Path);
+            }
+        }
+        catch
+        {
+            // Discovery is observational. The next telemetry cycle will retry.
+        }
+
+        var symbols = found
+            .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        _xauDiscoveryCache[instancePath] = (DateTimeOffset.UtcNow, symbols);
+        return symbols;
+    }
+
+    private static DateTime SafeLastWriteTimeUtc(string path)
+    {
+        try
+        {
+            return File.GetLastWriteTimeUtc(path);
+        }
+        catch
+        {
+            return DateTime.MinValue;
+        }
     }
 
     private static string ReadSmallText(string path)
@@ -378,6 +558,65 @@ internal sealed class Mt5Runtime
         Directory.CreateDirectory(presetDir);
 
         var presetPath = Path.Combine(presetDir, "SCENOVA-Cloud.set");
+        var startupPath = Path.Combine(instancePath, "cloud-start.ini");
+
+        if (job.SymbolDiscoveryPending)
+        {
+            // Phase 1: connect the real MT5 account only. No guessed chart and
+            // no trading EA are loaded before the customer confirms a symbol.
+            ResetSymbolDiscoveryCache(instancePath);
+            File.WriteAllText(
+                Path.Combine(instancePath, "symbol-discovery.started"),
+                DateTimeOffset.UtcNow.ToString("O"),
+                new UTF8Encoding(false));
+            File.WriteAllLines(
+                presetPath,
+                new[]
+                {
+                    "InpApiBase=" + SafeIniValue(_config.EffectiveApiBase),
+                    "InpInstanceId=" + SafeIniValue(job.InstanceId),
+                    "InpInstallToken=" + SafeIniValue(job.InstallToken),
+                    "InpCloudRelay=true"
+                },
+                Encoding.Unicode);
+
+            File.WriteAllLines(
+                startupPath,
+                new[]
+                {
+                    "[Common]",
+                    "Login=" + SafeIniValue(job.AccountNumberText),
+                    "Password=" + SafeIniValue(job.TradingPassword),
+                    "Server=" + SafeIniValue(job.BrokerServer),
+                    "KeepPrivate=1",
+                    "NewsEnable=0",
+                    "ProxyEnable=0",
+                    "CertInstall=0",
+                    "EnableDpiAware=1",
+                    "[Experts]",
+                    "Enabled=0",
+                    "AllowLiveTrading=0",
+                    "AllowDllImport=0",
+                    "WebRequest=0"
+                },
+                Encoding.Unicode);
+
+            return new PreparedInstance(
+                instancePath,
+                terminal,
+                presetPath,
+                startupPath,
+                "");
+        }
+
+        try
+        {
+            var discoveryMarker = Path.Combine(instancePath, "symbol-discovery.started");
+            if (File.Exists(discoveryMarker)) File.Delete(discoveryMarker);
+        }
+        catch { }
+        _xauDiscoveryCache.Remove(instancePath);
+
         File.WriteAllLines(
             presetPath,
             new[]
@@ -386,11 +625,10 @@ internal sealed class Mt5Runtime
                 "InpInstanceId=" + SafeIniValue(job.InstanceId),
                 "InpInstallToken=" + SafeIniValue(job.InstallToken),
                 "InpCloudRelay=true",
-                "InpStartupSymbol=" + SafeIniValue(job.RequestedSymbol)
+                "InpStartupSymbol=" + SafeIniValue(job.Symbol)
             },
             Encoding.Unicode);
 
-        var startupPath = Path.Combine(instancePath, "cloud-start.ini");
         File.WriteAllLines(
             startupPath,
             new[]
@@ -427,9 +665,7 @@ internal sealed class Mt5Runtime
             terminal,
             presetPath,
             startupPath,
-            job.Symbol,
-            job.FallbackSymbol,
-            job.StartupSymbolCandidates);
+            job.Symbol);
     }
 
     public EaApplyOutcome ApplyEaUpdate(
@@ -670,6 +906,7 @@ internal sealed class Mt5Runtime
         _brokerMigrationAttempted.Remove(instanceId);
         _provisioningHealthyReported.Remove(instanceId);
         _maximizedProcessByInstance.Remove(instanceId);
+        _xauDiscoveryCache.Remove(path);
     }
 
     public async Task StartOrRecoverAsync(
@@ -899,7 +1136,8 @@ internal sealed class Mt5Runtime
     {
         if (HasExactTerminal(prepared.TerminalPath))
         {
-            TryMaximizeChart(prepared);
+            if (!string.IsNullOrWhiteSpace(prepared.Symbol))
+                TryMaximizeChart(prepared);
             return;
         }
 
@@ -913,84 +1151,62 @@ internal sealed class Mt5Runtime
             "Files",
             "scenova-ea-ready.txt");
 
-        var startupSymbols = prepared.StartupSymbols
-            .Where(symbol => !string.IsNullOrWhiteSpace(symbol))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+        try { if (File.Exists(readyMarker)) File.Delete(readyMarker); } catch { }
 
-        for (var attempt = 0; attempt < startupSymbols.Length; attempt++)
+        ResetCloudChartWorkspace(prepared.InstancePath);
+        if (!string.IsNullOrWhiteSpace(prepared.Symbol))
         {
-            var startupSymbol = startupSymbols[attempt];
+            RewriteStartupSymbol(prepared.StartupPath, prepared.Symbol);
+        }
 
-            if (attempt > 0)
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = prepared.TerminalPath,
+            Arguments = $"/portable /config:\"{prepared.StartupPath}\"",
+            WorkingDirectory = prepared.InstancePath,
+            UseShellExecute = true,
+            WindowStyle = ProcessWindowStyle.Maximized
+        });
+
+        _autoLaunchAttempted.Add(instanceId);
+
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(30);
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            var running = HasExactTerminal(prepared.TerminalPath);
+            if (!running)
             {
-                if (HasExactTerminal(prepared.TerminalPath) &&
-                    !StopInstance(instanceId))
-                    throw new InvalidOperationException("SYMBOL_FALLBACK_STOP_FAILED");
-
-                _maximizedProcessByInstance.Remove(instanceId);
-                Thread.Sleep(350);
-            }
-
-            try { if (File.Exists(readyMarker)) File.Delete(readyMarker); } catch { }
-
-            RewriteStartupSymbol(prepared.StartupPath, startupSymbol);
-
-            // Every intentional launch starts from one clean chart workspace.
-            // If the broker-specific bootstrap symbol does not attach the EA,
-            // retry once with the canonical requested symbol. This covers
-            // accounts whose Gold chart is XAUUSD instead of XAUUSDm without
-            // guessing beyond a symbol the customer/server already requested.
-            ResetCloudChartWorkspace(prepared.InstancePath);
-
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = prepared.TerminalPath,
-                Arguments = $"/portable /config:\"{prepared.StartupPath}\"",
-                WorkingDirectory = prepared.InstancePath,
-                UseShellExecute = true,
-                WindowStyle = ProcessWindowStyle.Maximized
-            });
-
-            _autoLaunchAttempted.Add(instanceId);
-
-            var deadline = DateTimeOffset.UtcNow.AddSeconds(30);
-            while (DateTimeOffset.UtcNow < deadline)
-            {
-                var running = HasExactTerminal(prepared.TerminalPath);
-                if (running && EaReadyMarkerMatches(readyMarker, instanceId))
-                {
-                    if (attempt > 0)
-                    {
-                        Console.WriteLine(
-                            $"SCENOVA symbol bootstrap fallback attached EA: {prepared.Symbol} -> {startupSymbol} ({instanceId})");
-                    }
-                    TryMaximizeChart(prepared);
-                    return;
-                }
-
                 Thread.Sleep(250);
-            }
-
-            var terminalRunning = HasExactTerminal(prepared.TerminalPath);
-            var hasAnotherSymbol = attempt + 1 < startupSymbols.Length;
-            if (terminalRunning && hasAnotherSymbol)
-            {
-                Console.WriteLine(
-                    $"SCENOVA symbol bootstrap retry: {startupSymbol} -> {startupSymbols[attempt + 1]} ({instanceId})");
                 continue;
             }
 
-            if (terminalRunning)
+            // Discovery mode only proves that this exact MT5 terminal opened.
+            // Symbol names come from the terminal's synchronized broker cache.
+            if (string.IsNullOrWhiteSpace(prepared.Symbol))
+                return;
+
+            if (EaReadyMarkerMatches(readyMarker, instanceId))
             {
                 TryMaximizeChart(prepared);
-                if (!requireEaAttach)
-                    return;
-
-                // Explicit update/reload callers may treat this as verification
-                // failure. Normal supervision leaves the terminal running.
-                throw new InvalidOperationException("EA_ATTACH_TIMEOUT");
+                return;
             }
+
+            if (!requireEaAttach)
+            {
+                TryMaximizeChart(prepared);
+                return;
+            }
+
+            Thread.Sleep(250);
+        }
+
+        if (HasExactTerminal(prepared.TerminalPath))
+        {
+            if (!string.IsNullOrWhiteSpace(prepared.Symbol))
+                TryMaximizeChart(prepared);
+            if (!requireEaAttach || string.IsNullOrWhiteSpace(prepared.Symbol))
+                return;
+            throw new InvalidOperationException("EA_ATTACH_TIMEOUT");
         }
 
         throw new InvalidOperationException("TERMINAL_START_FAILED");
@@ -998,6 +1214,8 @@ internal sealed class Mt5Runtime
 
     private void TryApplyChartLayout(CloudJob job, string terminalPath)
     {
+        if (string.IsNullOrWhiteSpace(job.Symbol)) return;
+
         var terminal = EnumerateTerminalProcesses()
             .FirstOrDefault(item =>
                 string.Equals(item.Path, terminalPath, StringComparison.OrdinalIgnoreCase));
@@ -1013,9 +1231,7 @@ internal sealed class Mt5Runtime
             terminalPath,
             Path.Combine(instancePath, "MQL5", "Presets", "SCENOVA-Cloud.set"),
             Path.Combine(instancePath, "cloud-start.ini"),
-            job.Symbol,
-            job.FallbackSymbol,
-            job.StartupSymbolCandidates);
+            job.Symbol);
 
         if (TryMaximizeChart(prepared))
             _maximizedProcessByInstance[job.InstanceId] = terminal.Pid;

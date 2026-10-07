@@ -310,6 +310,8 @@ export default function DashboardPage() {
   const [vpsMigrationProgress, setVpsMigrationProgress] = useState<any>(null);
   const [dismissedCloudUpdateKey, setDismissedCloudUpdateKey] = useState("");
   const [tradingSymbol, setTradingSymbol] = useState("");
+  const [discoveredXauSymbols, setDiscoveredXauSymbols] = useState<string[]>([]);
+  const symbolAutoPromptedSlotRef = useRef("");
   const [symbolBusy, setSymbolBusy] = useState(false);
   const [serverOperation, setServerOperation] = useState<any>(null);
   const [serverOperationMinimized, setServerOperationMinimized] = useState(false);
@@ -330,7 +332,6 @@ export default function DashboardPage() {
   const [brokerCode, setBrokerCode] = useState("EXNESS");
   const [customBrokerName, setCustomBrokerName] = useState("");
   const [brokerServer, setBrokerServer] = useState("");
-  const [symbolAccountType, setSymbolAccountType] = useState<"USD"|"USD_CENT">("USD");
   const [cloudMt5DialogError, setCloudMt5DialogError] = useState("");
   const [tradingPassword, setTradingPassword] = useState("");
   const [cloudMt5DialogMode, setCloudMt5DialogMode] = useState<"NEW"|"RECONNECT">("NEW");
@@ -900,29 +901,94 @@ export default function DashboardPage() {
       .filter((item:string)=>item && TRADING_SYMBOL_PATTERN.test(item))
       .map((item:string)=>[item.toUpperCase(),item])
   ).values()) as string[];
+  const cloudSymbolFlow = String(data?.selectedSlot?.mode || data?.account?.mode || "").toUpperCase() === "CLOUD";
+  const confirmedCloudSymbol =
+    String(data?.settings?.symbolResolutionMode || "").toUpperCase() === "EXACT";
   const desiredTradingSymbol = String(
-    data?.settings?.startupSymbol ||
-    metrics.requestedStartupSymbol ||
-    metrics.symbol ||
-    settings.symbol ||
-    ""
+    cloudSymbolFlow && !confirmedCloudSymbol
+      ? ""
+      : data?.settings?.startupSymbol ||
+        metrics.requestedStartupSymbol ||
+        metrics.symbol ||
+        settings.symbol ||
+        ""
   ).trim();
   const activeTradingSymbol = String(metrics.symbol || "").trim();
-  const symbolSelectedBy = String(data?.settings?.symbolSelectedBy || "").toUpperCase();
+  const displayTradingSymbol =
+    activeTradingSymbol ||
+    desiredTradingSymbol ||
+    (cloudSymbolFlow ? "รอเลือก Symbol" : String(settings.symbol || "—"));
   const symbolSelectionPending = Boolean(
     desiredTradingSymbol &&
     (!activeTradingSymbol || desiredTradingSymbol.toUpperCase() !== activeTradingSymbol.toUpperCase())
   );
-  // Only symbols reported by the connected MT5 Market Watch are selectable.
-  // Never inject guessed canonical names such as BTCUSD/XAUUSD into the picker.
-  const tradingSymbolOptions = marketWatchSymbols;
+  // Symbol selection is broker-authoritative. Cloud uses only XAU names
+  // discovered from the connected MT5 terminal; no suffix is guessed in Web/API.
+  const tradingSymbolOptions = cloudSymbolFlow
+    ? discoveredXauSymbols
+    : marketWatchSymbols.filter(item=>item.toUpperCase().startsWith("XAU"));
   const tradingSymbolLabel = (symbol:string) => {
     const upper = String(symbol || "").toUpperCase();
-    if (upper.includes("BTC") || upper.includes("XBT")) return "Bitcoin · " + symbol;
     if (upper.startsWith("XAU")) return "Gold · " + symbol;
-    if (upper.includes("ETH")) return "Ethereum · " + symbol;
     return symbol;
   };
+
+  useEffect(() => {
+    const slotId = String(data?.selectedSlot?.id || "");
+    if (!cloudSymbolFlow || !slotId || !data?.account) {
+      setDiscoveredXauSymbols([]);
+      return;
+    }
+
+    let cancelled = false;
+    let inFlight = false;
+    const refreshDiscovery = async () => {
+      if (cancelled || inFlight || document.visibilityState !== "visible") return;
+      inFlight = true;
+      try {
+        const result = await api("/bot/trading-symbol?slotId=" + encodeURIComponent(slotId));
+        if (cancelled) return;
+        const symbols = Array.isArray(result?.discoveredXauSymbols)
+          ? result.discoveredXauSymbols
+              .map((item:any)=>String(item || "").trim())
+              .filter((item:string)=>item.toUpperCase().startsWith("XAU") && TRADING_SYMBOL_PATTERN.test(item))
+          : [];
+        setDiscoveredXauSymbols(symbols);
+
+        const confirmed = String(result?.symbolResolutionMode || "").toUpperCase() === "EXACT" &&
+          Boolean(String(result?.desiredSymbol || "").trim());
+        if (
+          !confirmed &&
+          result?.symbolDiscoveryReady === true &&
+          symbols.length > 0 &&
+          symbolAutoPromptedSlotRef.current !== slotId
+        ) {
+          symbolAutoPromptedSlotRef.current = slotId;
+          setTradingSymbol(symbols[0]);
+          window.setTimeout(()=>{
+            if (!symbolDialogRef.current?.open) symbolDialogRef.current?.showModal();
+          }, 0);
+        }
+      } catch {
+        // Discovery keeps polling while the VPS/MT5 is still synchronizing.
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    void refreshDiscovery();
+    const timer = window.setInterval(refreshDiscovery, 3000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [
+    cloudSymbolFlow,
+    data?.selectedSlot?.id,
+    data?.account?.id,
+    data?.settings?.symbolResolutionMode,
+    data?.settings?.startupSymbol
+  ]);
 
   useEffect(() => {
     const slotKey = String(data?.selectedSlot?.id || data?.instance?.id || "");
@@ -1463,6 +1529,7 @@ export default function DashboardPage() {
       const runnerReady = !runtimeIsCloud || Boolean(data?.instance?.runner_online);
       const mt5Ready = Boolean(data?.instance?.mt5_online);
       const mt5GraceReady = Boolean(data?.instance?.mt5_connection_online);
+      const cloudDiscoveryReady = runtimeIsCloud && discoveredXauSymbols.length > 0;
       const terminalConnected = liveMetrics.terminalConnected;
       const accountTradeAllowed = liveMetrics.accountTradeAllowed;
       const accountTradeExpert = liveMetrics.accountTradeExpert;
@@ -1479,10 +1546,10 @@ export default function DashboardPage() {
         runtimeIsCloud &&
         accountMatches &&
         runnerReady &&
-        mt5Ready &&
-        firstConnectPrimePending
+        cloudDiscoveryReady
       ) {
-        message = "MT5 และ EA เชื่อมแล้ว · กำลัง Start บอทครั้งแรกบน VPS แบบห้ามออกออเดอร์ แล้วระบบจะ Stop ให้อัตโนมัติ";
+        complete = true;
+        message = "เชื่อม MT5 สำเร็จ · พบ Symbol XAU จริง " + discoveredXauSymbols.length + " รายการ · กรุณาเลือก Symbol ที่ต้องการใช้";
       } else if (accountMatches && runnerReady && mt5Ready) {
         complete = true;
 
@@ -1502,7 +1569,9 @@ export default function DashboardPage() {
       } else if (!accountMatches) {
         message = "กำลังตรวจสอบบัญชี MT5 ใหม่...";
       } else if (mt5GraceReady) {
-        message = "MT5 ตอบกลับแล้ว · กำลังยืนยัน Heartbeat ให้เสถียร";
+        message = runtimeIsCloud
+          ? "MT5 เปิดและเชื่อม Broker แล้ว · กำลังตรวจหา Symbol XAU จากข้อมูลจริงของ MT5"
+          : "MT5 ตอบกลับแล้ว · กำลังยืนยัน Heartbeat ให้เสถียร";
       } else {
         message = op.kind === "LOCAL_MT5_BIND"
           ? "บัญชีถูกยืนยันแล้ว · กำลังรอ EA Heartbeat ล่าสุด"
@@ -1545,6 +1614,7 @@ export default function DashboardPage() {
     data?.instance?.metrics?.accountScenovaPendingOrders,
     data?.instance?.provisioning_error,
     data?.settings?.firstConnectPrimePending,
+    discoveredXauSymbols.length,
     serverOperation?.id,
     serverOperation?.status,
     startPhase,
@@ -3100,14 +3170,6 @@ export default function DashboardPage() {
     setCloudMt5DialogError("");
 
     if (dialogMode === "RECONNECT" && slot?.account_number) {
-      const savedSymbolAccountType = String(slot?.symbol_account_type || "").trim().toUpperCase();
-      const savedStartupSymbol = String(slot?.startup_symbol || slot?.active_symbol || "").trim().toUpperCase();
-      const centSymbol = savedStartupSymbol === "XAUUSC" || /^XAUUSD[._#-]?(C|CENT)$/i.test(savedStartupSymbol);
-      setSymbolAccountType(
-        savedSymbolAccountType === "USD_CENT" || savedSymbolAccountType === "USDC" || centSymbol
-          ? "USD_CENT"
-          : "USD"
-      );
       setAccountNumber(String(slot.account_number || ""));
       const brokerMatch = brokerCatalog.find(item =>
         String(item.name || "").toLowerCase() === String(slot.broker || "").toLowerCase() ||
@@ -3122,7 +3184,6 @@ export default function DashboardPage() {
       }
       setBrokerServer(String(slot.broker_server || ""));
     } else {
-      setSymbolAccountType("USD");
       setAccountNumber("");
       setBrokerServer("");
       if (!brokerCatalog.some(item=>item.code===brokerCode)) {
@@ -3189,8 +3250,7 @@ export default function DashboardPage() {
           method:"POST",
           body:JSON.stringify({
             mt5AccountId:cloudMt5DialogAccountId,
-            tradingPassword,
-            symbolAccountType
+            tradingPassword
           })
         });
       } else {
@@ -3206,20 +3266,21 @@ export default function DashboardPage() {
             broker:selectedBrokerName,
             brokerServer:selectedServer.trim(),
             mode:"CLOUD",
-            tradingPassword,
-            symbolAccountType
+            tradingPassword
           })
         });
       }
 
       setTradingPassword("");
       cloudMt5DialogRef.current?.close();
+      symbolAutoPromptedSlotRef.current = "";
+      setDiscoveredXauSymbols([]);
       setNotice(cloudMt5DialogMode === "RECONNECT"
-        ? "บันทึกรหัสแล้ว กำลังเชื่อม MT5 บน VPS ใหม่"
-        : "เชื่อมบัญชี MT5 ใหม่แล้ว กำลังเปิดบน VPS");
+        ? "บันทึกรหัสแล้ว · VPS กำลังเชื่อม MT5 และตรวจหา Symbol XAU จากบัญชีจริง"
+        : "เชื่อมบัญชีแล้ว · VPS กำลังเปิด MT5 และตรวจหา Symbol XAU ที่ใช้งานได้จริง");
       setServerOperation((current:any) =>
         current?.id === operationId
-          ? { ...current, message:"Server รับข้อมูลแล้ว · กำลังเปิด MT5 และรอ EA Heartbeat ยืนยัน", updatedAt:Date.now() }
+          ? { ...current, message:"Server รับข้อมูลแล้ว · กำลังเชื่อม MT5 และอ่านรายการ XAU จากบัญชีจริง", updatedAt:Date.now() }
           : current
       );
       await load(selectedSlotIdRef.current,true);
@@ -3654,6 +3715,10 @@ export default function DashboardPage() {
   }
 
   function openTradingSymbolPicker() {
+    if (cloudSymbolFlow && tradingSymbolOptions.length === 0) {
+      setError("กำลังรอ VPS ตรวจหา Symbol XAU จาก MT5 บัญชีจริง · กรุณารอสักครู่");
+      return;
+    }
     const desired = desiredTradingSymbol;
     const match = tradingSymbolOptions.find(
       item => item.toUpperCase() === desired.toUpperCase()
@@ -3668,8 +3733,8 @@ export default function DashboardPage() {
       setError("ไม่พบบัญชี MT5 ที่เลือก");
       return;
     }
-    if (!next || next.length > 64 || !TRADING_SYMBOL_PATTERN.test(next)) {
-      setError("Symbol ไม่ถูกต้อง กรุณาเลือกชื่อเดียวกับ MT5 Market Watch");
+    if (!next || next.length > 64 || !TRADING_SYMBOL_PATTERN.test(next) || !next.toUpperCase().startsWith("XAU")) {
+      setError("กรุณาเลือก Symbol XAU จากรายการที่ VPS ตรวจพบใน MT5 บัญชีนี้");
       return;
     }
 
@@ -3681,10 +3746,10 @@ export default function DashboardPage() {
     setServerOperation({
       id:operationId,
       kind:"SYMBOL",
-      title:"กำลังเปลี่ยน Trading Symbol",
+      title:"กำลังยืนยัน Symbol XAU",
       target:next,
       status:"RUNNING",
-      message:"กำลังตรวจสอบ Symbol จริงจาก MT5 Market Watch...",
+      message:"กำลังยืนยันชื่อ Symbol ตรงกับรายการที่ VPS อ่านจาก MT5 จริง...",
       startedAt:Date.now()
     });
     try {
@@ -4581,7 +4646,7 @@ export default function DashboardPage() {
                   <div className="cc-v6-symbol-copy">
                     <span className="cc-v4-eyebrow">SCENOVA · LIVE EXECUTION</span>
                     <div className="cc-symbol-title-row">
-                      <h2>{metrics.symbol || settings.symbol}</h2>
+                      <h2>{displayTradingSymbol}</h2>
                       {showCompactAccessCountdown && (
                         <span
                           className="cc-membership-mobile-countdown"
@@ -4633,7 +4698,7 @@ export default function DashboardPage() {
 
                 <div className="cc-v13-hero-actions" aria-label="ควบคุมบอท">
                   <div className="cc-v12-quick-actions cc-v19-hero-quick-actions">
-                    <button className="symbol" disabled={symbolBusy} onClick={openTradingSymbolPicker}><ScenovaIcon name="trend" size={15}/><span><b>{desiredTradingSymbol||"Symbol"}</b><small>เลือก Symbol</small></span></button>
+                    <button className="symbol" disabled={symbolBusy} onClick={openTradingSymbolPicker}><ScenovaIcon name="trend" size={15}/><span><b>{desiredTradingSymbol||activeTradingSymbol||"เลือก Symbol"}</b><small>{cloudSymbolFlow && !desiredTradingSymbol ? "รอ XAU จาก MT5" : "เลือก Symbol"}</small></span></button>
                     <button className="start" disabled={startBlocked} onClick={()=>command("/bot/start","ส่งคำสั่ง Start แล้ว บอทกำลังเริ่มทำงาน")}><ScenovaIcon name="play" size={15}/><span><b>เริ่มบอท</b><small>Start</small></span></button>
                     <button className="stop" disabled={stopBlocked} onClick={()=>command("/bot/stop","Safe Stop แล้ว · ไม่เปิดรอบใหม่ และรอรอบปัจจุบันปิดตามเงื่อนไขปกติ")}><ScenovaIcon name="stop" size={15}/><span><b>หยุดปลอดภัย</b><small>Safe Stop</small></span></button>
                     <button className="close" disabled={busy} onClick={async()=>{const ok=await confirmPopup({tone:"warning",title:"ยืนยันปิดสถานะทั้งหมด",message:"คำสั่งนี้จะปิด Position ของ SCENOVA ทั้งหมดทันที และรีเซ็ตสถานะรอบที่ค้างของบัญชีนี้ ใช้ได้แม้หน้าจอแสดง 0 Position ยืนยันดำเนินการหรือไม่?",confirmLabel:"ปิดสถานะทั้งหมด",cancelLabel:"ยกเลิก"});if(ok)await command("/bot/close-all","ส่งคำสั่งปิดสถานะทั้งหมดและรีเซ็ตสถานะแล้ว")}}><ScenovaIcon name="close" size={15}/><span><b>ปิดสถานะทั้งหมด</b><small>Close All Positions</small></span></button>
@@ -4649,15 +4714,15 @@ export default function DashboardPage() {
               >
                 <div className="cc-symbol-picker-card">
                   <div className="cc-symbol-picker-head">
-                    <b>Trading Symbol</b>
+                    <b>เลือก Symbol ทองคำ</b>
                     <button type="button" aria-label="ปิด" disabled={symbolBusy} onClick={()=>symbolDialogRef.current?.close()}>×</button>
                   </div>
                   <p className="cc-symbol-picker-source">
-                    Symbol ที่เลือก: <b>{desiredTradingSymbol || "—"}</b>
-                    {symbolSelectedBy==="ADMIN" ? " · กำหนดโดยผู้ดูแล" : symbolSelectedBy==="CUSTOMER" ? " · เลือกจากบัญชีนี้" : ""}
-                    {symbolSelectionPending ? " · รอ MT5/EA ยืนยัน" : activeTradingSymbol ? " · ใช้งานจริงแล้ว" : ""}
+                    {desiredTradingSymbol
+                      ? <>Symbol ที่ยืนยันแล้ว: <b>{desiredTradingSymbol}</b>{symbolSelectionPending ? " · กำลังเปิดบน MT5" : activeTradingSymbol ? " · ใช้งานจริงแล้ว" : ""}</>
+                      : <>VPS ตรวจพบ <b>{tradingSymbolOptions.length}</b> Symbol XAU จาก MT5 บัญชีนี้</>}
                   </p>
-                  <p className="cc-symbol-picker-source">รายการด้านล่างแสดงเฉพาะ Symbol ที่ MT5 บัญชีนี้รายงานจาก Market Watch</p>
+                  <p className="cc-symbol-picker-source">เลือกจากชื่อที่ MT5 ตรวจพบจริงเท่านั้น · ระบบจะไม่เติมหรือลอง suffix ให้อัตโนมัติ</p>
                   <select
                     autoFocus
                     value={tradingSymbol}
@@ -4666,7 +4731,7 @@ export default function DashboardPage() {
                   >
                     {tradingSymbolOptions.length
                       ? tradingSymbolOptions.map(item=><option key={item} value={item}>{tradingSymbolLabel(item)}</option>)
-                      : <option value="">รอ Symbol จาก MT5</option>}
+                      : <option value="">กำลังตรวจหา XAU จาก MT5...</option>}
                   </select>
                   <button
                     type="button"
@@ -5317,23 +5382,6 @@ export default function DashboardPage() {
                 </select>
               </label>
 
-              <label className="field">
-                <span>ประเภท Symbol ของบัญชี</span>
-                <select
-                  className="input"
-                  value={symbolAccountType}
-                  onChange={e=>{
-                    setSymbolAccountType(e.target.value === "USD_CENT" ? "USD_CENT" : "USD");
-                    setCloudMt5DialogError("");
-                  }}
-                  required
-                >
-                  <option value="USD">USD · XAUUSD / XAUUSDm</option>
-                  <option value="USD_CENT">USDc · XAUUSDc / Cent Symbol</option>
-                </select>
-                <small>ระบบจะค้นหา Symbol ที่มีอยู่จริงและเปิดเทรดได้ใน MT5 ของบัญชีนี้</small>
-              </label>
-
               {brokerCode === "OTHER" && (
                 <label className="field">
                   <span>ชื่อ Broker</span>
@@ -5402,6 +5450,10 @@ export default function DashboardPage() {
                 </small>
               </label>
             </div>
+
+            <p className="cloud-mt5-password-note">
+              หลังเชื่อมสำเร็จ VPS จะตรวจรายการ XAU จาก MT5 บัญชีนี้จริง แล้วให้คุณเลือก Symbol ก่อนโหลด EA · ระบบจะไม่เดาหรือเติม suffix เอง
+            </p>
 
             {cloudMt5DialogError && (
               <div className="cloud-mt5-inline-error" role="alert">

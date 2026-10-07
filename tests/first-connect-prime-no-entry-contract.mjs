@@ -1,9 +1,16 @@
 import fs from "node:fs";
 
+function text(path) {
+  return fs.readFileSync(path, "utf8");
+}
 function assertContains(path, needle, message) {
-  const text = fs.readFileSync(path, "utf8");
-  if (!text.includes(needle)) {
+  if (!text(path).includes(needle)) {
     throw new Error(message + " (missing: " + needle + ")");
+  }
+}
+function assertNotContains(path, needle, message) {
+  if (text(path).includes(needle)) {
+    throw new Error(message + " (forbidden: " + needle + ")");
   }
 }
 
@@ -11,41 +18,32 @@ const bot = "apps/api/src/bot.controller.ts";
 const eaApi = "apps/api/src/ea.controller.ts";
 const ea = "mt5/FastBasketBot.mq5";
 const dashboard = "apps/web/app/dashboard/page.tsx";
+const symbols = "apps/api/src/trading-symbol.controller.ts";
+const worker = "tools/windows-cloud-worker/Worker/Mt5Runtime.cs";
 
-assertContains(bot, "FIRST_CONNECT_PRIME_ARMED", "Cloud connect must arm the first-connect lifecycle");
-assertContains(bot, "firstConnectPrimePending", "Cloud connect must persist the first-connect lifecycle");
-assertContains(bot, "FIRST_CONNECT_PRIME_COMPLETED_BY_CUSTOMER_START", "Compatible Cloud Start must be able to complete a stuck prime safely");
-assertContains(bot, "primeCanYieldToCustomerStart", "Customer Start may bypass only a compatible, flat, Worker-confirmed prime");
+// New Cloud accounts are credential-first and must not start a trading EA
+// until MT5 discovery has returned a real XAU symbol and the customer confirms it.
+assertContains(bot, "firstConnectPrimeArmed: false", "Cloud connect must not auto-prime before Symbol confirmation");
+assertContains(bot, 'symbolDiscoveryPending: mode === "CLOUD"', "Cloud connect must enter Symbol discovery");
+assertContains(bot, 'symbolResolutionMode !== "EXACT"', "Cloud Start must be blocked until Symbol confirmation");
+assertContains(bot, "กรุณารอ VPS ตรวจ Symbol XAU", "Customer Start error must explain the pending Symbol step");
 
-assertContains(eaApi, "FIRST_CONNECT_PRIME_DISPATCHED", "Current EA heartbeat must dispatch the one-time Start");
-assertContains(eaApi, "FIRST_CONNECT_PRIME_MIN_EA_VERSION", "Prime Start must use a minimum compatible protected EA version");
-assertContains(eaApi, "isVersionAtLeast(metrics.eaVersion, FIRST_CONNECT_PRIME_MIN_EA_VERSION)", "Compatible older EA patches must remain usable until Admin applies an update");
-assertContains(eaApi, "desired_state='RUNNING'", "Prime must exercise the real RUNNING lifecycle");
-assertContains(eaApi, "entrySuppressed:", "Heartbeat must explicitly tell the EA to suppress entries");
-assertContains(eaApi, "FIRST_CONNECT_PRIME_COMPLETED", "Server must audit completion of the prime cycle");
-assertContains(eaApi, "SET desired_state='STOPPED',lock_owner=NULL", "Server must stop immediately after RUNNING is confirmed");
-assertContains(eaApi, "firstConnectPrimeCompletedAt", "Prime completion must be durable");
+assertContains(worker, '"Enabled=0"', "Discovery MT5 must keep Experts disabled");
+assertContains(worker, '"AllowLiveTrading=0"', "Discovery MT5 must keep live trading disabled");
+assertContains(worker, '"WebRequest=0"', "Discovery MT5 must not start EA network control");
+assertContains(worker, 'string.IsNullOrWhiteSpace(prepared.Symbol)', "Worker must distinguish discovery from confirmed Symbol");
+assertContains(symbols, "'symbolResolutionMode','EXACT'", "Customer confirmation must create exact Symbol authority");
+assertContains(symbols, "SET desired_state=CASE WHEN $7::boolean THEN 'STOPPED' ELSE 'SAFE_STOP' END", "Cloud Symbol confirmation must reload while bot remains stopped");
+assertContains(dashboard, "symbolDiscoveryReady === true", "Dashboard must wait for real MT5 Symbol discovery");
+assertContains(dashboard, "ระบบจะไม่เติมหรือลอง suffix ให้อัตโนมัติ", "Dashboard must state the no-guess rule");
 
-assertContains(ea, "g_serverEntrySuppressed", "EA must carry an independent entry lock");
+// Keep the independent EA entry-suppression protections for legacy/repair
+// first-connect flows. They remain a defense in depth even though new Cloud
+// provisioning no longer auto-primes before Symbol confirmation.
+assertContains(eaApi, "entrySuppressed:", "Heartbeat must still support server-side entry suppression");
+assertContains(ea, "g_serverEntrySuppressed", "EA must retain the independent entry lock");
 assertContains(ea, 'JsonBool(response, "entrySuppressed", false)', "EA must read the server-side entry lock");
-assertContains(ea, 'g_executionStatus = "FIRST_CONNECT_PRIME";', "EA must expose the prime lifecycle status");
-assertContains(ea, "if(g_serverEntrySuppressed) return false;", "Every shared order/lease gate must reject entries during the prime cycle");
-assertContains(ea, "ScenovaAccountPositionCount()<=0", "Prime guard must execute before normal entry engines");
-assertContains(ea, "initial Cloud heartbeat was not queued; refusing false-ready marker", "Cloud runtime must not publish readiness before heartbeat relay initializes");
-const eaText = fs.readFileSync(ea, "utf8");
-const onInitStart = eaText.indexOf("int OnInit()");
-const onInitEnd = eaText.indexOf("void OnDeinit", onInitStart);
-const onInit = eaText.slice(onInitStart, onInitEnd);
-const initialHeartbeatAt = onInit.indexOf("SendHeartbeat();");
-const timerAt = onInit.indexOf("ArmRuntimeTimer()");
-const readyMarkerAt = onInit.indexOf("PublishEaAttachMarker()");
-if (!(initialHeartbeatAt >= 0 && timerAt > initialHeartbeatAt && readyMarkerAt > timerAt)) {
-  throw new Error("Worker-ready marker must be published only after initial heartbeat queueing and runtime timer arming");
-}
+assertContains(ea, "if(g_serverEntrySuppressed) return false;", "Shared order gate must reject entries when suppressed");
+assertNotContains(dashboard, "แบบห้ามออกออเดอร์", "New connection UI must not describe the retired pre-Symbol prime flow");
 
-assertContains(dashboard, "firstConnectPrimeBlocksStart", "Dashboard must allow compatible Cloud Start to resolve a stuck prime");
-assertContains(dashboard, "isCloudControlReady", "Cloud Start readiness must come from fresh Worker terminal/EA control state");
-assertContains(dashboard, "แบบห้ามออกออเดอร์", "Customer-facing connect status must say no orders are allowed");
-
-console.log("First-connect prime no-entry contract PASS");
-
+console.log("First-connect Symbol-discovery no-entry contract PASS.");
