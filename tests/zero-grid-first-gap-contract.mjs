@@ -55,7 +55,7 @@ assert.match(api, /metrics\.zeroGridConfiguredFirstGapPrice/);
 assert.match(api, /metrics\.zeroGridConfiguredStepPrice/);
 assert.match(api, /Math\.abs\(appliedFirstGap - requestedFirstGap\) > 0\.000001/);
 assert.match(api, /Math\.abs\(appliedStep - requestedStep\) > 0\.000001/);
-assert.match(release, /DEFAULT_EA_VERSION = "1\.1\.29"/);
+assert.match(release, /DEFAULT_EA_VERSION = "1\.1\.30"/);
 
 console.log("ZERO GRID 2/3 first offset and 0.5/1/2/3/4 step contract PASS (10 settings combinations)");
 
