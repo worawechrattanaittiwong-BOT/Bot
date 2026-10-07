@@ -267,6 +267,7 @@ const defaultSettings = {
   raceCloseAllProfitMoney: 1,
   racePerPositionProfitMoney: 1,
   counterPerPositionProfitMoney: 1,
+  zeroGridFirstGapPrice: 3,
   zeroGridStepPrice: 3,
   zeroGridLevelsPerSide: 10,
   zeroGridBaseLot: 0.03,
@@ -455,8 +456,10 @@ export default function DashboardPage() {
           if (storedSettings.flipLockDailyProfitTargetMoney === undefined) nextSettings.flipLockDailyProfitTargetMoney = Number(storedSettings.standardDailyProfitTargetMoney ?? legacyDailyProfit);
         }
         if (loadedControlMode === "ZERO_GRID") {
+          const loadedZeroFirstGap = Number(nextSettings.zeroGridFirstGapPrice ?? 3);
+          nextSettings.zeroGridFirstGapPrice = [2,3].includes(loadedZeroFirstGap) ? loadedZeroFirstGap : 3;
           const loadedZeroStep = Number(nextSettings.zeroGridStepPrice);
-          nextSettings.zeroGridStepPrice = [0.5,1,2,3].includes(loadedZeroStep) ? loadedZeroStep : 3;
+          nextSettings.zeroGridStepPrice = [0.5,1,2,3,4].includes(loadedZeroStep) ? loadedZeroStep : 3;
           nextSettings.zeroGridLevelsPerSide = Math.max(1, Math.min(30, Number(nextSettings.zeroGridLevelsPerSide) || 10));
           nextSettings.zeroGridBaseLot = normalizeZeroGridBaseLot(nextSettings.zeroGridBaseLot);
           if (!Number.isFinite(Number(nextSettings.zeroGridMinNetProfitMoney)) || Number(nextSettings.zeroGridMinNetProfitMoney) <= 0.01) nextSettings.zeroGridMinNetProfitMoney = 1;
@@ -3846,6 +3849,7 @@ export default function DashboardPage() {
         "sessionStartHour",
         "sessionEndHour",
         "maxAtrPoints",
+        "zeroGridFirstGapPrice",
         "zeroGridStepPrice",
         "zeroGridLevelsPerSide",
         "zeroGridBaseLot",
@@ -3883,8 +3887,10 @@ export default function DashboardPage() {
       if (requestedControlMode === "ZERO_GRID") {
         payload.controlMode = "ZERO_GRID";
         payload.engineMode = "ZERO_GRID";
+        const zeroGridFirstGapPrice = Number(payload.zeroGridFirstGapPrice ?? 3);
+        payload.zeroGridFirstGapPrice = [2,3].includes(zeroGridFirstGapPrice) ? zeroGridFirstGapPrice : 3;
         const zeroGridStepPrice = Number(payload.zeroGridStepPrice);
-        payload.zeroGridStepPrice = [0.5,1,2,3].includes(zeroGridStepPrice) ? zeroGridStepPrice : 3;
+        payload.zeroGridStepPrice = [0.5,1,2,3,4].includes(zeroGridStepPrice) ? zeroGridStepPrice : 3;
         payload.zeroGridBaseLot = normalizeZeroGridBaseLot(payload.zeroGridBaseLot);
         delete payload.zeroGridLowVolatilityEnabled;
       } else if (requestedControlMode === "RACE") {
@@ -6941,8 +6947,10 @@ function BotSettingsModal(props:any) {
     if (mode === "ZERO_GRID") {
       props.onEdit?.("engineMode","ZERO_GRID");
       props.onEdit?.("profitTargetMode","OFF");
+      const zeroGridFirstGapPrice = Number(props.settings?.zeroGridFirstGapPrice ?? 3);
+      props.onEdit?.("zeroGridFirstGapPrice",[2,3].includes(zeroGridFirstGapPrice) ? zeroGridFirstGapPrice : 3);
       const zeroGridStepPrice = Number(props.settings?.zeroGridStepPrice);
-      props.onEdit?.("zeroGridStepPrice",[0.5,1,2,3].includes(zeroGridStepPrice) ? zeroGridStepPrice : 3);
+      props.onEdit?.("zeroGridStepPrice",[0.5,1,2,3,4].includes(zeroGridStepPrice) ? zeroGridStepPrice : 3);
       props.onEdit?.("zeroGridLevelsPerSide",Math.max(1,Math.min(30,Number(props.settings?.zeroGridLevelsPerSide)||10)));
       props.onEdit?.("zeroGridBaseLot",normalizeZeroGridBaseLot(props.settings?.zeroGridBaseLot));
       if (!Number.isFinite(Number(props.settings?.zeroGridMinNetProfitMoney)) || Number(props.settings?.zeroGridMinNetProfitMoney) <= 0.01) props.onEdit?.("zeroGridMinNetProfitMoney",1);
@@ -7030,11 +7038,15 @@ function BotSettingsModal(props:any) {
         ? "M5 ATR × 1.20"
         : "ATR × 2.00";
   const selectedZeroLevels = Math.max(1,Math.min(30,Number(props.settings?.zeroGridLevelsPerSide)||10));
+  const rawZeroGridFirstGap = Number(props.settings?.zeroGridFirstGapPrice ?? 3);
+  const selectedZeroGridFirstGap = [2,3].includes(rawZeroGridFirstGap) ? rawZeroGridFirstGap : 3;
   const rawZeroGridStep = Number(props.settings?.zeroGridStepPrice);
-  const selectedZeroGridStep = [0.5,1,2,3].includes(rawZeroGridStep) ? rawZeroGridStep : 3;
+  const selectedZeroGridStep = [0.5,1,2,3,4].includes(rawZeroGridStep) ? rawZeroGridStep : 3;
   const selectedZeroBaseLot = normalizeZeroGridBaseLot(props.settings?.zeroGridBaseLot);
   const appliedZeroLevels = Number(props.metrics?.zeroGridConfiguredLevelsPerSide);
   const appliedZeroBaseLot = Number(props.metrics?.zeroGridConfiguredBaseLot);
+  const appliedZeroFirstGap = Number(props.metrics?.zeroGridConfiguredFirstGapPrice);
+  const appliedZeroStep = Number(props.metrics?.zeroGridConfiguredStepPrice);
   const zeroGridSettingsSynced =
     controlMode === "ZERO_GRID" &&
     String(props.metrics?.controlMode || "").toUpperCase() === "ZERO_GRID" &&
@@ -7042,6 +7054,10 @@ function BotSettingsModal(props:any) {
     appliedZeroLevels === selectedZeroLevels &&
     Number.isFinite(appliedZeroBaseLot) &&
     Math.abs(appliedZeroBaseLot-selectedZeroBaseLot) <= 0.000001 &&
+    Number.isFinite(appliedZeroFirstGap) &&
+    Math.abs(appliedZeroFirstGap-selectedZeroGridFirstGap) <= 0.000001 &&
+    Number.isFinite(appliedZeroStep) &&
+    Math.abs(appliedZeroStep-selectedZeroGridStep) <= 0.000001 &&
     Number(props.metrics?.zeroGridMaxLevelsPerSide) === 30;
 
   return (
@@ -7129,7 +7145,8 @@ function BotSettingsModal(props:any) {
                 <div className="cc-bot-v2-section-title compact"><span>02</span><div><b>การเปิดออเดอร์</b></div></div>
                 <div className="cc-bot-v2-fields">
                   {controlMode==="ZERO_GRID" ? <>
-                    <label className="cc-bot-v2-field">{settingHelpLabel("grid-step","ระยะห่างกริด","กำหนดระยะห่างระหว่างแต่ละระดับของกริด","layers")}<select className="input" value={String(selectedZeroGridStep)} onChange={e=>props.onEdit?.("zeroGridStepPrice",Number(e.target.value))}><option value="0.5">0.50</option><option value="1">1.00</option><option value="2">2.00</option><option value="3">3.00</option></select></label>
+                    <label className="cc-bot-v2-field">{settingHelpLabel("grid-first-gap","ระยะห่างคู่แรก","กำหนดระยะ BUY STOP ไม้ 1 และ SELL STOP ไม้ 1 จากราคากลางเริ่มต้นของรอบ ฝั่งละ 2.00 หรือ 3.00 หน่วยราคา โดยอาจขยับออกตามระยะขั้นต่ำของ Broker","layers")}<select className="input" value={String(selectedZeroGridFirstGap)} onChange={e=>props.onEdit?.("zeroGridFirstGapPrice",Number(e.target.value))}><option value="2">2.00</option><option value="3">3.00</option></select></label>
+                    <label className="cc-bot-v2-field">{settingHelpLabel("grid-step","ระยะห่างกริด","กำหนดระยะห่างระหว่างไม้ 1→2→3→4 ของฝั่งเดียวกัน แยกจากระยะคู่แรก","layers")}<select className="input" value={String(selectedZeroGridStep)} onChange={e=>props.onEdit?.("zeroGridStepPrice",Number(e.target.value))}><option value="0.5">0.50</option><option value="1">1.00</option><option value="2">2.00</option><option value="3">3.00</option><option value="4">4.00</option></select></label>
                     <label className="cc-bot-v2-field">{settingHelpLabel("grid-levels","จำนวนคำสั่งรอต่อฝั่ง","กำหนดจำนวน BUY STOP และ SELL STOP ต่อฝั่ง","layers")}<select className="input" value={String(Math.max(1,Math.min(30,Number(props.settings.zeroGridLevelsPerSide)||10)))} onChange={e=>props.onEdit?.("zeroGridLevelsPerSide",Number(e.target.value))}>{Array.from({length:30},(_,i)=>i+1).map(value=><option key={value} value={value}>{value} ระดับต่อฝั่ง</option>)}</select></label>
                     <label className="cc-bot-v2-field">{settingHelpLabel("grid-base-lot","Lot เริ่มต้น","กำหนดชุด Lot ตาม Level: 0.03→0.06→0.09, 0.06→0.12→0.18 หรือ 0.09→0.18→0.27","lot")}<select className="input" value={String(selectedZeroBaseLot)} onChange={e=>props.onEdit?.("zeroGridBaseLot",Number(e.target.value))}>{ZERO_GRID_BASE_LOT_OPTIONS.map(v=><option key={v} value={v}>Lot {v.toFixed(2)}</option>)}</select></label>
                     <label className="cc-bot-v2-field">{settingHelpLabel("grid-profit","เป้ากำไรสุทธิ","กำไรรวมถึงยอดนี้ EA จะปิดทั้งรอบ","profit")}<MoneyInput value={props.settings.zeroGridMinNetProfitMoney || 1} currency={accountCurrency} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.("zeroGridMinNetProfitMoney",v)}/></label>
@@ -7206,7 +7223,8 @@ function BotSettingsModal(props:any) {
                 <div><dt>คู่เทรด</dt><dd>{props.symbol || "—"}</dd></div>
                 <div><dt>รูปแบบกริด</dt><dd>กริดมาตรฐาน</dd></div>
                 <div><dt>คำสั่งรอ</dt><dd>{Math.max(1,Math.min(30,Number(props.settings.zeroGridLevelsPerSide)||10))} BUY + {Math.max(1,Math.min(30,Number(props.settings.zeroGridLevelsPerSide)||10))} SELL</dd></div>
-                <div><dt>ระยะห่างกริด</dt><dd>{selectedZeroGridStep.toFixed(2)}</dd></div>
+                <div><dt>ระยะห่างคู่แรก</dt><dd>±{selectedZeroGridFirstGap.toFixed(2)} จากราคากลาง</dd></div>
+                <div><dt>ระยะห่างกริด</dt><dd>{selectedZeroGridStep.toFixed(2)} ต่อระดับ</dd></div>
                 <div><dt>Lot ตาม Level</dt><dd>{selectedZeroBaseLot.toFixed(2)} → {(selectedZeroBaseLot*2).toFixed(2)} → {(selectedZeroBaseLot*3).toFixed(2)}…</dd></div>
                 <div><dt>เป้ากำไรสุทธิ</dt><dd>{formatAccountMoney(props.settings.zeroGridMinNetProfitMoney||1,accountCurrency)} · ถึงแล้วปิดทันที</dd></div>
               </dl> : (

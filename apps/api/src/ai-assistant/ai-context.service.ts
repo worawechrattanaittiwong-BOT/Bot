@@ -12,7 +12,7 @@ const SAFE_SETTING_KEYS = [
   "counterLot","counterMaxPositions","counterPerPositionProfitMoney",
   "flipLockLot",
   "manualLot","manualMaxPositions","manualBasketProfitTargetMoney","manualPerPositionProfitMoney","manualStopLossPoints",
-  "zeroGridStepPrice","zeroGridLevelsPerSide","zeroGridBaseLot","zeroGridMinNetProfitMoney","zeroGridCloseReserveMoney",
+  "zeroGridFirstGapPrice","zeroGridStepPrice","zeroGridLevelsPerSide","zeroGridBaseLot","zeroGridMinNetProfitMoney","zeroGridCloseReserveMoney",
   "maxBasketLossMoney","dailyLossMoney","dailyProfitTargetMoney"
 ] as const;
 

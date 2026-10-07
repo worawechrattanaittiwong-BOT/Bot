@@ -485,6 +485,7 @@ export class BacktestController {
         settings: {
           controlMode: "ZERO_GRID",
           dataSource: "LIVE_ZERO_HISTORY",
+          zeroGridFirstGapPrice: Number(settings.zeroGridFirstGapPrice ?? 3),
           zeroGridStepPrice: Number(settings.zeroGridStepPrice || 0),
           zeroGridLowVolatilityEnabled: settings.zeroGridLowVolatilityEnabled === true,
           zeroGridLevelsPerSide: Number(settings.zeroGridLevelsPerSide || 0),

@@ -3349,10 +3349,16 @@ export class BotController {
             Math.trunc(Number.isFinite(requestedRaw) ? requestedRaw : 3)
           )
         );
+        const requestedFirstGap = [2, 3].includes(Number(savedSettings.zeroGridFirstGapPrice ?? 3))
+          ? Number(savedSettings.zeroGridFirstGapPrice ?? 3) : 3;
+        const requestedStep = [0.5, 1, 2, 3, 4].includes(Number(savedSettings.zeroGridStepPrice ?? 3))
+          ? Number(savedSettings.zeroGridStepPrice ?? 3) : 3;
         const requestedBaseLotRaw = Number(savedSettings.zeroGridBaseLot ?? 0.03);
         const requestedBaseLot = [0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09].includes(requestedBaseLotRaw) ? requestedBaseLotRaw : 0.03;
         const appliedLevels = Number(metrics.zeroGridConfiguredLevelsPerSide);
         const appliedBaseLot = Number(metrics.zeroGridConfiguredBaseLot);
+        const appliedFirstGap = Number(metrics.zeroGridConfiguredFirstGapPrice);
+        const appliedStep = Number(metrics.zeroGridConfiguredStepPrice);
         const appliedMax = Number(metrics.zeroGridMaxLevelsPerSide);
         const appliedMode = String(metrics.controlMode || "").toUpperCase();
         if (
@@ -3361,11 +3367,17 @@ export class BotController {
           appliedLevels !== requestedLevels ||
           !Number.isFinite(appliedBaseLot) ||
           Math.abs(appliedBaseLot - requestedBaseLot) > 0.000001 ||
+          !Number.isFinite(appliedFirstGap) ||
+          Math.abs(appliedFirstGap - requestedFirstGap) > 0.000001 ||
+          !Number.isFinite(appliedStep) ||
+          Math.abs(appliedStep - requestedStep) > 0.000001 ||
           appliedMax !== ZERO_GRID_MAX_LEVELS_PER_SIDE
         ) {
           throw new ConflictException(
             "ZERO GRID ยังไม่พร้อมเริ่ม: ตั้งไว้ " + requestedLevels +
-            " Pending ต่อฝั่ง · Base Lot " + requestedBaseLot.toFixed(2) +
+            " Pending ต่อฝั่ง · คู่แรก " + requestedFirstGap.toFixed(2) +
+            " · Grid " + requestedStep.toFixed(2) +
+            " · Base Lot " + requestedBaseLot.toFixed(2) +
             " แต่ EA ที่กำลังรันยังไม่ยืนยันค่าชุดนี้ · กรุณารอ Heartbeat ถัดไป 5–10 วินาที แล้วกดเริ่มอีกครั้ง"
           );
         }
@@ -3684,10 +3696,17 @@ export class BotController {
     }
     numberSetting("minOrderIntervalMs", 0, 60000, true);
     numberSetting("maxOrdersPerMinute", 1, 5000, true);
+    if (body.zeroGridFirstGapPrice !== undefined) {
+      const zeroGridFirstGapPrice = Number(body.zeroGridFirstGapPrice);
+      if (![2, 3].includes(zeroGridFirstGapPrice)) {
+        throw new BadRequestException("ZERO GRID ระยะคู่แรกต้องเป็น 2.00 หรือ 3.00 เท่านั้น");
+      }
+      clean.zeroGridFirstGapPrice = zeroGridFirstGapPrice;
+    }
     if (body.zeroGridStepPrice !== undefined) {
       const zeroGridStepPrice = Number(body.zeroGridStepPrice);
-      if (![0.5, 1, 2, 3].includes(zeroGridStepPrice)) {
-        throw new BadRequestException("ZERO GRID Step ต้องเป็น 0.50, 1.00, 2.00 หรือ 3.00 เท่านั้น");
+      if (![0.5, 1, 2, 3, 4].includes(zeroGridStepPrice)) {
+        throw new BadRequestException("ZERO GRID Step ต้องเป็น 0.50, 1.00, 2.00, 3.00 หรือ 4.00 เท่านั้น");
       }
       clean.zeroGridStepPrice = zeroGridStepPrice;
     }
@@ -3977,8 +3996,10 @@ export class BotController {
       );
     }
     if (zeroGridSelected) {
-      const zeroGridStepPrice = Number(clean.zeroGridStepPrice);
-      clean.zeroGridStepPrice = [0.5, 1, 2, 3].includes(zeroGridStepPrice) ? zeroGridStepPrice : 3;
+      const zeroGridFirstGapPrice = Number(clean.zeroGridFirstGapPrice ?? currentSettings.zeroGridFirstGapPrice ?? 3);
+      clean.zeroGridFirstGapPrice = [2, 3].includes(zeroGridFirstGapPrice) ? zeroGridFirstGapPrice : 3;
+      const zeroGridStepPrice = Number(clean.zeroGridStepPrice ?? currentSettings.zeroGridStepPrice ?? 3);
+      clean.zeroGridStepPrice = [0.5, 1, 2, 3, 4].includes(zeroGridStepPrice) ? zeroGridStepPrice : 3;
       const zeroGridBaseLot = Number(clean.zeroGridBaseLot);
       clean.zeroGridBaseLot = [0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09].includes(zeroGridBaseLot) ? zeroGridBaseLot : 0.03;
       if (body.zeroGridMinNetProfitMoney === undefined) clean.zeroGridMinNetProfitMoney = 1;

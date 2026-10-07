@@ -163,6 +163,8 @@ jobs:
         run: ./tests/local-execution-plane-contract.ps1
       - name: ZERO GRID stability simulation regression
         run: node ./tests/zero-grid-v1-simulation.mjs
+      - name: ZERO GRID first-pair distance and separate step regression
+        run: node ./tests/zero-grid-first-gap-contract.mjs
       - name: LOCAL explicit account switch no customer Slot contract
         shell: pwsh
         run: ./tests/local-account-follow-contract.ps1

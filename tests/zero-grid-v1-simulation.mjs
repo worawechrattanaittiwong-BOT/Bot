@@ -8,8 +8,9 @@ export function buildPendingPlan({ bid, ask, step = 3, baseLot = 0.03, levelsPer
   const effectiveStep = step;
   const effectiveFirstOffset = firstOffsetPrice;
   const brokerSafe = Math.max(tick, brokerMinDistance) + tick;
-  const requestedBuy = ask + effectiveFirstOffset;
-  const requestedSell = bid - effectiveFirstOffset;
+  const center = (bid + ask) / 2;
+  const requestedBuy = center + effectiveFirstOffset;
+  const requestedSell = center - effectiveFirstOffset;
   const buyAnchor = up(Math.max(requestedBuy, ask + brokerSafe), tick);
   const sellAnchor = down(Math.min(requestedSell, bid - brokerSafe), tick);
   const orders = [];
@@ -29,8 +30,8 @@ export function buildPendingPlan({ bid, ask, step = 3, baseLot = 0.03, levelsPer
   const orders = buildPendingPlan({ bid, ask, step: 3, brokerMinDistance: 0.05, tick: 0.01, levelsPerSide: 3 });
   const buys = orders.filter((o) => o.type === "BUY_STOP");
   const sells = orders.filter((o) => o.type === "SELL_STOP");
-  assert.equal(Number(buys[0].price.toFixed(2)), 4004.05, "first BUY STOP should be +3.00 from live ask");
-  assert.equal(Number(sells[0].price.toFixed(2)), 3997.95, "first SELL STOP should be -3.00 from live bid");
+  assert.equal(Number(buys[0].price.toFixed(2)), 4004.00, "first BUY STOP should be +3.00 from saved midpoint");
+  assert.equal(Number(sells[0].price.toFixed(2)), 3998.00, "first SELL STOP should be -3.00 from saved midpoint");
   assert.equal(Number((buys[1].price - buys[0].price).toFixed(2)), 3);
   assert.equal(Number((sells[0].price - sells[1].price).toFixed(2)), 3);
 }
@@ -70,9 +71,9 @@ assert.match(sendBlock, /request\.action\s*=\s*TRADE_ACTION_PENDING/);
 assert.match(sendBlock, /ORDER_TYPE_BUY_STOP/);
 assert.match(sendBlock, /ORDER_TYPE_SELL_STOP/);
 assert.doesNotMatch(sendBlock, /TRADE_ACTION_DEAL/);
-assert.match(ea, /double ZeroGridEntryGapPrice\(\)[\s\S]*double preferredGap=ZeroGridEffectiveLowVolatilityEnabled\(\) \? ZERO_GRID_LOW_VOL_FIRST_GAP : 3\.0;[\s\S]*ZeroGridMinPendingDistancePrice\(\)\+tick/);
+assert.match(ea, /double ZeroGridEntryGapPrice\(\)[\s\S]*double preferredGap=ZeroGridEffectiveLowVolatilityEnabled\(\) \? ZERO_GRID_LOW_VOL_FIRST_GAP : ZeroGridEffectiveFirstGapPrice\(\);[\s\S]*ZeroGridMinPendingDistancePrice\(\)\+tick/);
 assert.doesNotMatch(ea, /MathMax\(stops,freeze\)/);
-assert.match(ea, /double ZeroGridPendingAnchorPrice\(bool buySide\)[\s\S]*g_zeroGridCenter\+gap[\s\S]*live\.ask\+gap[\s\S]*live\.bid-gap[\s\S]*live\.ask\+brokerSafe[\s\S]*live\.bid-brokerSafe/);
+assert.match(ea, /double ZeroGridPendingAnchorPrice\(bool buySide\)[\s\S]*g_zeroGridCycleFirstGapPrice<=0\.0[\s\S]*live\.ask\+gap[\s\S]*live\.bid-gap[\s\S]*g_zeroGridCenter\+gap[\s\S]*g_zeroGridCenter-gap[\s\S]*live\.ask\+brokerSafe[\s\S]*live\.bid-brokerSafe/);
 assert.doesNotMatch(ea, /ZeroGridEffectiveStepPrice\(\)\*1\.5/);
 assert.match(ea, /double ZeroGridEstimatedExitCostMoney\(\)/);
 assert.match(ea, /double ZeroGridRequiredCloseNet\(\)[\s\S]*return MathMax\(0\.01,g_zeroGridMinNetProfitMoney\);/, "ZERO must close at the exact configured money target");
@@ -90,7 +91,7 @@ assert.match(sendBlock, /OrderSendAsync\(request,result\)/, "live ZERO pending p
 assert.match(ea, /ZeroGridPendingRequestInFlight\(bool buySide,int level\)/, "async ZERO placement must suppress duplicate in-flight requests");
 assert.match(ea, /ZERO_SIMPLE_STABLE_V117/, "ZERO must use the simple stable pending engine");
 assert.doesNotMatch(ea, /InpZeroGridLowVolatilityEnabled/, "removed low-volatility switch must not remain as a new-cycle input");
-assert.match(ea, /double ZeroGridAllowedStep\(double requested\)[\s\S]*requested-0\.5[\s\S]*requested-1\.0[\s\S]*requested-2\.0[\s\S]*return 3\.0;/, "ZERO must allow 0.50 / 1.00 / 2.00 / 3.00 steps");
+assert.match(ea, /double ZeroGridAllowedStep\(double requested\)[\s\S]*requested-0\.5[\s\S]*requested-1\.0[\s\S]*requested-2\.0[\s\S]*requested-4\.0[\s\S]*return 3\.0;/, "ZERO must allow 0.50 / 1.00 / 2.00 / 3.00 / 4.00 steps");
 assert.match(ea, /ZeroGridEffectiveLevelLot\(int level\)/, "ZERO must isolate cycle lot calculation");
 assert.match(ea, /ZeroGridAllowedBaseLot\(double requested\)[\s\S]*requested-0\.03[\s\S]*requested-0\.06[\s\S]*requested-0\.09/, "ZERO must allow only 0.03 / 0.06 / 0.09 base lots");
 assert.match(ea, /g_zeroGridCycleBaseLot=ZeroGridAllowedBaseLot\(g_zeroGridBaseLot\)/, "ZERO must snapshot the selected base lot only when a new cycle starts");
@@ -110,7 +111,7 @@ assert.match(ea, /g_safeStopDrainRequested\s*=\s*\(g_access && desired == "SAFE_
 assert.match(ea, /bool safeStopDrain\s*=\s*[\s\S]*g_state==STATE_SAFE_STOP[\s\S]*g_safeStopDrainRequested[\s\S]*if\(!safeStopDrain\)[\s\S]*ZeroGridCancelPending\(\)/, "ZERO Safe Stop must preserve the already-staged pending ladder only for explicit Safe Stop");
 assert.match(ea, /pending=ZeroGridPendingCount\(\);[\s\S]*if\(positions<=0 && pending<=0\)/, "ZERO Safe Stop must not mark the cycle flat while pending orders still belong to it");
 assert.match(ea, /for\(int level=1;level<=levels;level\+\+\)/, "flat ZERO must validate every configured level pair");
-console.log("ZERO GRID standard + low-volatility geometry, paired staging and real-net regression passed");
+console.log("ZERO GRID first-offset + stepped geometry, paired staging and real-net regression passed");
 
 assert.match(ea, /#define ZERO_GRID_DEFAULT_BASE_LOT 0\.03/, "ZERO base lot must default to 0.03");
 assert.match(ea, /#define ZERO_GRID_PENDING_REQUEST_GUARD_MS 10000/, "ZERO async duplicate guard must cover delayed broker acknowledgements");
