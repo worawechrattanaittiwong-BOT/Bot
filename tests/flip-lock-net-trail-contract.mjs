@@ -56,6 +56,12 @@ for (const point of [.001,.01]) {
   assert.equal(higherCosts.armed,false,'higher real broker fees must delay lock');
   const centAccount=project({direction:1,entry:4000,bid:4002.7,ask:4002.94,point,currencyScale:100});
   assert.equal(centAccount.armed,true,'USD-cent conversion must preserve 1 real USD floor');
+  // $1 is the net MONEY floor, not a fixed quote-price movement. With 10x
+  // the lot, larger entry/exit costs must still be covered at the broker SL.
+  const tenXLot=project({direction:1,entry:4000,bid:4001.8,ask:4002.04,point,lot:.10,entryFeesUsd:.70});
+  assert.ok(tenXLot.armed && tenXLot.netUsd>=1,'larger lot must arm from projected money net, not the quote-price delta');
+  const costlyTenXLot=project({direction:1,entry:4000,bid:4001.7,ask:4001.94,point,lot:.10,entryFeesUsd:.70});
+  assert.equal(costlyTenXLot.armed,false,'larger lot cannot lock before broker fees and $1 net are covered');
   const brokerOverride=project({direction:1,entry:4000,bid:4003.4,ask:4003.64,point,brokerDistancePoints:2000});
   if(point===.001) assert.ok(Math.abs(brokerOverride.distance-2)<1e-8,'broker stop/freeze minimum overrides 1.5');
 }
