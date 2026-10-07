@@ -15,6 +15,7 @@ import { randomBytes } from "crypto";
 import { DbService } from "./db.service";
 import { JwtGuard } from "./security";
 import { buildJournalPositionOwnerModes, reconstructCompletedJournal, resolveJournalControlModeWithOwner } from "./performance-journal";
+import { buildZeroGridCyclePresentation } from "./performance-zero-grid-cycle";
 
 type Actor = { sub: string; role?: string };
 type BasketRow = {
@@ -43,7 +44,7 @@ function normalizeShareStrategyModes(value: unknown) {
 
 function shareModeLabel(value: unknown) {
   return String(value || "AUTO").toUpperCase() === "ZERO_GRID"
-    ? "GRID"
+    ? "ZERO GRID"
     : String(value || "AUTO").toUpperCase();
 }
 
@@ -268,6 +269,7 @@ export class PerformanceActionsController {
     const account = await this.accountForActor(actor, String(body?.accountId || ""));
     const { from, to } = this.parseRange(String(body?.from || ""), String(body?.to || ""));
     const selectedStrategyModes = normalizeShareStrategyModes(body?.strategyModes);
+    const zeroGridOnly=selectedStrategyModes.length===1&&selectedStrategyModes[0]==="ZERO_GRID";
     const metrics = account.metrics || {};
     const currentBalance = Number(metrics.balance || 0);
 
@@ -358,6 +360,11 @@ export class PerformanceActionsController {
     computed.summary.primaryLotCount=primaryLot.count;
     computed.summary.primaryLotPercent=primaryLot.percent;
     computed.summary.lotSizeCount=lotDistribution.length;
+    if(zeroGridOnly){
+      const cycleView=buildZeroGridCyclePresentation(baskets,derivedStart);
+      Object.assign(computed.summary,cycleView.summary);
+      computed.curve=cycleView.curve;
+    }
 
     const modeBreakdown=SHARE_STRATEGY_MODES.map((mode)=>{
       const rows=allBaskets.filter((row:any)=>row.controlMode===mode);
@@ -425,6 +432,7 @@ export class PerformanceActionsController {
       },
       summary:computed.summary,
       curve:computed.curve,
+      curveBasis:zeroGridOnly?"BOT_CYCLES":"CLOSED_POSITIONS",
       monthly:computed.monthly,
       lotDistribution,
       modeBreakdown,
@@ -696,6 +704,7 @@ export class SharedPerformanceController {
 
     const frozen = row.snapshot || {};
     const selectedStrategyModes = normalizeShareStrategyModes(frozen?.filter?.strategyModes);
+    const zeroGridOnly=selectedStrategyModes.length===1&&selectedStrategyModes[0]==="ZERO_GRID";
     if (!row.mt5_account_id) {
       return {
         ...row,
@@ -895,6 +904,11 @@ export class SharedPerformanceController {
     computed.summary.primaryLotCount = primaryLot.count;
     computed.summary.primaryLotPercent = primaryLot.percent;
     computed.summary.lotSizeCount = lotDistribution.length;
+    if(zeroGridOnly){
+      const cycleView=buildZeroGridCyclePresentation(baskets,derivedStart);
+      Object.assign(computed.summary,cycleView.summary);
+      computed.curve=cycleView.curve;
+    }
 
     const modeBreakdown = SHARE_STRATEGY_MODES.map((mode) => {
       const rows = allBaskets.filter((item:any) => item.controlMode === mode);
@@ -965,6 +979,7 @@ export class SharedPerformanceController {
       },
       summary: computed.summary,
       curve: computed.curve,
+      curveBasis: zeroGridOnly ? "BOT_CYCLES" : "CLOSED_POSITIONS",
       lotDistribution,
       modeBreakdown,
       closedTrades: filteredExitRows.map((trade:any) => ({

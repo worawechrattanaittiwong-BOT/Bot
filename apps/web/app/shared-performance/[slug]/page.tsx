@@ -85,7 +85,7 @@ function strategyLabel(value:StrategyMode|string) {
     COUNTER:"COUNTER",
     FLIP_LOCK:"FLIP LOCK",
     MANUAL:"MANUAL",
-    ZERO_GRID:"GRID"
+    ZERO_GRID:"ZERO GRID"
   };
   return labels[String(value||"AUTO").toUpperCase()]||String(value||"AUTO");
 }
@@ -135,7 +135,7 @@ function LotDistributionChart({rows,total}:{rows:any[];total:number}) {
   );
 }
 
-function SummaryChart({points}:{points:any[]}) {
+function SummaryChart({points,axisLabel="จำนวนไม้"}:{points:any[];axisLabel?:string}) {
   if(!points?.length) return <div className={styles.emptyChart}>ยังไม่มีข้อมูลกราฟในช่วงเวลานี้</div>;
   const width=1500,height=148,left=40,right=12,top=10,bottom=31;
   const values=points.map((point)=>Number(point.balance??0));
@@ -172,7 +172,7 @@ function SummaryChart({points}:{points:any[]}) {
       <path d={area} fill="url(#share-perf-area)"/>
       <path d={line} fill="none" stroke="url(#share-perf-line)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
       <circle cx={last.x} cy={last.y} r="4" fill="#b36cff" stroke="#f0dcff" strokeWidth="2"/>
-      <text x={width/2} y={height-2} textAnchor="middle" className={styles.chartLabel}>จำนวนไม้</text>
+      <text x={width/2} y={height-2} textAnchor="middle" className={styles.chartLabel}>{axisLabel}</text>
     </svg>
   );
 }
@@ -378,6 +378,7 @@ export default function SharedPerformancePage() {
     ? snapshot.filter.strategyModes
     : [...STRATEGY_OPTIONS];
   const strategyScopeLabel=strategyPortfolioLabel(selectedStrategyModes);
+  const zeroGridOnly=selectedStrategyModes.length===1&&selectedStrategyModes[0]==="ZERO_GRID";
   const accountType=String(account.accountType||"REAL").toUpperCase()==="DEMO"?"DEMO":"REAL";
   const runtimeMode=String(account.mode||"LIVE").toUpperCase();
   const displayFrom=from||dateInput(snapshot?.range?.from);
@@ -494,7 +495,7 @@ export default function SharedPerformancePage() {
             </div>
             <div className={styles.infoCol}>
               <InfoRow icon="play" label="Data Mode" value="LIVE"/>
-              <InfoRow icon="orders" label="Closed Baskets" value={String(Number(summary.trades||0))}/>
+              <InfoRow icon="orders" label={zeroGridOnly?"Closed Cycles":"Closed Baskets"} value={String(Number(summary.trades||0))}/>
               <InfoRow icon="orders" label="Closed Positions" value={String(totalPositions)}/>
             </div>
           </div>
@@ -542,13 +543,13 @@ export default function SharedPerformancePage() {
             </div>
 
             <div className={styles.panel}>
-              <PanelTitle icon="orders">Trades & Positions</PanelTitle>
-              <StatRow label="Total Baskets" value={String(Number(summary.trades||0))}/>
+              <PanelTitle icon="orders">{zeroGridOnly?"Cycles & Positions":"Trades & Positions"}</PanelTitle>
+              <StatRow label={zeroGridOnly?"Total Cycles":"Total Baskets"} value={String(Number(summary.trades||0))}/>
               <StatRow label="Total Positions" value={String(totalPositions)}/>
               <StatRow label="Total Deals" value={String(totalDeals)}/>
-              <StatRow label="Profit Baskets" value={String(Number(summary.wins||0))}/>
-              <StatRow label="Loss Baskets" value={String(Number(summary.losses||0))}/>
-              <StatRow label="Basket Win Rate" value={percent(summary.winRate)}/>
+              <StatRow label={zeroGridOnly?"Profit Cycles":"Profit Baskets"} value={String(Number(summary.wins||0))}/>
+              <StatRow label={zeroGridOnly?"Loss Cycles":"Loss Baskets"} value={String(Number(summary.losses||0))}/>
+              <StatRow label={zeroGridOnly?"Cycle Win Rate":"Basket Win Rate"} value={percent(summary.winRate)}/>
               <StatRow label="Profit Positions" value={String(Number(summary.profitPositions||0))}/>
               <StatRow label="Loss Positions" value={String(Number(summary.lossPositions||0))}/>
               <StatRow label="Position Win Rate" value={percent(summary.positionWinRate||0)}/>
@@ -556,13 +557,13 @@ export default function SharedPerformancePage() {
 
             <div className={styles.panel}>
               <PanelTitle icon="spread">Directional Analytics</PanelTitle>
-              <StatRow label="Long Trades (won %)" value={String(Number(summary.buyTrades||0))+" ("+percent(summary.buyWinRate||0)+")"}/>
-              <StatRow label="Short Trades (won %)" value={String(Number(summary.sellTrades||0))+" ("+percent(summary.sellWinRate||0)+")"}/>
+              <StatRow label={zeroGridOnly?"Long Cycles (won %)":"Long Trades (won %)"} value={String(Number(summary.buyTrades||0))+" ("+percent(summary.buyWinRate||0)+")"}/>
+              <StatRow label={zeroGridOnly?"Short Cycles (won %)":"Short Trades (won %)"} value={String(Number(summary.sellTrades||0))+" ("+percent(summary.sellWinRate||0)+")"}/>
               <StatRow label="Loss Rate" value={percent(summary.lossRate??(Number(summary.trades)?Number(summary.losses||0)/Number(summary.trades)*100:0))}/>
-              <StatRow label="Breakeven Baskets" value={String(Number(summary.breakeven||0))}/>
+              <StatRow label={zeroGridOnly?"Breakeven Cycles":"Breakeven Baskets"} value={String(Number(summary.breakeven||0))}/>
               <StatRow label="Breakeven Positions" value={String(Number(summary.breakevenPositions||0))}/>
               {modeBreakdown.map((row:any)=>(
-                <StatRow key={row.mode} label={strategyLabel(row.mode)+" Baskets"} value={String(Number(row.baskets||0))+" · "+percent(row.winRate||0)}/>
+                <StatRow key={row.mode} label={strategyLabel(row.mode)+(zeroGridOnly&&row.mode==="ZERO_GRID"?" Cycles":" Baskets")} value={String(Number(row.baskets||0))+" · "+percent(row.winRate||0)}/>
               ))}
             </div>
 
@@ -578,10 +579,10 @@ export default function SharedPerformancePage() {
 
             <div className={styles.panel}>
               <PanelTitle icon="target">Streaks</PanelTitle>
-              <StatRow label="Maximum consecutive wins" value={String(Number(summary.maxWinStreak||0))+" ("+money(summary.maxWinStreakProfit,currency)+")"}/>
-              <StatRow label="Maximum consecutive losses" value={String(Number(summary.maxLossStreak||0))+" ("+money(summary.maxLossStreakLoss,currency)+")"} tone="bad"/>
-              <StatRow label="Average consecutive wins" value={fixed(summary.averageWinStreak,1)}/>
-              <StatRow label="Average consecutive losses" value={fixed(summary.averageLossStreak,1)}/>
+              <StatRow label={zeroGridOnly?"Maximum consecutive winning cycles":"Maximum consecutive wins"} value={String(Number(summary.maxWinStreak||0))+" ("+money(summary.maxWinStreakProfit,currency)+")"}/>
+              <StatRow label={zeroGridOnly?"Maximum consecutive losing cycles":"Maximum consecutive losses"} value={String(Number(summary.maxLossStreak||0))+" ("+money(summary.maxLossStreakLoss,currency)+")"} tone="bad"/>
+              <StatRow label={zeroGridOnly?"Average consecutive winning cycles":"Average consecutive wins"} value={fixed(summary.averageWinStreak,1)}/>
+              <StatRow label={zeroGridOnly?"Average consecutive losing cycles":"Average consecutive losses"} value={fixed(summary.averageLossStreak,1)}/>
             </div>
 
             <div className={styles.panel}>
@@ -617,8 +618,8 @@ export default function SharedPerformancePage() {
               <LotDistributionChart rows={lotDistribution} total={totalPositions}/>
             </div>
             <div className={styles.chartCard}>
-              <div className={styles.chartHead}><div><ScenovaIcon name="trend" size={15}/><b>Capital Growth</b><small>Balance progression · X = Closed Positions</small></div><span>End Balance: {money(endBalance,currency)}</span></div>
-              <SummaryChart points={curve}/>
+              <div className={styles.chartHead}><div><ScenovaIcon name="trend" size={15}/><b>Capital Growth</b><small>{zeroGridOnly?"Balance progression · X = Closed Cycles":"Balance progression · X = Closed Positions"}</small></div><span>End Balance: {money(endBalance,currency)}</span></div>
+              <SummaryChart points={curve} axisLabel={zeroGridOnly?"จำนวนรอบ":"จำนวนไม้"}/>
             </div>
           </div>
         </section>
