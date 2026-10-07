@@ -4719,7 +4719,7 @@ export default function DashboardPage() {
 
                 <section className="panel cc-v17-running-positions" aria-label="ออเดอร์ที่บอทกำลังรัน">
                   <div className="cc-v17-running-head">
-                    <div className="cc-v17-running-title"><span><ScenovaIcon name="orders" size={18}/></span><div><small>{String(metrics.liveExecutionTransport||"")==="CLOUD_SSE"?"LIVE EXECUTION · CLOUD 200ms":"LIVE EXECUTION"}</small><b>ออเดอร์ที่กำลังรัน</b></div></div>
+                    <div className="cc-v17-running-title"><span><ScenovaIcon name="orders" size={18}/></span><div><small>{String(metrics.liveExecutionTransport||"")==="CLOUD_SSE"?"LIVE EXECUTION · CLOUD":"LIVE EXECUTION"}</small><b>ออเดอร์ที่กำลังรัน</b></div></div>
                     <div className="cc-v17-running-head-metrics">
                       <span className={"cc-v17-net-profit "+(liveNetProfit>0?"good":liveNetProfit<0?"bad":"neutral")}>
                         Net Profit <b>{formatAccountMoney(liveNetProfit,accountCurrency,true)}</b>
