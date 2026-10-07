@@ -1,11 +1,11 @@
 ﻿{
     "runtimeContract":  "RACE_CONFIGURED_LOSS_ONLY_V1",
-    "eaVersion":  "1.1.28",
+    "eaVersion":  "1.1.29",
     "brain":  "AUTO",
-    "buildId":  "c1a08682dbf0737d0f6a162869cc6182b80f763a",
-    "sourceCommit":  "c1a08682dbf0737d0f6a162869cc6182b80f763a",
-    "builtAt":  "2026-10-06T16:17:48.5172818Z",
-    "sha256":  "b5845418a90e88153c640d58867a5f4be49688e9e302efa9ea723307806c87b7",
+    "buildId":  "f844e86d91da8489c20426f7523ae5a70c29b254",
+    "sourceCommit":  "f844e86d91da8489c20426f7523ae5a70c29b254",
+    "builtAt":  "2026-10-07T01:46:14.3004178Z",
+    "sha256":  "901f7d521d909aade1a53faa0050b02c022b248c777b1ca007f8ce4155879426",
     "policy":  "AUTO",
     "file":  "FastBasketBot.ex5"
 }
