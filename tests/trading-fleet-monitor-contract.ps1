@@ -87,7 +87,7 @@ foreach ($required in @(
   'Total Lots',
   'Spread',
   'Ping',
-  'Deposit/Withdraw',
+  'รายการฝากและถอนเงิน',
   'ช่วงเวลาผลงาน',
   'กำหนดเอง',
   'type="datetime-local"',
