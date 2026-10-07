@@ -37,6 +37,16 @@ assert.ok(web.includes('if(accountId&&from&&to&&from<=to)'));
 assert.ok(web.includes('disabled={loading||!accountId||!from||!to||from>to}'));
 assert.ok(web.includes('rangeClippedByReset'));
 assert.ok(web.includes('ข้อมูลจริงเริ่ม'));
+assert.ok(web.includes('function confirmPerformancePreferences()'));
+assert.ok(web.includes('if(!userId||!accountId||!from||!to||from>to) return;'));
+assert.ok(web.includes('onClick={confirmPerformancePreferences}'));
+assert.ok(web.includes('disabled={!accountId||!from||!to||from>to}'));
+assert.ok(web.includes('<ScenovaIcon name="check" size={15}/>ยืนยัน'));
+assert.ok(web.includes('title:"ยืนยันการตั้งค่ารายงานแล้ว"'));
+assert.ok(web.includes('if(!accountId||mode!=="LIVE"||!from||!to||from>to) return;'));
+assert.ok(web.includes('disabled={sharing||!Number(summary.trades||0)||!from||!to||from>to}'));
+const clearResetSequence='await loadOptions();\n      setDateSelectionMode("SINGLE");\n      setFrom(today);\n      setTo(today);';
+assert.equal(web.split(clearResetSequence).length-1,2,'both clear flows must visibly reset to single-day today after reloading options');
 
 // Saved v1 "All Strategies" meant every strategy available at that time. It
 // must migrate to all six modes after COUNTER becomes reportable.

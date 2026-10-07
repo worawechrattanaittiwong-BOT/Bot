@@ -552,9 +552,9 @@ export default function PerformanceDashboardPage() {
     setFrom(range.from);setTo(range.to);
   }
 
-  function savePerformancePreferences(){
+  function confirmPerformancePreferences(){
     const userId=String(options?.user?.id||"");
-    if(!userId||!accountId) return;
+    if(!userId||!accountId||!from||!to||from>to) return;
     const preferences:PerformancePreferences={
       accountId,
       mode,
@@ -567,10 +567,11 @@ export default function PerformanceDashboardPage() {
       performancePreferencesKey(userId),
       JSON.stringify(preferences)
     );
+    setControlsOpen(false);
     showPopup({
       tone:"success",
-      title:"บันทึกค่ารายงานแล้ว",
-      message:"บัญชี แหล่งรายงาน ช่วงวันที่ และ Strategy Portfolio จะถูกเรียกคืนอัตโนมัติเมื่อรีเฟรชหรือเปิดหน้านี้ใหม่",
+      title:"ยืนยันการตั้งค่ารายงานแล้ว",
+      message:"บัญชี แหล่งรายงาน ช่วงวันที่ และ Strategy Portfolio ถูกบันทึกแล้ว และจะถูกเรียกคืนอัตโนมัติเมื่อเปิดหน้านี้ครั้งถัดไป",
       duration:3200
     });
   }
@@ -592,7 +593,7 @@ export default function PerformanceDashboardPage() {
   }
 
   async function createShare(){
-    if(!accountId||mode!=="LIVE") return;
+    if(!accountId||mode!=="LIVE"||!from||!to||from>to) return;
     setSharing(true);
     try{
       const result=await api("/performance-actions/share-live",{method:"POST",body:JSON.stringify({accountId,from,to,strategyModes:selectedStrategies})});
@@ -635,9 +636,10 @@ export default function PerformanceDashboardPage() {
       setSelectedBacktestId("");
       setShareResult(null);
       setError("");
+      await loadOptions();
+      setDateSelectionMode("SINGLE");
       setFrom(today);
       setTo(today);
-      await loadOptions();
       showPopup({
         tone:"success",
         title:"ล้างข้อมูลสำเร็จ",
@@ -684,9 +686,10 @@ export default function PerformanceDashboardPage() {
       setSelectedBacktestId("");
       setShareResult(null);
       setError("");
+      await loadOptions();
+      setDateSelectionMode("SINGLE");
       setFrom(today);
       setTo(today);
-      await loadOptions();
       showPopup({
         tone:"success",
         title:"ล้างข้อมูลทั้งระบบสำเร็จ",
@@ -818,7 +821,7 @@ export default function PerformanceDashboardPage() {
                 <div className={styles.ownerBadge}><ScenovaIcon name="account" size={15}/><div><b>{options?.user?.user_code||"SCENOVA"}</b><span>My Performance Only</span></div></div>
               </div>
               <div className={styles.toolbarActions}>
-                {mode==="LIVE"?<button type="button" className={styles.shareButton} onClick={createShare} disabled={sharing||!Number(summary.trades||0)}><ScenovaIcon name="share" size={14}/>{sharing?"กำลังสร้าง...":"แชร์ Read-only"}</button>:null}
+                {mode==="LIVE"?<button type="button" className={styles.shareButton} onClick={createShare} disabled={sharing||!Number(summary.trades||0)||!from||!to||from>to}><ScenovaIcon name="share" size={14}/>{sharing?"กำลังสร้าง...":"แชร์ Read-only"}</button>:null}
                 {shareResult?.path&&mode==="LIVE"?<><input className={styles.shareInput} readOnly value={window.location.origin+shareResult.path}/><button type="button" className={styles.minorButton} onClick={copyShare}>คัดลอก</button><a className={styles.minorButton} href={shareResult.path} target="_blank" rel="noreferrer">เปิด</a></>:null}
                 <button type="button" className={styles.clearOwnButton} onClick={clearOwnPerformanceData} disabled={loading}><ScenovaIcon name="delete" size={14}/>ล้างข้อมูลของฉัน</button>
                 {options?.elevated?<button type="button" className={styles.clearButton} onClick={clearAllPerformanceData} disabled={loading}><ScenovaIcon name="delete" size={14}/>ล้างข้อมูลทั้งระบบ</button>:null}
@@ -885,10 +888,10 @@ export default function PerformanceDashboardPage() {
                 <button
                   type="button"
                   className={styles.saveSettingsButton}
-                  onClick={savePerformancePreferences}
-                  disabled={!accountId}
+                  onClick={confirmPerformancePreferences}
+                  disabled={!accountId||!from||!to||from>to}
                 >
-                  <ScenovaIcon name="settings" size={15}/>บันทึกค่า
+                  <ScenovaIcon name="check" size={15}/>ยืนยัน
                 </button>
               </div>
             </div>

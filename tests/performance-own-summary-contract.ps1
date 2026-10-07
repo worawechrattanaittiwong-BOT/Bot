@@ -99,9 +99,9 @@ if ($web.Contains('className={styles.controlCard}')) { throw 'External performan
 foreach ($required in @(
   'PERFORMANCE_PREFS_KEY',
   'readPerformancePreferences',
-  'savePerformancePreferences',
+  'confirmPerformancePreferences',
   'window.localStorage.setItem',
-  'บันทึกค่า',
+  'ยืนยัน',
   'styles.saveSettingsButton'
 )) {
   if (-not $web.Contains($required)) { throw "Performance saved-report preferences missing: $required" }
