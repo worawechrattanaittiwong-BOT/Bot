@@ -331,7 +331,6 @@ ulong  g_lastMarketTickMs = 0;
 ulong  g_lastCloudLiveExecutionSnapshotMs = 0;
 ulong  g_lastTimerEventTickMs = 0;
 ulong  g_timerArmedAtTickMs = 0;
-ulong  g_cloudSymbolResolveUntilMs = 0;
 datetime g_lastSuccessfulHeartbeat = 0;
 datetime g_lastRunAuthorization = 0;
 datetime g_lastServerContactAt = 0;
@@ -1541,208 +1540,39 @@ bool PublishEaAttachMarker()
    return true;
 }
 
-string CloudCanonicalStartupSymbol(string requested)
-{
-   string upper=requested;
-   StringToUpper(upper);
-
-   if(StringFind(upper,"XAUUSD")==0)
-      return "XAUUSD";
-
-   if(StringFind(upper,"BTCUSD")==0 || StringFind(upper,"XBTUSD")==0)
-      return "BTCUSD";
-
-   return requested;
-}
-
-bool CloudStartupFamilyMatch(const string candidate,const string canonical)
-{
-   string candidateUpper=candidate;
-   string canonicalUpper=canonical;
-   StringToUpper(candidateUpper);
-   StringToUpper(canonicalUpper);
-
-   if(canonicalUpper=="XAUUSD")
-      return StringFind(candidateUpper,"XAUUSD")==0;
-
-   if(canonicalUpper=="BTCUSD")
-      return StringFind(candidateUpper,"BTCUSD")==0 ||
-             StringFind(candidateUpper,"XBTUSD")==0;
-
-   return candidateUpper==canonicalUpper;
-}
-
-string CloudStartupSymbolAccountType(const string requested)
-{
-   string upper=requested;
-   StringToUpper(upper);
-
-   if(upper=="XAUUSC" || upper=="BTCUSC" || upper=="XBTUSC")
-      return "USD_CENT";
-
-   string root="";
-   if(StringFind(upper,"XAUUSD")==0)
-      root="XAUUSD";
-   else if(StringFind(upper,"BTCUSD")==0)
-      root="BTCUSD";
-   else if(StringFind(upper,"XBTUSD")==0)
-      root="XBTUSD";
-   else
-      return "";
-
-   string suffix=StringSubstr(upper,StringLen(root));
-   StringReplace(suffix,".","");
-   StringReplace(suffix,"_","");
-   StringReplace(suffix,"-","");
-   StringReplace(suffix,"#","");
-
-   if(suffix=="" || suffix=="M")
-      return "USD";
-   if(suffix=="C" || suffix=="CENT")
-      return "USD_CENT";
-
-   // Broker-native suffixes outside the standard/Cent profile remain exact.
-   return "EXACT";
-}
-
-bool CloudStartupAccountTypeMatch(
-   const string candidate,
-   const string canonical,
-   const string accountType)
-{
-   string candidateUpper=candidate;
-   string canonicalUpper=canonical;
-   StringToUpper(candidateUpper);
-   StringToUpper(canonicalUpper);
-
-   if(accountType=="USD_CENT" && canonicalUpper=="XAUUSD" && candidateUpper=="XAUUSC")
-      return true;
-   if(accountType=="USD_CENT" && canonicalUpper=="BTCUSD" &&
-      (candidateUpper=="BTCUSC" || candidateUpper=="XBTUSC"))
-      return true;
-
-   string candidateRoot=canonicalUpper;
-   if(canonicalUpper=="BTCUSD" && StringFind(candidateUpper,"XBTUSD")==0)
-      candidateRoot="XBTUSD";
-   else if(StringFind(candidateUpper,canonicalUpper)!=0)
-      return false;
-
-   string suffix=StringSubstr(candidateUpper,StringLen(candidateRoot));
-   StringReplace(suffix,".","");
-   StringReplace(suffix,"_","");
-   StringReplace(suffix,"-","");
-   StringReplace(suffix,"#","");
-
-   if(accountType=="USD")
-      return suffix=="" || suffix=="M";
-   if(accountType=="USD_CENT")
-      return suffix=="C" || suffix=="CENT";
-
-   return false;
-}
-
-string ResolveCloudStartupSymbol(const string requested)
-{
-   string canonical=CloudCanonicalStartupSymbol(requested);
-   string canonicalUpper=canonical;
-   string requestedUpper=requested;
-   StringToUpper(canonicalUpper);
-   StringToUpper(requestedUpper);
-
-   string accountType=CloudStartupSymbolAccountType(requested);
-   if(accountType=="EXACT")
-      return requested;
-
-   string best="";
-   int bestScore=-1000000;
-   int total=SymbolsTotal(false);
-
-   for(int i=0;i<total;i++)
-   {
-      string candidate=SymbolName(i,false);
-      if(StringLen(candidate)<=0)
-         continue;
-
-      bool matches=StringLen(accountType)>0
-         ? CloudStartupAccountTypeMatch(candidate,canonical,accountType)
-         : CloudStartupFamilyMatch(candidate,canonical);
-      if(!matches)
-         continue;
-
-      long tradeMode=SymbolInfoInteger(candidate,SYMBOL_TRADE_MODE);
-      if(tradeMode==SYMBOL_TRADE_MODE_DISABLED ||
-         tradeMode==SYMBOL_TRADE_MODE_CLOSEONLY)
-         continue;
-
-      string candidateUpper=candidate;
-      StringToUpper(candidateUpper);
-
-      int score=0;
-      if(candidateUpper==requestedUpper)
-         score+=20000;
-      if(candidateUpper==canonicalUpper)
-         score+=10000;
-
-      if((bool)SymbolInfoInteger(candidate,SYMBOL_SELECT))
-         score+=1000;
-
-      if(tradeMode==SYMBOL_TRADE_MODE_FULL)
-         score+=200;
-      else
-         score+=100;
-
-      int suffixLength=StringLen(candidate)-StringLen(canonical);
-      if(suffixLength>0)
-         score-=suffixLength;
-
-      if(score>bestScore)
-      {
-         bestScore=score;
-         best=candidate;
-      }
-   }
-
-   return StringLen(best)>0 ? best : requested;
-}
-
-bool SwitchCloudChartToAccountSymbol()
+bool SwitchCloudChartToExactStartupSymbol()
 {
    if(!InpCloudRelay)
       return false;
 
-   // Worker 2.2.25+ passes the canonical Web symbol explicitly. Older Workers
-   // can still receive EA 1.0.97 through Fleet Update, so fall back to the
-   // bootstrap chart family and resolve its account-specific suffix locally.
    string requested=InpStartupSymbol;
    if(StringLen(requested)<=0)
-      requested=_Symbol;
-   if(StringLen(requested)<=0)
       return false;
 
-   string resolved=ResolveCloudStartupSymbol(requested);
-   if(StringLen(resolved)<=0 || StringCompare(resolved,_Symbol,false)==0)
+   // The Web/API already validated this exact broker-native symbol against the
+   // connected MT5 account. Never add/remove suffixes and never substitute a
+   // sibling symbol such as XAUUSD/XAUUSDm/XAUUSDc.
+   if(StringCompare(requested,_Symbol,false)==0)
       return false;
 
-   if(!SymbolSelect(resolved,true))
+   if(!SymbolSelect(requested,true))
    {
-      Print("SCENOVA CLOUD SYMBOL: cannot select ",resolved,
-            " requested=",requested,
+      Print("SCENOVA CLOUD SYMBOL: exact symbol unavailable requested=",requested,
             " current=",_Symbol);
       return false;
    }
 
    ResetLastError();
-   if(!ChartSetSymbolPeriod(0,resolved,PERIOD_M5))
+   if(!ChartSetSymbolPeriod(0,requested,PERIOD_M5))
    {
-      Print("SCENOVA CLOUD SYMBOL: chart switch failed ",
-            _Symbol," -> ",resolved,
+      Print("SCENOVA CLOUD SYMBOL: exact chart switch failed ",
+            _Symbol," -> ",requested,
             " error=",GetLastError());
       return false;
    }
 
-   Print("SCENOVA CLOUD SYMBOL: account symbol resolved ",
-         _Symbol," -> ",resolved,
-         " requested=",requested);
+   Print("SCENOVA CLOUD SYMBOL: exact symbol selected ",
+         _Symbol," -> ",requested);
    return true;
 }
 
@@ -1764,14 +1594,26 @@ int OnInit()
          return(INIT_PARAMETERS_INCORRECT);
       }
 
-      // A Cloud account switch can change the broker-native symbol suffix.
-      // Resolve the actual tradable symbol from the newly logged-in MT5 account
-      // before declaring the EA attached, so an old XAUUSDm/XAUUSDc suffix never
-      // leaks across accounts. Keep a short retry window because MT5 may finish
-      // loading the new broker's symbol catalog after the first OnInit pass.
-      g_cloudSymbolResolveUntilMs=GetTickCount64()+30000;
-      if(SwitchCloudChartToAccountSymbol())
-         return(INIT_SUCCEEDED);
+      // Cloud Symbol is customer-confirmed and broker-native. The EA must
+      // run on that exact chart only; it is never allowed to guess a sibling
+      // suffix or continue on a different symbol.
+      if(StringLen(InpStartupSymbol)<=0)
+      {
+         Print("SCENOVA CONFIG ERROR: exact startup symbol is missing.");
+         RenderChartStatus("SYMBOL REQUIRED", clrTomato, "Confirm XAU Symbol on SCENOVA");
+         return(INIT_PARAMETERS_INCORRECT);
+      }
+
+      if(StringCompare(InpStartupSymbol,_Symbol,false)!=0)
+      {
+         if(SwitchCloudChartToExactStartupSymbol())
+            return(INIT_SUCCEEDED);
+
+         Print("SCENOVA CONFIG ERROR: exact startup symbol unavailable. requested=",
+               InpStartupSymbol," current=",_Symbol);
+         RenderChartStatus("SYMBOL MISMATCH", clrTomato, InpStartupSymbol);
+         return(INIT_FAILED);
+      }
 
       // Do not publish the Worker-ready marker yet. A chart can load the
       // EA far enough to reach this point and still fail later in OnInit before
@@ -6645,12 +6487,6 @@ bool SendFlatHeartbeatIfDue()
 void OnTimer()
 {
    g_lastTimerEventTickMs=GetTickCount64();
-
-   if(InpCloudRelay &&
-      g_cloudSymbolResolveUntilMs>0 &&
-      g_lastTimerEventTickMs<=g_cloudSymbolResolveUntilMs &&
-      SwitchCloudChartToAccountSymbol())
-      return;
 
    // A flat/STOPPED Cloud runtime has no exposure to protect. Give a due
    // heartbeat the whole timer pass before indicators/chart/profit work so a
