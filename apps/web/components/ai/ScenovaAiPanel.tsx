@@ -173,7 +173,7 @@ export function ScenovaAiPanel({
           <div className={styles.welcomeRow}>
             <img
               className={styles.aiAvatar}
-              src="/assets/scenova-ai-operator-v1.png"
+              src="/assets/scenova-brand-logo-v1.png"
               alt="SCENOVA AI"
             />
             <div className={styles.welcome}>
@@ -192,7 +192,7 @@ export function ScenovaAiPanel({
             <div key={index} className={styles.aiRow}>
               <img
                 className={styles.aiAvatar}
-                src="/assets/scenova-ai-operator-v1.png"
+                src="/assets/scenova-brand-logo-v1.png"
                 alt=""
                 aria-hidden="true"
               />
@@ -217,7 +217,7 @@ export function ScenovaAiPanel({
           <div className={styles.aiRow}>
             <img
               className={styles.aiAvatar}
-              src="/assets/scenova-ai-operator-v1.png"
+              src="/assets/scenova-brand-logo-v1.png"
               alt=""
               aria-hidden="true"
             />
