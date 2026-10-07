@@ -1424,8 +1424,8 @@ export class AdminController {
       );
       if (!workerOnline) throw new ConflictException("Cloud Worker Offline กรุณาให้ Server กลับมา Online ก่อนเปลี่ยน Symbol");
       const workerVersion = String(worker?.telemetry?.version || "");
-      if (!versionAtLeast(workerVersion, "2.2.35")) {
-        throw new ConflictException("Cloud Worker ยังไม่รองรับ Symbol Discovery รุ่นใหม่ · กรุณาอัปเดต Server เป็น Worker 2.2.35+ ก่อน");
+      if (!versionAtLeast(workerVersion, "2.2.36")) {
+        throw new ConflictException("Cloud Worker ยังไม่รองรับ Symbol Discovery รุ่นใหม่ · กรุณาอัปเดต Server เป็น Worker 2.2.36+ ก่อน");
       }
       const workerInstance = Array.isArray(worker?.telemetry?.instances)
         ? worker.telemetry.instances.find((item:any)=>String(item?.instanceId || "")===String(slot.instance_id))

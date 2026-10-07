@@ -102,7 +102,10 @@ internal static class PayloadInstaller
                             StringComparison.OrdinalIgnoreCase))
                         continue;
 
-                    process.Kill(entireProcessTree: true);
+                    // The updater Setup is launched by this Worker. Killing the
+                    // whole process tree would also kill the Setup that is performing
+                    // the replacement. Stop only the Worker process.
+                    process.Kill(entireProcessTree: false);
                     if (!process.WaitForExit(15_000))
                         throw new InvalidOperationException("Cloud Worker เดิมยังไม่หยุด จึงไม่แทนที่ไฟล์");
                 }

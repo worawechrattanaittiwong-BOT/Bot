@@ -52,8 +52,8 @@ Assert-Contains $controller "'symbolSelectedBy','CUSTOMER'" 'customer is recorde
 Assert-NotContains $controller 'resolveBrokerTradingSymbol' 'API broker suffix guessing'
 Assert-NotContains $controller 'resolveAccountProfileTradingSymbol' 'API account-profile suffix guessing'
 Assert-NotContains $controller 'return root + "m"' 'hard-coded broker suffix fallback'
-Assert-Contains $adminApi '"2.2.35"' 'Admin Cloud exact selection requires discovery-capable Worker'
-Assert-Contains $ownerApi '"2.2.35"' 'Owner Cloud exact selection requires discovery-capable Worker'
+Assert-Contains $adminApi '"2.2.36"' 'Admin Cloud exact selection requires discovery-capable Worker'
+Assert-Contains $ownerApi '"2.2.36"' 'Owner Cloud exact selection requires discovery-capable Worker'
 Assert-NotContains $eaApi 'AUTO_DISCOVER_CLOUD_SYMBOL' 'EA heartbeat must never auto-select a Symbol for the customer'
 Assert-NotContains $eaApi 'ACCOUNT_PROFILE' 'EA heartbeat must not repair guessed Symbol profiles'
 
@@ -84,9 +84,9 @@ Assert-Contains $symbolProbe 'SYMBOL_VOLUME_MIN' 'Probe verifies the broker expo
 Assert-Contains $dashboard 'เปิดกราฟ M5 ได้และอนุญาตเทรด' 'Web explains that only usable/tradable XAU symbols are shown'
 
 # Release and self-test must carry the new protocol.
-Assert-Contains $workerLoop 'Version = "2.2.35"' 'Worker version bumped for Symbol discovery protocol'
-Assert-Contains $cloudRelease 'workerVersion: "2.2.35"' 'Server publishes discovery-capable Worker'
-Assert-Contains $cloudRelease 'setupVersion: "0.6.24"' 'Cloud Setup bumped with the new Worker'
+Assert-Contains $workerLoop 'Version = "2.2.36"' 'Worker version bumped for Symbol discovery protocol'
+Assert-Contains $cloudRelease 'workerVersion: "2.2.36"' 'Server publishes discovery-capable Worker'
+Assert-Contains $cloudRelease 'setupVersion: "0.6.25"' 'Cloud Setup bumped with the new Worker'
 Assert-Contains $selfTest 'new Cloud account must enter symbol discovery without a guessed symbol' 'self-test covers no-guess discovery'
 Assert-Contains $selfTest 'customer-confirmed exact symbol must be preserved byte-for-byte' 'self-test covers exact Symbol authority'
 
