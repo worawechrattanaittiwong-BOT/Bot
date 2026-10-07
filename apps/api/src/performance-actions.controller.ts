@@ -26,7 +26,7 @@ type BasketRow = {
   entry_trigger?: string | null;
 };
 
-const SHARE_STRATEGY_MODES = ["AUTO","RACE","FLIP_LOCK","MANUAL","ZERO_GRID"];
+const SHARE_STRATEGY_MODES = ["AUTO","RACE","COUNTER","FLIP_LOCK","MANUAL","ZERO_GRID"];
 
 function normalizeShareStrategyModes(value: unknown) {
   const source = Array.isArray(value)

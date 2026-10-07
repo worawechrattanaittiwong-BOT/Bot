@@ -9,13 +9,17 @@ import { useSystemPopup } from "../../components/SystemPopupProvider";
 import styles from "./performance.module.css";
 
 type Mode = "LIVE" | "BACKTEST";
-type StrategyMode = "AUTO" | "RACE" | "FLIP_LOCK" | "MANUAL" | "ZERO_GRID";
-const STRATEGY_OPTIONS:StrategyMode[]=["AUTO","RACE","FLIP_LOCK","MANUAL","ZERO_GRID"];
-const PERFORMANCE_PREFS_KEY="scenova.performance.preferences.v1";
+type StrategyMode = "AUTO" | "RACE" | "COUNTER" | "FLIP_LOCK" | "MANUAL" | "ZERO_GRID";
+type DateSelectionMode = "SINGLE" | "CUSTOM";
+const STRATEGY_OPTIONS:StrategyMode[]=["AUTO","RACE","COUNTER","FLIP_LOCK","MANUAL","ZERO_GRID"];
+const LEGACY_STRATEGY_OPTIONS:StrategyMode[]=["AUTO","RACE","FLIP_LOCK","MANUAL","ZERO_GRID"];
+const PERFORMANCE_PREFS_KEY="scenova.performance.preferences.v2";
+const LEGACY_PERFORMANCE_PREFS_KEY="scenova.performance.preferences.v1";
 
 type PerformancePreferences = {
   accountId:string;
   mode:Mode;
+  dateSelectionMode:DateSelectionMode;
   selectedStrategies:StrategyMode[];
   from:string;
   to:string;
@@ -25,20 +29,37 @@ function performancePreferencesKey(userId:string) {
   return PERFORMANCE_PREFS_KEY+":"+String(userId||"guest");
 }
 
+function legacyPerformancePreferencesKey(userId:string) {
+  return LEGACY_PERFORMANCE_PREFS_KEY+":"+String(userId||"guest");
+}
+
 function readPerformancePreferences(userId:string):PerformancePreferences|null {
   try {
-    const raw=window.localStorage.getItem(performancePreferencesKey(userId));
+    const currentRaw=window.localStorage.getItem(performancePreferencesKey(userId));
+    const legacyRaw=currentRaw?null:window.localStorage.getItem(legacyPerformancePreferencesKey(userId));
+    const raw=currentRaw||legacyRaw;
     if(!raw) return null;
     const parsed=JSON.parse(raw);
-    const savedStrategies=Array.isArray(parsed?.selectedStrategies)
-      ? STRATEGY_OPTIONS.filter((item)=>parsed.selectedStrategies.includes(item))
+    const rawSavedStrategies=Array.isArray(parsed?.selectedStrategies)
+      ? parsed.selectedStrategies.map((item:any)=>String(item||"").toUpperCase())
       : [];
+    let savedStrategies=STRATEGY_OPTIONS.filter((item)=>rawSavedStrategies.includes(item));
+    const legacyAllSelected=Boolean(
+      legacyRaw &&
+      LEGACY_STRATEGY_OPTIONS.every((item)=>rawSavedStrategies.includes(item))
+    );
+    if(legacyAllSelected) savedStrategies=[...STRATEGY_OPTIONS];
     const savedMode:Mode=parsed?.mode==="BACKTEST"?"BACKTEST":"LIVE";
     const savedFrom=/^\d{4}-\d{2}-\d{2}$/.test(String(parsed?.from||""))?String(parsed.from):"";
     const savedTo=/^\d{4}-\d{2}-\d{2}$/.test(String(parsed?.to||""))?String(parsed.to):"";
+    const dateSelectionMode:DateSelectionMode=
+      parsed?.dateSelectionMode==="CUSTOM" || (savedFrom&&savedTo&&savedFrom!==savedTo)
+        ? "CUSTOM"
+        : "SINGLE";
     return {
       accountId:String(parsed?.accountId||""),
       mode:savedMode,
+      dateSelectionMode,
       selectedStrategies:savedStrategies.length?savedStrategies:[...STRATEGY_OPTIONS],
       from:savedFrom,
       to:savedTo
@@ -60,6 +81,15 @@ function dateInput(value: Date | string) {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone:"Asia/Bangkok", year:"numeric", month:"2-digit", day:"2-digit"
   }).format(date);
+}
+
+function bangkokDateTime(value: Date | string) {
+  const date=value instanceof Date?value:new Date(value);
+  if(!Number.isFinite(date.getTime())) return "";
+  return new Intl.DateTimeFormat("en-GB",{
+    timeZone:"Asia/Bangkok",year:"numeric",month:"2-digit",day:"2-digit",
+    hour:"2-digit",minute:"2-digit",hour12:false
+  }).format(date).replace(",","")+" น.";
 }
 
 function accountCurrentScore(account:any) {
@@ -163,6 +193,7 @@ function strategyLabel(value:StrategyMode|string) {
   const labels:Record<string,string>={
     AUTO:"AUTO",
     RACE:"RACE",
+    COUNTER:"COUNTER",
     FLIP_LOCK:"FLIP LOCK",
     MANUAL:"MANUAL",
     ZERO_GRID:"GRID"
@@ -172,7 +203,7 @@ function strategyLabel(value:StrategyMode|string) {
 
 function strategyPortfolioLabel(values:Array<StrategyMode|string>) {
   const normalized=(values||[]).map((value)=>String(value).toUpperCase());
-  if(normalized.length===5) return "All Strategies · 5 Selected";
+  if(normalized.length===STRATEGY_OPTIONS.length) return `All Strategies · ${STRATEGY_OPTIONS.length} Selected`;
   if(normalized.length===1) return strategyLabel(normalized[0])+" · Single Strategy";
   return normalized.length+" Strategies · "+normalized.map(strategyLabel).join(" + ");
 }
@@ -336,6 +367,7 @@ export default function PerformanceDashboardPage() {
   const [accountId,setAccountId]=useState("");
   const [mode,setMode]=useState<Mode>("LIVE");
   const [selectedStrategies,setSelectedStrategies]=useState<StrategyMode[]>([...STRATEGY_OPTIONS]);
+  const [dateSelectionMode,setDateSelectionMode]=useState<DateSelectionMode>("SINGLE");
   const [from,setFrom]=useState(today);
   const [to,setTo]=useState(today);
   const [report,setReport]=useState<any>(null);
@@ -394,9 +426,10 @@ export default function PerformanceDashboardPage() {
       if(saved){
         setMode(saved.mode);
         setSelectedStrategies(saved.selectedStrategies);
+        setDateSelectionMode(saved.dateSelectionMode);
         if(saved.from&&saved.to&&saved.from<=saved.to){
           setFrom(saved.from);
-          setTo(saved.to);
+          setTo(saved.dateSelectionMode==="SINGLE"?saved.from:saved.to);
         }
       }
       setAccountId(preferred?.id||"");
@@ -406,7 +439,7 @@ export default function PerformanceDashboardPage() {
   }
 
   async function refresh(nextAccountId=accountId,nextMode=mode,silent=false){
-    if(!nextAccountId) return;
+    if(!nextAccountId||!from||!to||from>to) return;
     const requestId=++refreshSequence.current;
     if(!silent) setLoading(true);
     try{
@@ -451,7 +484,7 @@ export default function PerformanceDashboardPage() {
       setAccountId(currentAccounts[0]?.id||"");
       return;
     }
-    if(accountId){setShareResult(null);void refresh(accountId,mode);}
+    if(accountId&&from&&to&&from<=to){setShareResult(null);void refresh(accountId,mode);}
   },[accountId,mode,selectedStrategies,from,to,currentAccounts]);
 
   useEffect(()=>{
@@ -492,8 +525,30 @@ export default function PerformanceDashboardPage() {
     else setSelectedStrategies(["ZERO_GRID"]);
   }
 
+  function selectDateMode(nextMode:DateSelectionMode){
+    setDateSelectionMode(nextMode);
+    if(nextMode==="SINGLE"){
+      const selected=to||from||today;
+      setFrom(selected);
+      setTo(selected);
+    }
+  }
+
+  function selectSingleDate(value:string){
+    if(!value) return;
+    setFrom(value);
+    setTo(value);
+  }
+
   function applyDays(days:number){
+    if(days<=1){
+      setDateSelectionMode("SINGLE");
+      setFrom(today);
+      setTo(today);
+      return;
+    }
     const range=rangeFromDays(to||today,days);
+    setDateSelectionMode("CUSTOM");
     setFrom(range.from);setTo(range.to);
   }
 
@@ -503,6 +558,7 @@ export default function PerformanceDashboardPage() {
     const preferences:PerformancePreferences={
       accountId,
       mode,
+      dateSelectionMode,
       selectedStrategies,
       from,
       to
@@ -701,6 +757,14 @@ export default function PerformanceDashboardPage() {
   const displayFrom=mode==="BACKTEST"&&backtest?.started_at?dateInput(backtest.started_at):liveDisplayFrom;
   const displayTo=mode==="BACKTEST"&&backtest?.ended_at?dateInput(backtest.ended_at):to;
   const rangeDays=inclusiveDays(displayFrom,displayTo);
+  const liveEffectiveFromMs=mode==="LIVE"&&report?.range?.effectiveFrom?new Date(report.range.effectiveFrom).getTime():0;
+  const liveRequestedFromMs=mode==="LIVE"&&report?.range?.from?new Date(report.range.from).getTime():0;
+  const rangeClippedByReset=Boolean(
+    mode==="LIVE" && report?.range?.resetAt &&
+    Number.isFinite(liveEffectiveFromMs) && Number.isFinite(liveRequestedFromMs) &&
+    liveEffectiveFromMs>liveRequestedFromMs+1000
+  );
+  const actualFromLabel=rangeClippedByReset?bangkokDateTime(report.range.effectiveFrom):displayFrom;
 
   return (
     <div className={styles.shell}>
@@ -794,13 +858,28 @@ export default function PerformanceDashboardPage() {
                 </div>
               </div>
 
-              <div className={styles.datePair}>
-                <label><span>Start Date</span><input type="date" value={from} onChange={(e)=>setFrom(e.target.value)}/></label>
-                <label><span>End Date</span><input type="date" value={to} onChange={(e)=>setTo(e.target.value)}/></label>
+              <div className={styles.dateModeField}>
+                <span className={styles.drawerLabel}>ช่วงวันที่</span>
+                <div className={styles.dateModeToggle}>
+                  <button type="button" aria-pressed={dateSelectionMode==="SINGLE"} className={dateSelectionMode==="SINGLE"?styles.dateModeButtonActive:styles.dateModeButton} onClick={()=>selectDateMode("SINGLE")}>วันเดียว</button>
+                  <button type="button" aria-pressed={dateSelectionMode==="CUSTOM"} className={dateSelectionMode==="CUSTOM"?styles.dateModeButtonActive:styles.dateModeButton} onClick={()=>selectDateMode("CUSTOM")}>กำหนดเอง</button>
+                </div>
               </div>
 
+              {dateSelectionMode==="SINGLE"?(
+                <div className={styles.dateSingle}>
+                  <label><span>วันที่</span><input type="date" value={from} onChange={(e)=>selectSingleDate(e.target.value)}/></label>
+                </div>
+              ):(
+                <div className={styles.datePair}>
+                  <label><span>วันที่เริ่มต้น</span><input type="date" value={from} onChange={(e)=>setFrom(e.target.value)}/></label>
+                  <label><span>วันที่สิ้นสุด</span><input type="date" value={to} onChange={(e)=>setTo(e.target.value)}/></label>
+                </div>
+              )}
+              {from&&to&&from>to?<div className={styles.dateRangeError}>วันที่เริ่มต้นต้องไม่เกินวันที่สิ้นสุด</div>:null}
+
               <div className={styles.drawerActionRow}>
-                <button className={styles.refreshButton} onClick={()=>refresh()} disabled={loading||!accountId}>
+                <button className={styles.refreshButton} onClick={()=>refresh()} disabled={loading||!accountId||!from||!to||from>to}>
                   <ScenovaIcon name="refresh" size={15}/>{loading?"กำลังโหลด...":"Refresh Report"}
                 </button>
                 <button
@@ -844,14 +923,14 @@ export default function PerformanceDashboardPage() {
                   <span>Portfolio Presets</span>
                   <button type="button" onClick={()=>selectStrategyPortfolio("ALL")}>All Strategies</button>
                   <button type="button" onClick={()=>selectStrategyPortfolio("CORE")}>Core 4</button>
-                  <button type="button" onClick={()=>selectStrategyPortfolio("GRID")}>Grid Only</button>
+                  <button type="button" onClick={()=>selectStrategyPortfolio("GRID")}>ZERO GRID Only</button>
                 </div>
               </div>
             ):null}
 
             <div className={styles.drawerFooter}>
               <div className={styles.presets}><button onClick={()=>applyDays(1)}>วันนี้</button><button onClick={()=>applyDays(7)}>7 วัน</button><button onClick={()=>applyDays(30)}>30 วัน</button><button onClick={()=>applyDays(90)}>90 วัน</button></div>
-              <strong>{rangeDays} วัน · {from} → {to} · {mode==="LIVE"?strategyPortfolioLabel(selectedStrategies):"BACKTEST"}</strong>
+              <strong>{rangeDays} วัน · {from} → {to} · {mode==="LIVE"?strategyPortfolioLabel(selectedStrategies):"BACKTEST"}{rangeClippedByReset?` · ข้อมูลจริงเริ่ม ${bangkokDateTime(report.range.effectiveFrom)}`:""}</strong>
             </div>
 
             {mode==="BACKTEST"?(
@@ -882,7 +961,7 @@ export default function PerformanceDashboardPage() {
                   <InfoRow icon="control" label="Strategy Portfolio" value={strategyScopeLabel}/>
                 </div>
                 <div className={styles.infoCol}>
-                  <InfoRow icon="clock" label="From" value={displayFrom}/>
+                  <InfoRow icon="clock" label={rangeClippedByReset?"ข้อมูลจริงเริ่ม":"From"} value={actualFromLabel}/>
                   <InfoRow icon="stop" label="To" value={displayTo}/>
                   <InfoRow icon="hourglass" label="Period" value={rangeDays+" วัน"}/>
                 </div>

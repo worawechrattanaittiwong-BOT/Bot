@@ -73,7 +73,7 @@ export class PerformanceAnalyticsController {
   }
 
   private strategyModes(value = "ALL") {
-    const allowed = ["AUTO", "RACE", "FLIP_LOCK", "MANUAL", "ZERO_GRID"];
+    const allowed = ["AUTO", "RACE", "COUNTER", "FLIP_LOCK", "MANUAL", "ZERO_GRID"];
     const requested = String(value || "ALL")
       .split(",")
       .map((item) => item.trim().toUpperCase())
@@ -557,7 +557,7 @@ export class PerformanceAnalyticsController {
       ? "MT5_BROKER_DAY"
       : "BANGKOK_LEGACY";
     const reportedTodayClosed = Number(metrics.botTodayClosedProfit);
-    const allStrategiesSelected = selectedStrategyModes.length === 5;
+    const allStrategiesSelected = selectedStrategyModes.length === 6;
     const canReconcileToday =
       allStrategiesSelected &&
       freshHeartbeat &&
@@ -899,7 +899,7 @@ export class PerformanceAnalyticsController {
     computed.summary.ahpr = ahpr === null ? null : Number(ahpr.toFixed(6));
     computed.summary.ghpr = ghpr === null ? null : Number(ghpr.toFixed(6));
 
-    const modeBreakdown = ["AUTO", "RACE", "FLIP_LOCK", "MANUAL", "ZERO_GRID"].map((mode) => {
+    const modeBreakdown = ["AUTO", "RACE", "COUNTER", "FLIP_LOCK", "MANUAL", "ZERO_GRID"].map((mode) => {
       const rows = rangeBasketsAllModes.filter(
         (row) => String(row.controlMode || "AUTO").toUpperCase() === mode
       );
@@ -976,7 +976,7 @@ export class PerformanceAnalyticsController {
       },
       filter: {
         strategyModes: selectedStrategyModes,
-        scope: selectedStrategyModes.length === 5 ? "ALL_STRATEGIES" : "CUSTOM_PORTFOLIO"
+        scope: selectedStrategyModes.length === 6 ? "ALL_STRATEGIES" : "CUSTOM_PORTFOLIO"
       },
       account: {
         id: account.id,

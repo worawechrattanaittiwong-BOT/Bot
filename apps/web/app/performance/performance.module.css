@@ -12,6 +12,14 @@
 .drawerControls label{display:flex;flex-direction:column;gap:5px}.drawerControls label span{font-size:var(--ui-type-meta);color:#8a97b0;text-transform:uppercase;letter-spacing:.07em}
 .drawerControls select,.drawerControls input{height:38px;border:1px solid #28364f;border-radius:8px;background:#070d17;color:#eef2ff;padding:0 10px;outline:none;font-size:11px}
 .drawerFooter{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:9px;padding-top:9px;border-top:1px solid #172134}.drawerFooter>strong{font-size:var(--ui-type-meta);color:#b0a2d2;white-space:nowrap}
+.dateModeField{display:flex;flex-direction:column;gap:6px}
+.dateModeToggle{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.dateModeButton,.dateModeButtonActive{height:34px;border-radius:8px;font-size:var(--ui-type-meta);font-weight:850;cursor:pointer}
+.dateModeButton{border:1px solid #293149;background:#090f1a;color:#8792aa}
+.dateModeButtonActive{border:1px solid #745ae2;background:linear-gradient(135deg,rgba(92,68,208,.42),rgba(54,40,121,.34));color:#f2efff}
+.dateSingle{display:grid;grid-template-columns:1fr;gap:6px}
+.datePair{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.dateRangeError{font-size:var(--ui-type-caption);color:#ff9eab;border:1px solid rgba(181,68,86,.35);background:rgba(92,28,42,.22);border-radius:7px;padding:6px 8px}
 .drawerBacktest{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:8px;padding-top:8px;border-top:1px solid #172134}.drawerBacktest>div{display:flex;align-items:center;gap:8px;color:#9c87ff}.drawerBacktest span{display:flex;flex-direction:column}.drawerBacktest b{font-size:var(--ui-type-meta);color:#eef1ff}.drawerBacktest small{font-size:var(--ui-type-caption);color:#8491aa}.drawerBacktest select{min-width:300px;height:30px;border:1px solid #4b3b80;border-radius:7px;background:#090f1a;color:#fff;padding:0 8px;font-size:var(--ui-type-meta)}
 .controlCard,.backtestBar{display:none!important}
 .summaryTitle{padding-right:110px;padding-left:110px}
@@ -262,7 +270,6 @@
   .modeBox b,.modeBoxActive b{font-size:var(--ui-type-meta)}
   .modeBox small,.modeBoxActive small{font-size:var(--ui-type-caption);color:#78849e;margin-top:1px}
   .modeBoxActive small{color:#aaa0d4}
-  .datePair{display:grid;grid-template-columns:1fr 1fr;gap:6px}
   .refreshButton{width:100%;height:37px}
   .strategyPortfolio{
     margin-top:9px;

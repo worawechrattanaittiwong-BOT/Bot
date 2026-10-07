@@ -55,6 +55,8 @@ jobs:
       - name: Performance Basket consistency contract
         shell: pwsh
         run: ./tests/performance-basket-consistency-contract.ps1
+      - name: Performance date and six-strategy contract
+        run: node ./tests/performance-date-strategy-contract.mjs
       - name: Unified role sidebar and customer performance contract
         shell: pwsh
         run: ./tests/unified-role-sidebar-contract.ps1

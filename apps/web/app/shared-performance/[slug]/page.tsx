@@ -6,8 +6,9 @@ import { api } from "../../../lib/api";
 import { ScenovaIcon } from "../../../components/ScenovaIcon";
 import styles from "../../performance/performance.module.css";
 
-type StrategyMode = "AUTO" | "RACE" | "FLIP_LOCK" | "MANUAL" | "ZERO_GRID";
-const STRATEGY_OPTIONS:StrategyMode[]=["AUTO","RACE","FLIP_LOCK","MANUAL","ZERO_GRID"];
+type StrategyMode = "AUTO" | "RACE" | "COUNTER" | "FLIP_LOCK" | "MANUAL" | "ZERO_GRID";
+type DateSelectionMode = "SINGLE" | "CUSTOM";
+const STRATEGY_OPTIONS:StrategyMode[]=["AUTO","RACE","COUNTER","FLIP_LOCK","MANUAL","ZERO_GRID"];
 
 function dateInput(value:any) {
   const date=value?new Date(value):null;
@@ -81,6 +82,7 @@ function strategyLabel(value:StrategyMode|string) {
   const labels:Record<string,string>={
     AUTO:"AUTO",
     RACE:"RACE",
+    COUNTER:"COUNTER",
     FLIP_LOCK:"FLIP LOCK",
     MANUAL:"MANUAL",
     ZERO_GRID:"GRID"
@@ -90,7 +92,7 @@ function strategyLabel(value:StrategyMode|string) {
 
 function strategyPortfolioLabel(values:Array<StrategyMode|string>) {
   const normalized=(values||[]).map((value)=>String(value).toUpperCase());
-  if(normalized.length===5) return "All Strategies · 5 Selected";
+  if(normalized.length===STRATEGY_OPTIONS.length) return `All Strategies · ${STRATEGY_OPTIONS.length} Selected`;
   if(normalized.length===1) return strategyLabel(normalized[0])+" · Single Strategy";
   return normalized.length+" Strategies · "+normalized.map(strategyLabel).join(" + ");
 }
@@ -296,10 +298,12 @@ export default function SharedPerformancePage() {
   const [loading,setLoading]=useState(true);
   const [from,setFrom]=useState("");
   const [to,setTo]=useState("");
+  const [dateSelectionMode,setDateSelectionMode]=useState<DateSelectionMode>("SINGLE");
   const [controlsOpen,setControlsOpen]=useState(false);
 
   async function load(nextFrom?:string,nextTo?:string,initialize=false) {
     if(!slug) return;
+    if(nextFrom&&nextTo&&nextFrom>nextTo) return;
     setLoading(true);
     try{
       const query=nextFrom&&nextTo?"?from="+encodeURIComponent(nextFrom)+"&to="+encodeURIComponent(nextTo):"";
@@ -307,8 +311,11 @@ export default function SharedPerformancePage() {
       setData(next);
       const range=next?.snapshot?.range||next?.defaultRange||{};
       if(initialize||!from||!to){
-        setFrom(dateInput(range.from));
-        setTo(dateInput(range.to));
+        const rangeFrom=dateInput(range.from);
+        const rangeTo=dateInput(range.to);
+        setFrom(rangeFrom);
+        setTo(rangeTo);
+        setDateSelectionMode(rangeFrom&&rangeTo&&rangeFrom!==rangeTo?"CUSTOM":"SINGLE");
       }
       setError("");
     }catch(e:any){
@@ -320,8 +327,31 @@ export default function SharedPerformancePage() {
 
   useEffect(()=>{void load(undefined,undefined,true);},[slug]);
 
+  function selectDateMode(nextMode:DateSelectionMode){
+    setDateSelectionMode(nextMode);
+    if(nextMode==="SINGLE"){
+      const selected=to||from||dateInput(new Date());
+      setFrom(selected);setTo(selected);
+      void load(selected,selected);
+    }
+  }
+
+  function selectSingleDate(value:string){
+    if(!value) return;
+    setFrom(value);setTo(value);
+    void load(value,value);
+  }
+
   function applyDays(days:number){
+    if(days<=1){
+      const today=dateInput(new Date());
+      setDateSelectionMode("SINGLE");
+      setFrom(today);setTo(today);
+      void load(today,today);
+      return;
+    }
     const range=rangeFromDays(to||dateInput(new Date()),days);
+    setDateSelectionMode("CUSTOM");
     setFrom(range.from);setTo(range.to);
     void load(range.from,range.to);
   }
@@ -391,9 +421,23 @@ export default function SharedPerformancePage() {
             <div className={styles.drawerControls}>
               <label><span>Trading Account</span><input value={String(account.accountNumber||"—")} readOnly/></label>
               <label><span>Report Source</span><input value="Live Performance" readOnly/></label>
-              <label><span>Start Date</span><input type="date" value={from} onChange={(e)=>setFrom(e.target.value)}/></label>
-              <label><span>End Date</span><input type="date" value={to} onChange={(e)=>setTo(e.target.value)}/></label>
-              <button className={styles.refreshButton} onClick={()=>load(from,to)} disabled={loading||!from||!to}><ScenovaIcon name="refresh" size={15}/>{loading?"กำลังโหลด...":"Refresh Report"}</button>
+              <div className={styles.dateModeField}>
+                <span className={styles.drawerLabel}>ช่วงวันที่</span>
+                <div className={styles.dateModeToggle}>
+                  <button type="button" aria-pressed={dateSelectionMode==="SINGLE"} className={dateSelectionMode==="SINGLE"?styles.dateModeButtonActive:styles.dateModeButton} onClick={()=>selectDateMode("SINGLE")}>วันเดียว</button>
+                  <button type="button" aria-pressed={dateSelectionMode==="CUSTOM"} className={dateSelectionMode==="CUSTOM"?styles.dateModeButtonActive:styles.dateModeButton} onClick={()=>setDateSelectionMode("CUSTOM")}>กำหนดเอง</button>
+                </div>
+              </div>
+              {dateSelectionMode==="SINGLE"?(
+                <div className={styles.dateSingle}><label><span>วันที่</span><input type="date" value={from} onChange={(e)=>selectSingleDate(e.target.value)}/></label></div>
+              ):(
+                <div className={styles.datePair}>
+                  <label><span>วันที่เริ่มต้น</span><input type="date" value={from} onChange={(e)=>setFrom(e.target.value)}/></label>
+                  <label><span>วันที่สิ้นสุด</span><input type="date" value={to} onChange={(e)=>setTo(e.target.value)}/></label>
+                </div>
+              )}
+              {from&&to&&from>to?<div className={styles.dateRangeError}>วันที่เริ่มต้นต้องไม่เกินวันที่สิ้นสุด</div>:null}
+              <button className={styles.refreshButton} onClick={()=>load(from,to)} disabled={loading||!from||!to||from>to}><ScenovaIcon name="refresh" size={15}/>{loading?"กำลังโหลด...":"Refresh Report"}</button>
             </div>
 
             <div className={styles.strategyPortfolio}>
