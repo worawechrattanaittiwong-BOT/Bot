@@ -11,7 +11,8 @@ internal static class Mt5TemplateManager
         return
             File.Exists(Path.Combine(target, "cloud-template.ready")) &&
             File.Exists(Path.Combine(target, "terminal64.exe")) &&
-            File.Exists(Path.Combine(target, "MQL5", "Experts", "FastBasketBot.ex5"));
+            File.Exists(Path.Combine(target, "MQL5", "Experts", "FastBasketBot.ex5")) &&
+            File.Exists(Path.Combine(target, "MQL5", "Experts", "ScenovaSymbolProbe.ex5"));
     }
 
     public static void Prepare(string root, string apiBase, string? explicitSource)
@@ -28,7 +29,12 @@ internal static class Mt5TemplateManager
                 "Experts",
                 "FastBasketBot.ex5");
             PayloadInstaller.ExtractEa(currentEa);
-            Console.WriteLine("MT5 Template พร้อมอยู่แล้ว · รีเฟรช EA จาก Setup รุ่นล่าสุดแล้ว");
+            PayloadInstaller.ExtractSymbolProbe(Path.Combine(
+                target,
+                "MQL5",
+                "Experts",
+                "ScenovaSymbolProbe.ex5"));
+            Console.WriteLine("MT5 Template พร้อมอยู่แล้ว · รีเฟรช EA และ Symbol Probe จาก Setup รุ่นล่าสุดแล้ว");
             return;
         }
 
@@ -60,6 +66,11 @@ internal static class Mt5TemplateManager
 
         var eaTarget = Path.Combine(staging, "MQL5", "Experts", "FastBasketBot.ex5");
         PayloadInstaller.ExtractEa(eaTarget);
+        PayloadInstaller.ExtractSymbolProbe(Path.Combine(
+            staging,
+            "MQL5",
+            "Experts",
+            "ScenovaSymbolProbe.ex5"));
 
         File.WriteAllText(
             Path.Combine(staging, "cloud-template.prepared"),

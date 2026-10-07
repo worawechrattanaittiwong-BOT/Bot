@@ -49,9 +49,6 @@ bool HasUsableM5Series(const string symbol)
    if(copied <= 0)
       return false;
 
-   if(!(bool)SeriesInfoInteger(symbol,PERIOD_M5,SERIES_SYNCHRONIZED))
-      return false;
-
    for(int i=0;i<copied;i++)
    {
       if(rates[i].time > 0 &&

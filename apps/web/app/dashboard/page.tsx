@@ -1549,7 +1549,7 @@ export default function DashboardPage() {
         cloudDiscoveryReady
       ) {
         complete = true;
-        message = "เชื่อม MT5 สำเร็จ · พบ Symbol XAU จริง " + discoveredXauSymbols.length + " รายการ · กรุณาเลือก Symbol ที่ต้องการใช้";
+        message = "เชื่อม MT5 สำเร็จ · พบ Symbol XAU ที่เปิดกราฟ M5 และอนุญาตเทรดได้จริง " + discoveredXauSymbols.length + " รายการ · กรุณาเลือก Symbol ที่ต้องการใช้";
       } else if (accountMatches && runnerReady && mt5Ready) {
         complete = true;
 
@@ -4720,9 +4720,9 @@ export default function DashboardPage() {
                   <p className="cc-symbol-picker-source">
                     {desiredTradingSymbol
                       ? <>Symbol ที่ยืนยันแล้ว: <b>{desiredTradingSymbol}</b>{symbolSelectionPending ? " · กำลังเปิดบน MT5" : activeTradingSymbol ? " · ใช้งานจริงแล้ว" : ""}</>
-                      : <>VPS ตรวจพบ <b>{tradingSymbolOptions.length}</b> Symbol XAU จาก MT5 บัญชีนี้</>}
+                      : <>VPS ตรวจยืนยัน <b>{tradingSymbolOptions.length}</b> Symbol XAU ที่เปิดกราฟ M5 และเทรดได้จาก MT5 บัญชีนี้</>}
                   </p>
-                  <p className="cc-symbol-picker-source">เลือกจากชื่อที่ MT5 ตรวจพบจริงเท่านั้น · ระบบจะไม่เติมหรือลอง suffix ให้อัตโนมัติ</p>
+                  <p className="cc-symbol-picker-source">แสดงเฉพาะ Symbol ที่ MT5 ยืนยันว่าเปิดกราฟ M5 ได้และอนุญาตเทรด · ระบบจะไม่เติมหรือลอง suffix ให้อัตโนมัติ</p>
                   <select
                     autoFocus
                     value={tradingSymbol}
