@@ -1159,6 +1159,12 @@ export default function DashboardPage() {
   };
   const heartbeatAgeSeconds = Math.max(0, Number(data?.instance?.ea_last_seen_age_seconds ?? metrics.heartbeatAgeSeconds ?? 0));
   const isAgentOnline = Boolean(data?.instance?.agent_online || data?.instance?.device_online);
+  const runtimeNodeOnline = isCloudRuntime ? isCloudWorkerOnline : isAgentOnline;
+  const runtimeNodeLabel = isCloudRuntime ? "VPS" : "Agent";
+  const runtimeNodeDetail = isCloudRuntime
+    ? (isCloudWorkerOnline ? "Cloud Worker online" : "Cloud Worker waiting")
+    : (isAgentOnline ? "Windows Agent connected" : "Windows Agent waiting");
+  const systemPulseAllOnline = runtimeNodeOnline && isMt5ConnectionOnline && isMt5Online;
   const isHeartbeatDelayed =
     !isMt5Online &&
     isMt5ConnectionOnline &&
@@ -4760,7 +4766,7 @@ export default function DashboardPage() {
                     <em>Today</em>
                   </div>
                   <div className="cc-v12-mode-table">
-                    <div className="head"><span>โหมด</span><span>Win Rate</span><span>Drawdown</span><span>Activity</span></div>
+                    <div className="head"><span>โหมด</span><span>Win Rate</span><span>Drawdown</span><span>Entries</span></div>
                     {modePerformanceToday.map((row:any)=>{
                       const mode=String(row.mode||"AUTO");
                       const active=mode===activeControlMode;
@@ -4769,7 +4775,7 @@ export default function DashboardPage() {
                       const entries=Number(row.activityEntries ?? row.trades ?? 0);
                       const closedTrades=Number(row.closedTrades??0);
                       return <div key={mode} className={"row "+(active?"active":"")}>
-                        <span className="mode"><i/>{mode}</span>
+                        <span className="mode"><i/>{mode.replaceAll("_"," ")}</span>
                         <span className={closedTrades>0?(win>=60?"good":win>=45?"warn":"bad"):"neutral"}>{closedTrades>0?win.toFixed(1)+"%":"—"}</span>
                         <span className={dd>=5?"bad":dd>=2?"warn":"good"}>{dd.toFixed(2)+"%"}<small>{formatAccountMoney(-Math.abs(Number(row.drawdownMoney||0)),accountCurrency)}</small></span>
                         <span>{entries}<small>{closedTrades>0?closedTrades+" Basket · ":""}{active?(botRunning?"Active":"Selected"):"Inactive"}</small></span>
@@ -4783,7 +4789,7 @@ export default function DashboardPage() {
                         <span><ScenovaIcon name="status" size={16}/></span>
                         <div><b>System Pulse</b><small>สถานะระบบแบบย่อ</small></div>
                       </div>
-                      <em className={isMt5ConnectionOnline?(isMt5Online&&isAgentOnline?"good":"warn"):"warn"}>{isMt5ConnectionOnline?(isMt5Online?"All Online":"MT5 Online"):"Check"}</em>
+                      <em className={systemPulseAllOnline?"good":"warn"}>{systemPulseAllOnline?"All Online":isMt5ConnectionOnline?"MT5 Online":"Check"}</em>
                     </div>
                     <div className="cc-v46-performance-system-grid">
                       <div>
@@ -4792,9 +4798,9 @@ export default function DashboardPage() {
                         <small>Web Dashboard</small>
                       </div>
                       <div>
-                        <span><i className={isAgentOnline?"good":"warn"}/>Agent</span>
-                        <b>{isAgentOnline?"Connected":"Waiting"}</b>
-                        <small>{heartbeatLatencyMs>0?heartbeatLatencyMs.toFixed(0)+" ms":"—"}</small>
+                        <span><i className={runtimeNodeOnline?"good":"warn"}/>{runtimeNodeLabel}</span>
+                        <b>{runtimeNodeOnline?"Connected":"Waiting"}</b>
+                        <small>{runtimeNodeDetail}</small>
                       </div>
                       <div>
                         <span><i className={isMt5ConnectionOnline?"good":"warn"}/>MT5</span>

@@ -12,7 +12,7 @@ import {
 import type { Response } from "express";
 import { DbService } from "./db.service";
 import { JwtGuard } from "./security";
-import { reconstructCompletedJournal, resolveJournalControlMode } from "./performance-journal";
+import { buildJournalPositionOwnerModes, reconstructCompletedJournal, resolveJournalControlMode, resolveJournalControlModeWithOwner } from "./performance-journal";
 
 type Actor = { sub: string; role?: string };
 type BasketRow = {
@@ -490,17 +490,40 @@ export class PerformanceAnalyticsController {
          WHERE mt5_account_id=$1
            AND event_type IN ('ENTRY','EXIT')
        )
+       ,range_deals AS (
+         SELECT *
+         FROM journal_source
+         WHERE event_at >= $2
+           AND event_at <= $3
+       ),owner_context AS (
+         SELECT
+           js.id,js.deal_ticket,js.position_id,js.event_type,js.direction,js.volume,js.price,
+           0::float8 AS net_profit,js.entry_model,js.entry_trigger,js.entry_quality_score,
+           js.confidence,js.created_at,js.metadata,js.event_at
+         FROM journal_source js
+         WHERE js.event_type IN ('ENTRY','EXIT')
+           AND js.event_at < $2
+           AND js.position_id IS NOT NULL
+           AND EXISTS (
+             SELECT 1 FROM range_deals rd
+             WHERE rd.event_type='EXIT'
+               AND rd.position_id=js.position_id
+           )
+       ),scoped_deals AS (
+         SELECT * FROM range_deals
+         UNION ALL
+         SELECT * FROM owner_context
+       )
        SELECT
          id,deal_ticket,position_id,event_type,direction,volume,price,net_profit,
          entry_model,entry_trigger,entry_quality_score,confidence,created_at,event_at,metadata
-       FROM journal_source
-       WHERE event_at >= $2
-         AND event_at <= $3
+       FROM scoped_deals
        ORDER BY event_at ASC,created_at ASC,id ASC
        LIMIT 50000`,
       [account.id, journalQueryFrom.toISOString(), journalTo.toISOString()]
     );
     const journalRows = journalResult.rows || [];
+    const ownerModes = buildJournalPositionOwnerModes(journalRows);
     const reconstructed = reconstructCompletedJournal(journalRows);
     const allBaskets = reconstructed.baskets;
     const allPositions = reconstructed.positions;
@@ -520,7 +543,7 @@ export class PerformanceAnalyticsController {
     const filteredJournalRows = journalRows.filter(
       (row:any) =>
         journalEventTime(row) >= effectiveFrom.getTime() &&
-        includeControlMode(resolveJournalControlMode(row))
+        includeControlMode(resolveJournalControlModeWithOwner(row,ownerModes))
     );
     const selectedDealRows = filteredJournalRows.filter(
       (row:any) => journalEventTime(row) <= to.getTime()

@@ -60,6 +60,32 @@ export function resolveJournalControlMode(row: PerformanceJournalDeal) {
   return VALID_MODES.includes(saved) ? saved : "AUTO";
 }
 
+export function buildJournalPositionOwnerModes(rows: PerformanceJournalDeal[]) {
+  const owners=new Map<string,string>();
+  const ordered=[...(rows || [])].sort((a,b) => {
+    const dt=new Date(rowEventTime(a)).getTime()-new Date(rowEventTime(b)).getTime();
+    if(dt!==0) return dt;
+    return String(a.deal_ticket ?? "").localeCompare(String(b.deal_ticket ?? ""));
+  });
+  for(const row of ordered){
+    if(String(row.event_type || "").toUpperCase()!=="ENTRY") continue;
+    const key=String(row.position_id ?? "").trim();
+    if(!key || owners.has(key)) continue;
+    owners.set(key,resolveJournalControlMode(row));
+  }
+  return owners;
+}
+
+export function resolveJournalControlModeWithOwner(
+  row: PerformanceJournalDeal,
+  owners: Map<string,string>
+) {
+  const key=String(row.position_id ?? "").trim();
+  return key && owners.has(key)
+    ? String(owners.get(key))
+    : resolveJournalControlMode(row);
+}
+
 function rowSymbol(row: PerformanceJournalDeal) {
   return String(row.metadata?.symbol || "").trim().toUpperCase() || "UNKNOWN";
 }

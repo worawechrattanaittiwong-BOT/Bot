@@ -14,7 +14,7 @@ import {
 import { randomBytes } from "crypto";
 import { DbService } from "./db.service";
 import { JwtGuard } from "./security";
-import { resolveJournalControlMode } from "./performance-journal";
+import { buildJournalPositionOwnerModes, reconstructCompletedJournal, resolveJournalControlModeWithOwner } from "./performance-journal";
 
 type Actor = { sub: string; role?: string };
 type BasketRow = {
@@ -46,6 +46,94 @@ function shareModeLabel(value: unknown) {
     ? "GRID"
     : String(value || "AUTO").toUpperCase();
 }
+
+async function actualRangeWithOwners(db: DbService, accountId: string, from: Date, to: Date) {
+    const result = await db.query(
+      `WITH journal_source AS (
+         SELECT
+           id,deal_ticket,position_id,event_type,direction,volume::float8,price::float8,
+           net_profit::float8,metadata,entry_model,entry_trigger,
+           entry_quality_score::float8,confidence::float8,created_at,
+           COALESCE(
+             CASE
+               WHEN (metadata->>'dealTimeMsc') ~ '^[0-9]+$'
+                 AND (metadata->>'dealTimeMsc')::numeric > 0
+               THEN to_timestamp(
+                 (metadata->>'dealTimeMsc')::double precision / 1000.0 -
+                 CASE
+                   WHEN (metadata->>'brokerUtcOffsetSeconds') ~ '^-?[0-9]+$'
+                   THEN (metadata->>'brokerUtcOffsetSeconds')::double precision
+                   ELSE 0
+                 END
+               )
+               WHEN (metadata->>'dealTime') ~ '^[0-9]+$'
+                 AND (metadata->>'dealTime')::numeric > 0
+               THEN to_timestamp(
+                 (metadata->>'dealTime')::double precision -
+                 CASE
+                   WHEN (metadata->>'brokerUtcOffsetSeconds') ~ '^-?[0-9]+$'
+                   THEN (metadata->>'brokerUtcOffsetSeconds')::double precision
+                   ELSE 0
+                 END
+               )
+               ELSE NULL
+             END,
+             created_at
+           ) AS event_at
+         FROM trade_journal
+         WHERE mt5_account_id=$1
+           AND event_type IN ('ENTRY','EXIT')
+       ),range_deals AS (
+         SELECT * FROM journal_source
+         WHERE event_at >= $2
+           AND event_at <= $3
+       ),owner_context AS (
+         SELECT
+           js.id,js.deal_ticket,js.position_id,js.event_type,js.direction,js.volume,js.price,
+           0::float8 AS net_profit,js.metadata,js.entry_model,js.entry_trigger,
+           js.entry_quality_score,js.confidence,js.created_at,js.event_at
+         FROM journal_source js
+         WHERE js.event_type IN ('ENTRY','EXIT')
+           AND js.event_at < $2
+           AND js.position_id IS NOT NULL
+           AND EXISTS (
+             SELECT 1 FROM range_deals rd
+             WHERE rd.event_type='EXIT'
+               AND rd.position_id=js.position_id
+           )
+       ),scoped_deals AS (
+         SELECT * FROM range_deals
+         UNION ALL
+         SELECT * FROM owner_context
+       )
+       SELECT *
+       FROM scoped_deals
+       ORDER BY event_at ASC,created_at ASC,id ASC
+       LIMIT 50000`,
+      [accountId, from.toISOString(), to.toISOString()]
+    );
+    const rows=result.rows || [];
+    const ownerModes=buildJournalPositionOwnerModes(rows);
+    const rangeRows=rows.filter((row:any) => {
+      const at=new Date(row.event_at || row.created_at).getTime();
+      return at>=from.getTime() && at<=to.getTime();
+    });
+    const reconstructed=reconstructCompletedJournal(rows);
+    return {
+      rows,
+      rangeRows,
+      ownerModes,
+      baskets:reconstructed.baskets.filter((row:any) => {
+        const at=new Date(row.created_at).getTime();
+        return at>=from.getTime() && at<=to.getTime();
+      }),
+      positions:reconstructed.positions.filter((row:any) => {
+        const at=new Date(row.closedAt).getTime();
+        return at>=from.getTime() && at<=to.getTime();
+      })
+    };
+  }
+
 
 @Controller("performance-actions")
 @UseGuards(JwtGuard)
@@ -183,37 +271,32 @@ export class PerformanceActionsController {
     const metrics = account.metrics || {};
     const currentBalance = Number(metrics.balance || 0);
 
-    const basketResult = await this.db.query(
-      "SELECT direction,net_profit,created_at,metadata,entry_model,entry_trigger " +
-      "FROM trade_journal " +
-      "WHERE mt5_account_id=$1 AND event_type='BASKET' AND created_at >= $2 AND created_at <= $3 " +
-      "ORDER BY created_at ASC,id ASC LIMIT 20000",
-      [account.id, from.toISOString(), to.toISOString()]
-    );
-    const allBaskets = basketResult.rows as BasketRow[];
+    const actualRange = await actualRangeWithOwners(this.db,account.id,from,to);
+    const allBaskets = actualRange.baskets;
     const baskets = allBaskets.filter((row:any) =>
-      selectedStrategyModes.includes(resolveJournalControlMode(row as any))
+      selectedStrategyModes.includes(row.controlMode)
     );
     if (!baskets.length) {
       throw new BadRequestException("ยังไม่มีข้อมูลผลการเทรดของ Strategy Portfolio ที่เลือกในช่วงเวลานี้");
     }
 
-    const ledgerResult = await this.db.query(
-      "SELECT event_type,net_profit::float8 AS net_profit,created_at,metadata,entry_model,entry_trigger " +
-      "FROM trade_journal " +
-      "WHERE mt5_account_id=$1 AND event_type IN ('ENTRY','EXIT') AND created_at >= $2 " +
-      "ORDER BY created_at ASC,id ASC LIMIT 50000",
-      [account.id, from.toISOString()]
+    const rangeLedger = actualRange.rangeRows.filter((row:any) =>
+      selectedStrategyModes.includes(
+        resolveJournalControlModeWithOwner(row,actualRange.ownerModes)
+      )
     );
-    const strategyLedger = (ledgerResult.rows || []).filter((row:any) =>
-      selectedStrategyModes.includes(resolveJournalControlMode(row as any))
+    const nowForBalance=new Date();
+    const balanceRange=nowForBalance.getTime()>from.getTime()
+      ? await actualRangeWithOwners(this.db,account.id,from,nowForBalance)
+      : actualRange;
+    const balanceLedger=balanceRange.rangeRows.filter((row:any) =>
+      selectedStrategyModes.includes(
+        resolveJournalControlModeWithOwner(row,balanceRange.ownerModes)
+      )
     );
-    const ledgerNetSinceFrom = strategyLedger.reduce(
+    const ledgerNetSinceFrom = balanceLedger.reduce(
       (sum:number,row:any) => sum + Number(row.net_profit || 0),
       0
-    );
-    const rangeLedger = strategyLedger.filter(
-      (row:any) => new Date(row.created_at).getTime() <= to.getTime()
     );
     const selectedNet = rangeLedger.reduce(
       (sum:number,row:any) => sum + Number(row.net_profit || 0),
@@ -242,23 +325,8 @@ export class PerformanceActionsController {
       ? Number((selectedNet / derivedStart * 100).toFixed(2))
       : null;
 
-    const exitResult = await this.db.query(
-      "SELECT x.deal_ticket,x.position_id,x.direction,x.volume,x.price AS exit_price,x.net_profit," +
-      " x.created_at AS closed_at,x.metadata,x.entry_model,x.entry_trigger," +
-      " COALESCE(x.metadata->>'symbol',$4) AS symbol,e.price AS entry_price,e.created_at AS opened_at " +
-      "FROM trade_journal x " +
-      "LEFT JOIN LATERAL (" +
-      " SELECT price,created_at FROM trade_journal e" +
-      " WHERE e.mt5_account_id=x.mt5_account_id AND e.event_type='ENTRY'" +
-      " AND e.position_id=x.position_id AND e.created_at<=x.created_at" +
-      " ORDER BY e.created_at DESC LIMIT 1" +
-      ") e ON true " +
-      "WHERE x.mt5_account_id=$1 AND x.event_type='EXIT' AND x.created_at >= $2 AND x.created_at <= $3 " +
-      "ORDER BY x.created_at DESC LIMIT 500",
-      [account.id, from.toISOString(), to.toISOString(), String(metrics.symbol || "XAUUSD")]
-    );
-    const filteredExitRows = (exitResult.rows || []).filter((row:any) =>
-      selectedStrategyModes.includes(resolveJournalControlMode(row as any))
+    const filteredExitRows = actualRange.positions.filter((row:any) =>
+      selectedStrategyModes.includes(row.controlMode)
     );
 
     const volumes = filteredExitRows
@@ -292,7 +360,7 @@ export class PerformanceActionsController {
     computed.summary.lotSizeCount=lotDistribution.length;
 
     const modeBreakdown=SHARE_STRATEGY_MODES.map((mode)=>{
-      const rows=allBaskets.filter((row:any)=>resolveJournalControlMode(row as any)===mode);
+      const rows=allBaskets.filter((row:any)=>row.controlMode===mode);
       const wins=rows.filter((row:any)=>Number(row.net_profit||0)>0).length;
       return {
         mode,
@@ -361,16 +429,16 @@ export class PerformanceActionsController {
       lotDistribution,
       modeBreakdown,
       closedTrades:filteredExitRows.map((row:any)=>({
-        ticket:String(row.deal_ticket),
-        positionId:row.position_id?String(row.position_id):null,
+        ticket:String(row.positionId),
+        positionId:String(row.positionId),
         symbol:row.symbol||accountSymbol,
         side:row.direction,
         lot:Number(row.volume||0),
-        entryPrice:row.entry_price===null?null:Number(row.entry_price),
-        exitPrice:Number(row.exit_price||0),
+        entryPrice:row.entryPrice===null?null:Number(row.entryPrice),
+        exitPrice:row.exitPrice===null?null:Number(row.exitPrice),
         profit:Number(row.net_profit||0),
-        openedAt:row.opened_at||null,
-        closedAt:row.closed_at
+        openedAt:row.openedAt||null,
+        closedAt:row.closedAt
       }))
     };
 
@@ -665,45 +733,33 @@ export class SharedPerformanceController {
     const available = await this.db.one(
       `SELECT MIN(created_at) AS min_at,MAX(created_at) AS max_at
        FROM trade_journal
-       WHERE mt5_account_id=$1 AND event_type='BASKET'`,
+       WHERE mt5_account_id=$1 AND event_type IN ('ENTRY','EXIT')`,
       [account.id]
     );
 
-    const basketsResult = await this.db.query(
-      `SELECT direction,net_profit,created_at,metadata,entry_model,entry_trigger
-       FROM trade_journal
-       WHERE mt5_account_id=$1
-         AND event_type='BASKET'
-         AND created_at >= $2
-         AND created_at <= $3
-       ORDER BY created_at ASC,id ASC
-       LIMIT 20000`,
-      [account.id, from.toISOString(), to.toISOString()]
-    );
-    const allBaskets = basketsResult.rows as BasketRow[];
+    const actualRange = await actualRangeWithOwners(this.db,account.id,from,to);
+    const allBaskets = actualRange.baskets;
     const baskets = allBaskets.filter((item:any) =>
-      selectedStrategyModes.includes(resolveJournalControlMode(item as any))
+      selectedStrategyModes.includes(item.controlMode)
     );
     const currentBalance = Number(account.metrics?.balance || 0);
-    const ledgerResult = await this.db.query(
-      `SELECT event_type,net_profit::float8 AS net_profit,created_at,metadata,entry_model,entry_trigger
-       FROM trade_journal
-       WHERE mt5_account_id=$1
-         AND event_type IN ('ENTRY','EXIT')
-         AND created_at >= $2
-       ORDER BY created_at ASC,id ASC
-       LIMIT 50000`,
-      [account.id, from.toISOString()]
+    const selectedRangeLedger = actualRange.rangeRows.filter((item:any) =>
+      selectedStrategyModes.includes(
+        resolveJournalControlModeWithOwner(item,actualRange.ownerModes)
+      )
     );
-    const strategyLedger = (ledgerResult.rows || []).filter((item:any) =>
-      selectedStrategyModes.includes(resolveJournalControlMode(item as any))
+    const nowForBalance=new Date();
+    const balanceRange=nowForBalance.getTime()>from.getTime()
+      ? await actualRangeWithOwners(this.db,account.id,from,nowForBalance)
+      : actualRange;
+    const balanceLedger=balanceRange.rangeRows.filter((item:any) =>
+      selectedStrategyModes.includes(
+        resolveJournalControlModeWithOwner(item,balanceRange.ownerModes)
+      )
     );
-    const ledgerNetSinceFrom = strategyLedger.reduce(
+    const ledgerNetSinceFrom = balanceLedger.reduce(
       (sum:number,item:any) => sum + Number(item.net_profit || 0),
       0
-    );
-    const selectedRangeLedger = strategyLedger.filter(
-      (item:any) => new Date(item.created_at).getTime() <= to.getTime()
     );
     const selectedRangeNet = selectedRangeLedger.reduce(
       (sum:number,item:any) => sum + Number(item.net_profit || 0),
@@ -775,27 +831,15 @@ export class SharedPerformanceController {
       }
     }
 
-    const detailedExits = await this.db.query(
-      `SELECT net_profit::float8 AS net_profit,created_at,metadata,entry_model,entry_trigger
-       FROM trade_journal
-       WHERE mt5_account_id=$1
-         AND event_type='EXIT'
-         AND lower(COALESCE(metadata->>'executedByBot','true')) <> 'false'
-         AND created_at >= $2
-         AND created_at <= $3
-       ORDER BY created_at ASC,id ASC
-       LIMIT 20000`,
-      [account.id, from.toISOString(), to.toISOString()]
+    const detailedExitRows = selectedRangeLedger.filter(
+      (item:any) => String(item.event_type || "").toUpperCase()==="EXIT"
     );
-    detailedExits.rows = (detailedExits.rows || []).filter((item:any) =>
-      selectedStrategyModes.includes(resolveJournalControlMode(item as any))
-    );
-    if (derivedStart !== null && detailedExits.rows.length > 0) {
+    if (derivedStart !== null && detailedExitRows.length > 0) {
       let balance = derivedStart;
       let peak = balance;
       let maxDdMoney = 0;
       let maxDdPercent = 0;
-      computed.curve = detailedExits.rows.map((exit:any) => {
+      computed.curve = detailedExitRows.map((exit:any) => {
         balance += Number(exit.net_profit || 0);
         peak = Math.max(peak, balance);
         const ddMoney = Math.max(0, peak - balance);
@@ -816,39 +860,8 @@ export class SharedPerformanceController {
         : computed.summary.netProfit > 0 ? 999 : null;
     }
 
-    const exits = await this.db.query(
-      `SELECT
-         x.deal_ticket,x.position_id,x.direction,x.volume,x.price AS exit_price,x.net_profit,
-         x.created_at AS closed_at,x.metadata,x.entry_model,x.entry_trigger,
-         COALESCE(x.metadata->>'symbol',$4) AS symbol,
-         e.price AS entry_price,e.created_at AS opened_at
-       FROM trade_journal x
-       LEFT JOIN LATERAL (
-         SELECT price,created_at
-         FROM trade_journal e
-         WHERE e.mt5_account_id=x.mt5_account_id
-           AND e.event_type='ENTRY'
-           AND e.position_id=x.position_id
-           AND e.created_at<=x.created_at
-         ORDER BY e.created_at DESC
-         LIMIT 1
-       ) e ON true
-       WHERE x.mt5_account_id=$1
-         AND x.event_type='EXIT'
-         AND x.created_at >= $2
-         AND x.created_at <= $3
-       ORDER BY x.created_at DESC
-       LIMIT 500`,
-      [
-        account.id,
-        from.toISOString(),
-        to.toISOString(),
-        String(account.metrics?.symbol || frozen.account?.symbol || "XAUUSD")
-      ]
-    );
-
-    const filteredExitRows = (exits.rows || []).filter((item:any) =>
-      selectedStrategyModes.includes(resolveJournalControlMode(item as any))
+    const filteredExitRows = actualRange.positions.filter((item:any) =>
+      selectedStrategyModes.includes(item.controlMode)
     );
     const volumes = filteredExitRows
       .map((item:any) => Number(item.volume || 0))
@@ -884,7 +897,7 @@ export class SharedPerformanceController {
     computed.summary.lotSizeCount = lotDistribution.length;
 
     const modeBreakdown = SHARE_STRATEGY_MODES.map((mode) => {
-      const rows = allBaskets.filter((item:any) => resolveJournalControlMode(item as any) === mode);
+      const rows = allBaskets.filter((item:any) => item.controlMode === mode);
       const wins = rows.filter((item:any) => Number(item.net_profit || 0) > 0).length;
       return {
         mode,
@@ -955,16 +968,16 @@ export class SharedPerformanceController {
       lotDistribution,
       modeBreakdown,
       closedTrades: filteredExitRows.map((trade:any) => ({
-        ticket: String(trade.deal_ticket),
-        positionId: trade.position_id ? String(trade.position_id) : null,
+        ticket: String(trade.positionId),
+        positionId: String(trade.positionId),
         symbol: trade.symbol || accountSymbol,
         side: trade.direction,
         lot: Number(trade.volume || 0),
-        entryPrice: trade.entry_price === null ? null : Number(trade.entry_price),
-        exitPrice: Number(trade.exit_price || 0),
+        entryPrice: trade.entryPrice === null ? null : Number(trade.entryPrice),
+        exitPrice: trade.exitPrice === null ? null : Number(trade.exitPrice),
         profit: Number(trade.net_profit || 0),
-        openedAt: trade.opened_at || null,
-        closedAt: trade.closed_at
+        openedAt: trade.openedAt || null,
+        closedAt: trade.closedAt
       }))
     };
 

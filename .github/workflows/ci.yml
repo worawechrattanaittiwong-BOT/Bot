@@ -57,6 +57,8 @@ jobs:
         run: ./tests/performance-basket-consistency-contract.ps1
       - name: Performance date and six-strategy contract
         run: node ./tests/performance-date-strategy-contract.mjs
+      - name: Performance cross-range strategy owner contract
+        run: node ./tests/performance-cross-range-owner-contract.mjs
       - name: Unified role sidebar and customer performance contract
         shell: pwsh
         run: ./tests/unified-role-sidebar-contract.ps1

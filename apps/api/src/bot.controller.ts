@@ -1221,8 +1221,8 @@ export class BotController {
 
     if (instance) {
       // "Today" is Bangkok-local trading day. Performance statistics use
-      // one canonical unit everywhere: a completed BASKET. Per-mode Activity
-      // still reports bot ENTRY count, but Win Rate, P/L and Drawdown are all
+      // one canonical unit everywhere: a completed BASKET. Per-mode Entries
+      // reports bot ENTRY count, while Win Rate, P/L and Drawdown are all
       // calculated from completed BASKET rows so headline and per-mode values
       // are directly comparable.
       const todayRows = await this.db.query(
@@ -1243,8 +1243,48 @@ export class BotController {
       );
 
       const rows = todayRows.rows || [];
-      const reconstructedToday = reconstructCompletedJournal(rows);
-      const reconstructedBasketRows = reconstructedToday.baskets;
+      const priorContextRows = await this.db.query(
+        `WITH day_start AS (
+           SELECT (
+             date_trunc('day', now() AT TIME ZONE 'Asia/Bangkok')
+             AT TIME ZONE 'Asia/Bangkok'
+           ) AS at
+         ), closing_positions AS (
+           SELECT DISTINCT position_id
+           FROM trade_journal,day_start
+           WHERE bot_instance_id=$1
+             AND mt5_account_id=$2
+             AND event_type='EXIT'
+             AND position_id IS NOT NULL
+             AND created_at >= day_start.at
+         )
+         SELECT
+           deal_ticket,position_id,event_type,direction,volume::float8,price::float8,
+           0::float8 AS net_profit,metadata,entry_model,entry_trigger,
+           entry_quality_score::float8,confidence::float8,created_at
+         FROM trade_journal,day_start
+         WHERE bot_instance_id=$1
+           AND mt5_account_id=$2
+           AND event_type IN ('ENTRY','EXIT')
+           AND created_at < day_start.at
+           AND position_id IN (SELECT position_id FROM closing_positions)
+         ORDER BY created_at ASC,id ASC`,
+        [instance.id, instance.mt5_account_id]
+      );
+      // Prior ENTRY/EXIT rows are state/ownership context only. Historical money is
+      // zeroed in SQL so today's realized P/L remains a Bangkok-day metric.
+      const reconstructionRows = [...(priorContextRows.rows || []), ...rows].sort(
+        (left:any,right:any) =>
+          new Date(left.created_at).getTime() - new Date(right.created_at).getTime()
+      );
+      const reconstructedToday = reconstructCompletedJournal(reconstructionRows);
+      const reconstructedBasketRows = reconstructedToday.baskets.filter(
+        (row:any) => new Date(row.created_at).getTime() >= new Date(
+          new Intl.DateTimeFormat("en-CA",{
+            timeZone:"Asia/Bangkok",year:"numeric",month:"2-digit",day:"2-digit"
+          }).format(new Date()) + "T00:00:00.000+07:00"
+        ).getTime()
+      );
       const zeroBasketRows = rows
         .filter((row:any) =>
           String(row.event_type || "").toUpperCase() === "BASKET" &&
