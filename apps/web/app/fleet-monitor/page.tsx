@@ -651,8 +651,7 @@ export default function FleetMonitorPage() {
         <div className={styles.dataNote}>
           <ScenovaIcon name="shield" size={14}/>
           <span>
-            หน้านี้แสดงเฉพาะบัญชี MT5 ที่ยัง ACTIVE และยังผูกกับระบบอยู่ · Balance, Equity, Floating, Position, Spread และ Ping เป็นค่า Live ปัจจุบัน ·
-            P/L และ Entries ใช้ ENTRY/EXIT จริงจาก Trade Journal · Win Rate, Baskets และ Drawdown reconstruct จากดีลจริงด้วย logic เดียวกับ Performance · Position/Pending เป็นยอด SCENOVA Magic ทั้งบัญชีทุก Symbol · ระบบยังไม่แสดง Deposit/Withdraw เพราะ EA ปัจจุบันไม่ได้ส่ง Funding History
+            หน้านี้แสดงข้อมูลบัญชี MT5 ที่กำลังใช้งานและเชื่อมต่ออยู่ โดยยอดคงเหลือ มูลค่าพอร์ต กำไร/ขาดทุนลอยตัว จำนวนสถานะ สเปรด และความหน่วง เป็นข้อมูลล่าสุด ส่วนกำไร/ขาดทุน สถิติการเทรด อัตราชนะ จำนวนรอบ และการลดลงสูงสุด คำนวณจากประวัติการซื้อขายของบัญชี ข้อมูลสถานะที่เปิดและคำสั่งรอดำเนินการแสดงรวมทุกสัญลักษณ์ของบัญชี ทั้งนี้ยังไม่รวมรายการฝากและถอนเงิน
           </span>
         </div>
       </main>
