@@ -246,6 +246,14 @@ function rangeLabel(mode: RangeMode, customFrom: string, customTo: string) {
   return "ทั้งหมด";
 }
 
+function cardRangeLabel(mode: RangeMode) {
+  if (mode === "TODAY") return "วันนี้";
+  if (mode === "7D") return "7 วัน";
+  if (mode === "30D") return "30 วัน";
+  if (mode === "CUSTOM") return "กำหนดเอง";
+  return "ทั้งหมด";
+}
+
 function expiryLabel(value?: string | null) {
   if (!value) return "—";
   const date = new Date(value);
@@ -398,7 +406,11 @@ export default function FleetMonitorPage() {
   }
 
   const selectedRangeLabel = rangeLabel(rangeMode, customFrom, customTo);
-  const periodProfitLabel = rangeMode === "ALL" ? "Net P/L" : "P/L ช่วง";
+  const selectedCardRangeLabel = cardRangeLabel(rangeMode);
+  const periodProfitLabel = rangeMode === "ALL"
+    ? "Net P/L · ทั้งหมด"
+    : "P/L · " + selectedCardRangeLabel;
+  const rangeMetricSuffix = " · " + selectedCardRangeLabel;
 
   return (
     <div className={styles.shell}>
@@ -586,20 +598,20 @@ export default function FleetMonitorPage() {
                   <Metric label="Equity" value={money(slot.money.equity, currency)}/>
                   <Metric label="Floating" value={money(slot.money.floatingProfit, currency, true)} tone={slot.money.floatingProfit >= 0 ? "good" : "bad"}/>
                   <Metric label={periodProfitLabel} value={money(slot.money.netProfit, currency, true)} tone={slot.money.netProfit >= 0 ? "good" : "bad"}/>
-                  <Metric label="Today P/L · Live" value={money(slot.money.todayClosedProfit, currency, true)} tone={slot.money.todayClosedProfit >= 0 ? "good" : "bad"}/>
-                  <Metric label="Return ช่วง" value={percent(slot.money.returnPercent, true)} tone={slot.money.returnPercent >= 0 ? "good" : "bad"}/>
+                  <Metric label={"Gross W/L" + rangeMetricSuffix} value={"+" + fixed(slot.money.grossProfit, 2) + " / -" + fixed(slot.money.grossLoss, 2) + " " + currency}/>
+                  <Metric label={"Return" + rangeMetricSuffix} value={percent(slot.money.returnPercent, true)} tone={slot.money.returnPercent >= 0 ? "good" : "bad"}/>
                 </div>
 
                 <div className={styles.statGrid}>
-                  <Metric label="Win Rate" value={percent(slot.performance.winRate)} tone={slot.performance.winRate >= 60 ? "good" : slot.performance.closedBaskets ? "warn" : ""}/>
-                  <Metric label="Profit Factor" value={slot.performance.profitFactor >= 999 ? "∞" : fixed(slot.performance.profitFactor, 2)} tone={slot.performance.profitFactor >= 1.2 ? "good" : slot.performance.closedBaskets ? "warn" : ""}/>
-                  <Metric label="Max DD" value={percent(slot.money.maxDrawdownPercent)} tone={slot.money.maxDrawdownPercent >= 10 ? "bad" : slot.money.maxDrawdownPercent >= 6 ? "warn" : ""}/>
-                  <Metric label="Baskets ช่วง" value={slot.performance.closedBaskets.toLocaleString("en-US")}/>
-                  <Metric label="W / L ช่วง" value={slot.performance.wins + " / " + slot.performance.losses}/>
-                  <Metric label="Entries ช่วง" value={slot.performance.entries.toLocaleString("en-US")}/>
+                  <Metric label={"Win Rate" + rangeMetricSuffix} value={percent(slot.performance.winRate)} tone={slot.performance.winRate >= 60 ? "good" : slot.performance.closedBaskets ? "warn" : ""}/>
+                  <Metric label={"Profit Factor" + rangeMetricSuffix} value={slot.performance.profitFactor >= 999 ? "∞" : fixed(slot.performance.profitFactor, 2)} tone={slot.performance.profitFactor >= 1.2 ? "good" : slot.performance.closedBaskets ? "warn" : ""}/>
+                  <Metric label={"Max DD" + rangeMetricSuffix} value={percent(slot.money.maxDrawdownPercent)} tone={slot.money.maxDrawdownPercent >= 10 ? "bad" : slot.money.maxDrawdownPercent >= 6 ? "warn" : ""}/>
+                  <Metric label={"Baskets" + rangeMetricSuffix} value={slot.performance.closedBaskets.toLocaleString("en-US")}/>
+                  <Metric label={"W / L" + rangeMetricSuffix} value={slot.performance.wins + " / " + slot.performance.losses}/>
+                  <Metric label={"Entries" + rangeMetricSuffix} value={slot.performance.entries.toLocaleString("en-US")}/>
                   <Metric label="Positions" value={String(slot.runtime.positions)} tone={slot.runtime.positions > 0 ? "warn" : ""}/>
                   <Metric label="Pending" value={String(slot.runtime.pendingOrders)} tone={slot.runtime.pendingOrders > 0 ? "warn" : ""}/>
-                  <Metric label="Total Lots ช่วง" value={fixed(slot.performance.totalEntryLots, 2)}/>
+                  <Metric label={"Total Lots" + rangeMetricSuffix} value={fixed(slot.performance.totalEntryLots, 2)}/>
                   <Metric label="Signal" value={fixed(slot.runtime.signalConfidence, 0) + "%"}/>
                   <Metric label="Spread" value={fixed(slot.runtime.spreadPoints, 1) + " pt"}/>
                   <Metric label="Ping" value={fixed(slot.runtime.brokerPingMs, 0) + " ms"}/>

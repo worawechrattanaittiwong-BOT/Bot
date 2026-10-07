@@ -74,9 +74,10 @@ foreach ($required in @(
   'Auto refresh 15s',
   'Balance',
   'Equity',
-  'Today P/L · Live',
-  'P/L ช่วง',
-  'Net P/L',
+  'cardRangeLabel(rangeMode)',
+  'Gross W/L',
+  'Net P/L · ทั้งหมด',
+  'rangeMetricSuffix',
   'Win Rate',
   'Profit Factor',
   'Max DD',
@@ -101,6 +102,10 @@ foreach ($required in @(
   if (-not $web.Contains($required)) {
     throw "Fleet monitor web contract missing: $required"
   }
+}
+
+if ($web.Contains('label="Today P/L · Live"')) {
+  throw 'Fleet Monitor account cards must follow the selected period instead of showing a fixed Today P/L metric'
 }
 
 if ($web.Contains('<option value="EMPTY">')) {
