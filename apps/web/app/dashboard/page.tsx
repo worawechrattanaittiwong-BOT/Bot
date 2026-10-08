@@ -6084,11 +6084,7 @@ function VpsSlotManager(props:{
           );
         })}
 
-        <button type="button" className="vps-slot-add-card" disabled={props.busy || !props.canBuy} onClick={props.onBuy}>
-          <span className="vps-slot-add-icon">+</span>
-          <b>{props.ownerDirectAdd ? "เพิ่ม VPS Slot เสริม" : "ซื้อ VPS Slot เสริม"}</b>
-          {props.ownerDirectAdd && <small>OWNER · ไม่ต้องชำระเงิน · ไม่จำกัดเวลา</small>}
-        </button>
+        {/* เพิ่ม Slot จากปุ่มหัวข้อด้านบนแล้ว จึงไม่แสดงปุ่มซ้ำเต็มแถว */}
       </div>
     </section>
   );
