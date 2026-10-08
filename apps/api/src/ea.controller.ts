@@ -31,44 +31,6 @@ export class EaController {
 
   private readonly verifiedBrokerServers = new Set<string>();
 
-  private tradingSymbolFamily(value: unknown) {
-    const upper = String(value || "").trim().toUpperCase();
-    if (upper === "XAUUSC" || upper.startsWith("XAUUSD")) return "XAUUSD";
-    if (
-      upper === "BTCUSC" ||
-      upper === "XBTUSC" ||
-      upper.startsWith("BTCUSD") ||
-      upper.startsWith("XBTUSD")
-    ) return "BTCUSD";
-    return upper;
-  }
-
-  private detectedSymbolAccountType(value: unknown): "USD" | "USD_CENT" | "" {
-    const upper = String(value || "").trim().toUpperCase();
-    if (["XAUUSC", "BTCUSC", "XBTUSC"].includes(upper)) return "USD_CENT";
-
-    const root = upper.startsWith("XAUUSD")
-      ? "XAUUSD"
-      : upper.startsWith("BTCUSD")
-        ? "BTCUSD"
-        : upper.startsWith("XBTUSD")
-          ? "XBTUSD"
-          : "";
-    if (!root) return "";
-
-    const suffix = upper
-      .slice(root.length)
-      .replace(/[._#-]/g, "");
-    if (suffix === "" || suffix === "M") return "USD";
-    if (suffix === "C" || suffix === "CENT") return "USD_CENT";
-    return "";
-  }
-
-  private brokerSymbolCanOpenNewOrders(value: unknown) {
-    const tradeMode = Number(value);
-    return Number.isFinite(tradeMode) && tradeMode !== 0 && tradeMode !== 3;
-  }
-
   private brokerServerEnvironment(serverName: string) {
     const value = String(serverName || "").toLowerCase();
     if (/demo|trial/.test(value)) return "DEMO";
@@ -823,76 +785,6 @@ export class EaController {
       [instance.id]
     );
     const runtimeSettings = { ...(settings?.settings || {}) };
-
-    // First Cloud connection has a bootstrap chicken-and-egg problem: the
-    // Worker needs a chart Symbol before the EA can publish the account's real
-    // Market Watch. Once the EA successfully attaches and reports a tradable
-    // broker-native Symbol, lock that exact Symbol to this Slot. This makes the
-    // next reload deterministic and also self-corrects a wrong USD/USDc guess.
-    if (
-      String(instance.mode || "").toUpperCase() === "CLOUD" &&
-      String(runtimeSettings.symbolResolutionMode || "").toUpperCase() === "ACCOUNT_PROFILE"
-    ) {
-      const activeSymbol = String(metrics.symbol || "").trim();
-      const requestedSymbol = String(
-        runtimeSettings.startupSymbol ||
-        runtimeSettings.symbol ||
-        ""
-      ).trim();
-      const sameFamily =
-        activeSymbol &&
-        requestedSymbol &&
-        this.tradingSymbolFamily(activeSymbol) ===
-          this.tradingSymbolFamily(requestedSymbol);
-      const detectedProfile = this.detectedSymbolAccountType(activeSymbol);
-
-      if (
-        sameFamily &&
-        detectedProfile &&
-        this.brokerSymbolCanOpenNewOrders(metrics.symbolTradeMode)
-      ) {
-        await this.db.query(
-          `UPDATE bot_settings
-           SET settings=COALESCE(settings,'{}'::jsonb) || jsonb_build_object(
-             'startupSymbol',$2::text,
-             'symbol',$2::text,
-             'symbolAccountType',$3::text,
-             'symbolResolutionMode','EXACT',
-             'symbolSelectedBy','AUTO_DISCOVERY',
-             'symbolAutoDiscoveredAt',$4::text
-           ),
-           updated_at=now()
-           WHERE bot_instance_id=$1`,
-          [
-            instance.id,
-            activeSymbol,
-            detectedProfile,
-            new Date().toISOString()
-          ]
-        );
-        runtimeSettings.startupSymbol = activeSymbol;
-        runtimeSettings.symbol = activeSymbol;
-        runtimeSettings.symbolAccountType = detectedProfile;
-        runtimeSettings.symbolResolutionMode = "EXACT";
-        runtimeSettings.symbolSelectedBy = "AUTO_DISCOVERY";
-
-        await this.db.query(
-          "INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail) VALUES($1,'AUTO_DISCOVER_CLOUD_SYMBOL','bot_instance',$2,$3::jsonb)",
-          [
-            ("EA:" + String(instance.user_id || "UNKNOWN")).slice(0,160),
-            instance.id,
-            JSON.stringify({
-              slotId: instance.slot_id,
-              requestedSymbol,
-              activeSymbol,
-              detectedProfile,
-              broker: instance.broker || reportedBroker || null,
-              brokerServer: instance.broker_server || reportedServer || null
-            })
-          ]
-        );
-      }
-    }
 
     const firstConnectPrimePending =
       instance.mode === "CLOUD" &&

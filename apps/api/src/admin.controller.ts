@@ -1340,23 +1340,12 @@ export class AdminController {
     return row;
   }
 
-  private canonicalSlotSymbol(settings: any, metrics: any) {
-    const raw = String(
-      settings?.startupSymbol ||
-      settings?.symbol ||
-      metrics?.symbol ||
-      "XAUUSD"
-    ).trim();
-    // Admin exact selection is authoritative per Slot. A refresh/repair must
-    // never collapse broker-native symbols such as XAUUSDm/XAUUSDc back to
-    // the generic root, otherwise the next reload silently changes Symbol.
-    if (String(settings?.symbolResolutionMode || "").toUpperCase() === "EXACT") {
-      return raw || "XAUUSD";
+  private confirmedSlotSymbol(settings: any) {
+    if (String(settings?.symbolResolutionMode || "").toUpperCase() !== "EXACT") {
+      return "";
     }
-    const upper = raw.toUpperCase();
-    if (upper.includes("XAUUSD")) return "XAUUSD";
-    if (upper.includes("BTCUSD") || upper.includes("XBTUSD")) return "BTCUSD";
-    return raw || "XAUUSD";
+    const raw = String(settings?.startupSymbol || settings?.symbol || "").trim();
+    return /^XAU[A-Za-z0-9._#-]{3,29}$/i.test(raw) ? raw : "";
   }
 
   private async adminCustomerSlot(userId: string, slotId: string) {
@@ -1403,8 +1392,8 @@ export class AdminController {
     }
 
     const requestedSymbol = String(body.symbol || "").trim();
-    if (!requestedSymbol || requestedSymbol.length > 64 || !/^[A-Za-z0-9._#-]+$/.test(requestedSymbol)) {
-      throw new ConflictException("Symbol ไม่ถูกต้อง");
+    if (!/^XAU[A-Za-z0-9._#-]{3,29}$/i.test(requestedSymbol)) {
+      throw new ConflictException("กรุณาเลือก Symbol XAU ที่ตรวจพบจาก MT5 บัญชีจริง");
     }
 
     const positions = Math.max(0, Number(slot.positions || 0));
@@ -1435,8 +1424,18 @@ export class AdminController {
       );
       if (!workerOnline) throw new ConflictException("Cloud Worker Offline กรุณาให้ Server กลับมา Online ก่อนเปลี่ยน Symbol");
       const workerVersion = String(worker?.telemetry?.version || "");
-      if (!versionAtLeast(workerVersion, "2.2.29")) {
-        throw new ConflictException("Cloud Worker ยังไม่รองรับ Exact Symbol · กรุณาอัปเดต Server เป็น Worker 2.2.29+ ก่อน");
+      if (!versionAtLeast(workerVersion, "2.2.36")) {
+        throw new ConflictException("Cloud Worker ยังไม่รองรับ Symbol Discovery รุ่นใหม่ · กรุณาอัปเดต Server เป็น Worker 2.2.36+ ก่อน");
+      }
+      const workerInstance = Array.isArray(worker?.telemetry?.instances)
+        ? worker.telemetry.instances.find((item:any)=>String(item?.instanceId || "")===String(slot.instance_id))
+        : null;
+      const discovered = Array.isArray(workerInstance?.discoveredXauSymbols)
+        ? workerInstance.discoveredXauSymbols.map((item:any)=>String(item || "").trim()).filter(Boolean)
+        : [];
+      const exact = discovered.find((item:string)=>item.toUpperCase()===requestedSymbol.toUpperCase());
+      if (!exact) {
+        throw new ConflictException("Symbol นี้ไม่ได้อยู่ในรายการ XAU ที่ VPS ตรวจพบจาก MT5 บัญชีจริง");
       }
     } else if (mode === "LOCAL") {
       const agentOnline = Boolean(
@@ -1612,21 +1611,46 @@ export class AdminController {
       throw new ConflictException("โหมด Slot ไม่ถูกต้อง");
     }
 
-    const requestedSymbol = this.canonicalSlotSymbol(slot.settings || {}, slot.metrics || {});
+    const requestedSymbol = this.confirmedSlotSymbol(slot.settings || {});
     const requestedAt = new Date().toISOString();
 
-    await this.db.query(
-      `INSERT INTO bot_settings(bot_instance_id,settings,updated_at)
-       VALUES($1,jsonb_build_object('startupSymbol',$2::text,'symbol',$2::text),now())
-       ON CONFLICT(bot_instance_id)
-       DO UPDATE SET
-         settings=jsonb_set(
-           jsonb_set(COALESCE(bot_settings.settings,'{}'::jsonb),'{startupSymbol}',to_jsonb($2::text),true),
-           '{symbol}',to_jsonb($2::text),true
-         ),
-         updated_at=now()`,
-      [slot.instance_id, requestedSymbol]
-    );
+    if (mode === "CLOUD") {
+      await this.db.query(
+        `INSERT INTO bot_settings(bot_instance_id,settings,updated_at)
+         VALUES($1,jsonb_build_object(
+           'symbolResolutionMode','DISCOVERY',
+           'symbolSelectedBy','MT5_DISCOVERY',
+           'symbolDiscoveryState','SCANNING'
+         ),now())
+         ON CONFLICT(bot_instance_id)
+         DO UPDATE SET
+           settings=(
+             COALESCE(bot_settings.settings,'{}'::jsonb)
+             - 'startupSymbol'
+             - 'symbol'
+             - 'symbolAccountType'
+           ) || jsonb_build_object(
+             'symbolResolutionMode','DISCOVERY',
+             'symbolSelectedBy','MT5_DISCOVERY',
+             'symbolDiscoveryState','SCANNING'
+           ),
+           updated_at=now()`,
+        [slot.instance_id]
+      );
+    } else {
+      if (!requestedSymbol) {
+        throw new ConflictException("ยังไม่มี Symbol XAU ที่ยืนยันแล้ว");
+      }
+      await this.db.query(
+        `INSERT INTO bot_settings(bot_instance_id,settings,updated_at)
+         VALUES($1,jsonb_build_object('startupSymbol',$2::text,'symbol',$2::text,'symbolResolutionMode','EXACT'),now())
+         ON CONFLICT(bot_instance_id)
+         DO UPDATE SET settings=COALESCE(bot_settings.settings,'{}'::jsonb) || jsonb_build_object(
+           'startupSymbol',$2::text,'symbol',$2::text,'symbolResolutionMode','EXACT'
+         ),updated_at=now()`,
+        [slot.instance_id, requestedSymbol]
+      );
+    }
 
     await this.db.query(
       `UPDATE bot_instances
@@ -1966,7 +1990,6 @@ export class AdminController {
       }
     }
 
-    const requestedSymbol = this.canonicalSlotSymbol(slot.settings || {}, slot.metrics || {});
     const oldAccountId = slot.mt5_account_id;
 
     await this.db.transaction(async tx => {
@@ -1983,15 +2006,21 @@ export class AdminController {
 
       await tx.query(
         `INSERT INTO bot_settings(bot_instance_id,settings,updated_at)
-         VALUES($1,jsonb_build_object('startupSymbol',$2::text,'symbol',$2::text),now())
+         VALUES($1,jsonb_build_object('symbolResolutionMode','DISCOVERY','symbolDiscoveryState','DISCONNECTED'),now())
          ON CONFLICT(bot_instance_id)
          DO UPDATE SET
-           settings=jsonb_set(
-             jsonb_set(COALESCE(bot_settings.settings,'{}'::jsonb),'{startupSymbol}',to_jsonb($2::text),true),
-             '{symbol}',to_jsonb($2::text),true
+           settings=(
+             COALESCE(bot_settings.settings,'{}'::jsonb)
+             - 'startupSymbol'
+             - 'symbol'
+             - 'symbolAccountType'
+           ) || jsonb_build_object(
+             'symbolResolutionMode','DISCOVERY',
+             'symbolSelectedBy','MT5_DISCOVERY',
+             'symbolDiscoveryState','DISCONNECTED'
            ),
            updated_at=now()`,
-        [slot.instance_id, requestedSymbol]
+        [slot.instance_id]
       );
 
       await tx.query(
@@ -2040,8 +2069,7 @@ export class AdminController {
       oldMt5AccountId: oldAccountId,
       accountNumber: slot.account_number || null,
       brokerServer: slot.broker_server || null,
-      preservedTrialHistory: true,
-      requestedSymbol
+      preservedTrialHistory: true
     });
 
     return {

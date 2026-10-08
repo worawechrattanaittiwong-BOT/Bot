@@ -11,7 +11,8 @@ internal static class Mt5TemplateManager
         return
             File.Exists(Path.Combine(target, "cloud-template.ready")) &&
             File.Exists(Path.Combine(target, "terminal64.exe")) &&
-            File.Exists(Path.Combine(target, "MQL5", "Experts", "FastBasketBot.ex5"));
+            File.Exists(Path.Combine(target, "MQL5", "Experts", "FastBasketBot.ex5")) &&
+            File.Exists(Path.Combine(target, "MQL5", "Experts", "ScenovaSymbolProbe.ex5"));
     }
 
     public static void Prepare(string root, string apiBase, string? explicitSource)
@@ -20,15 +21,36 @@ internal static class Mt5TemplateManager
         var target = Path.Combine(root, "template");
         var readyMarker = Path.Combine(target, "cloud-template.ready");
 
+        var currentTerminal = Path.Combine(target, "terminal64.exe");
+        var currentEa = Path.Combine(
+            target,
+            "MQL5",
+            "Experts",
+            "FastBasketBot.ex5");
+        var currentProbe = Path.Combine(
+            target,
+            "MQL5",
+            "Experts",
+            "ScenovaSymbolProbe.ex5");
+
         if (IsReady(root))
         {
-            var currentEa = Path.Combine(
-                target,
-                "MQL5",
-                "Experts",
-                "FastBasketBot.ex5");
             PayloadInstaller.ExtractEa(currentEa);
-            Console.WriteLine("MT5 Template พร้อมอยู่แล้ว · รีเฟรช EA จาก Setup รุ่นล่าสุดแล้ว");
+            PayloadInstaller.ExtractSymbolProbe(currentProbe);
+            Console.WriteLine("MT5 Template พร้อมอยู่แล้ว · รีเฟรช EA และ Symbol Probe จาก Setup รุ่นล่าสุดแล้ว");
+            return;
+        }
+
+        // Upgrade an already verified production template in place when only
+        // a new SCENOVA payload is missing. Never force a manual MT5 template
+        // rebuild merely because a new helper EX5 was introduced.
+        if (File.Exists(readyMarker) &&
+            File.Exists(currentTerminal) &&
+            File.Exists(currentEa))
+        {
+            PayloadInstaller.ExtractEa(currentEa);
+            PayloadInstaller.ExtractSymbolProbe(currentProbe);
+            Console.WriteLine("MT5 Template เดิมผ่านการยืนยันแล้ว · เพิ่ม/รีเฟรช Symbol Probe โดยไม่แตะบัญชีลูกค้า");
             return;
         }
 
@@ -60,6 +82,11 @@ internal static class Mt5TemplateManager
 
         var eaTarget = Path.Combine(staging, "MQL5", "Experts", "FastBasketBot.ex5");
         PayloadInstaller.ExtractEa(eaTarget);
+        PayloadInstaller.ExtractSymbolProbe(Path.Combine(
+            staging,
+            "MQL5",
+            "Experts",
+            "ScenovaSymbolProbe.ex5"));
 
         File.WriteAllText(
             Path.Combine(staging, "cloud-template.prepared"),

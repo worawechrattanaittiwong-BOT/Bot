@@ -8,6 +8,7 @@ internal static class PayloadInstaller
 {
     private const string WorkerResource = "SCENOVA.Payload.SCENOVA-CloudWorker.exe";
     private const string EaResource = "SCENOVA.Payload.FastBasketBot.ex5";
+    private const string SymbolProbeResource = "SCENOVA.Payload.ScenovaSymbolProbe.ex5";
 
     public static string ExtractWorker(string root)
     {
@@ -28,6 +29,12 @@ internal static class PayloadInstaller
     {
         Directory.CreateDirectory(Path.GetDirectoryName(target)!);
         ExtractResource(EaResource, target, minimumBytes: 10 * 1024);
+    }
+
+    public static void ExtractSymbolProbe(string target)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+        ExtractResource(SymbolProbeResource, target, minimumBytes: 2 * 1024);
     }
 
     private static void ExtractResource(
@@ -95,7 +102,10 @@ internal static class PayloadInstaller
                             StringComparison.OrdinalIgnoreCase))
                         continue;
 
-                    process.Kill(entireProcessTree: true);
+                    // The updater Setup is launched by this Worker. Killing the
+                    // whole process tree would also kill the Setup that is performing
+                    // the replacement. Stop only the Worker process.
+                    process.Kill(entireProcessTree: false);
                     if (!process.WaitForExit(15_000))
                         throw new InvalidOperationException("Cloud Worker เดิมยังไม่หยุด จึงไม่แทนที่ไฟล์");
                 }

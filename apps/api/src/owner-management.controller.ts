@@ -264,17 +264,8 @@ export class OwnerManagementService {
     if (!slot) throw new ConflictException("ไม่พบ Slot ของลูกค้ารายนี้");
     if (!slot.instance_id || !slot.mt5_account_id) throw new ConflictException("Slot นี้ยังไม่ได้เชื่อมบัญชี MT5");
     const requestedSymbol = String(input.symbol || "").trim();
-    if (!requestedSymbol || requestedSymbol.length > 64 || !/^[A-Za-z0-9._#-]+$/.test(requestedSymbol)) {
-      throw new ConflictException("Symbol ไม่ถูกต้อง");
-    }
-    const liveSymbols = Array.isArray(slot.metrics?.marketWatchSymbols)
-      ? slot.metrics.marketWatchSymbols.map((item:any)=>String(item||"").trim()).filter(Boolean)
-      : [];
-    if (
-      liveSymbols.length > 0 &&
-      !liveSymbols.some((item:string)=>item.toUpperCase()===requestedSymbol.toUpperCase())
-    ) {
-      throw new ConflictException("Symbol นี้ไม่มีอยู่ใน Market Watch จริงของบัญชี MT5");
+    if (!/^XAU[A-Za-z0-9._#-]{3,29}$/i.test(requestedSymbol)) {
+      throw new ConflictException("กรุณาเลือก Symbol XAU ที่ตรวจพบจาก MT5 บัญชีจริง");
     }
     if (
       Number(slot.positions || 0) > 0 ||
@@ -293,12 +284,27 @@ export class OwnerManagementService {
       const worker = await this.db.one("SELECT last_seen_at,telemetry FROM worker_nodes WHERE runner_id=$1", [slot.runner_id]);
       const online = Boolean(worker?.last_seen_at && Date.now()-new Date(worker.last_seen_at).getTime()<=30_000);
       if (!online) throw new ConflictException("Cloud Worker Offline");
-      if (!versionAtLeast(worker?.telemetry?.version, "2.2.29")) {
-        throw new ConflictException("Cloud Worker ยังไม่รองรับ Exact Symbol");
+      if (!versionAtLeast(worker?.telemetry?.version, "2.2.36")) {
+        throw new ConflictException("Cloud Worker ยังไม่รองรับ Symbol Discovery รุ่นใหม่");
+      }
+      const workerInstance = Array.isArray(worker?.telemetry?.instances)
+        ? worker.telemetry.instances.find((item:any)=>String(item?.instanceId || "")===String(slot.instance_id))
+        : null;
+      const discovered = Array.isArray(workerInstance?.discoveredXauSymbols)
+        ? workerInstance.discoveredXauSymbols.map((item:any)=>String(item || "").trim()).filter(Boolean)
+        : [];
+      if (!discovered.some((item:string)=>item.toUpperCase()===requestedSymbol.toUpperCase())) {
+        throw new ConflictException("Symbol นี้ไม่ได้อยู่ในรายการ XAU ที่ VPS ตรวจพบจาก MT5 บัญชีจริง");
       }
     } else if (mode === "LOCAL") {
       const online = Boolean(slot.agent_last_seen_at && Date.now()-new Date(slot.agent_last_seen_at).getTime()<=90_000);
       if (!online) throw new ConflictException("Windows Agent ของ Slot นี้ Offline");
+      const liveSymbols = Array.isArray(slot.metrics?.marketWatchSymbols)
+        ? slot.metrics.marketWatchSymbols.map((item:any)=>String(item||"").trim()).filter(Boolean)
+        : [];
+      if (!liveSymbols.some((item:string)=>item.toUpperCase()===requestedSymbol.toUpperCase())) {
+        throw new ConflictException("Symbol นี้ไม่มีอยู่ใน Market Watch จริงของบัญชี MT5");
+      }
     } else {
       throw new ConflictException("โหมด Slot ไม่ถูกต้อง");
     }
