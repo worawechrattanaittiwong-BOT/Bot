@@ -3,6 +3,7 @@ import {
   Body,
   ConflictException,
   Controller,
+  ForbiddenException,
   Get,
   Header,
   Logger,
@@ -15,7 +16,7 @@ import {
 import { randomBytes } from "crypto";
 import { DbService } from "./db.service";
 import { EA_RUNTIME_CONTRACT, FIRST_CONNECT_PRIME_MIN_EA_VERSION, ZERO_GRID_MAX_LEVELS_PER_SIDE, installerDownloadPath, isEaVersionExact, isVersionAtLeast, isVersionExact, isVersionSame, latestEaRelease, latestInstallerVersion } from "./release-version";
-import { CryptoService, JwtGuard } from "./security";
+import { AdminGuard, CryptoService, JwtGuard } from "./security";
 import { MaintenanceService } from "./maintenance.service";
 import { PartnerService } from "./partner.service";
 import { TrialAuthorizationService } from "./trial-authorization.service";
@@ -2697,6 +2698,88 @@ export class BotController {
       note: mode === "CLOUD"
         ? "MT5 credentials accepted. VPS will connect to the real account and return XAU symbols for customer confirmation."
         : "Install token is held encrypted for the runtime."
+    };
+  }
+
+  // Controller JwtGuard and method AdminGuard must both pass.
+  // All account binding still uses the pre-existing customer Cloud MT5 path.
+  @Post("mt5/admin-connect")
+  @UseGuards(AdminGuard)
+  async adminConnectCloudMt5(
+    @Req() req: any,
+    @Body() body: {
+      userId: string;
+      slotId: string;
+      accountNumber: string;
+      broker?: string;
+      brokerServer: string;
+      tradingPassword: string;
+    }
+  ) {
+    const actorId = String(req.user?.sub || "");
+    if (!actorId || !["OWNER","ADMIN"].includes(String(req.user?.role || ""))) {
+      throw new ForbiddenException("Owner/Admin login required");
+    }
+    const actor = await this.user(actorId);
+    if (!actor || actor.status !== "ACTIVE" || !["OWNER","ADMIN"].includes(actor.role)) {
+      throw new ForbiddenException("บัญชีผู้ดูแลไม่ได้รับอนุญาต");
+    }
+    const userId = String(body?.userId || "").trim();
+    const slotId = String(body?.slotId || "").trim();
+    const accountNumber = String(body?.accountNumber || "").trim();
+    const brokerServer = String(body?.brokerServer || "").trim();
+    const broker = String(body?.broker || "").trim() || "Other";
+    const tradingPassword = typeof body?.tradingPassword === "string" ? body.tradingPassword : "";
+    if (!/^[0-9a-f-]{36}$/i.test(userId) || !/^[0-9a-f-]{36}$/i.test(slotId)) {
+      throw new BadRequestException("User ID หรือ Slot ID ไม่ถูกต้อง");
+    }
+    if (!tradingPassword || tradingPassword.length > 512 || /[\r\n\x00]/.test(tradingPassword)) {
+      throw new BadRequestException("กรุณาระบุ Trading Password ที่ถูกต้อง");
+    }
+    const customer = await this.user(userId);
+    if (!customer || customer.status !== "ACTIVE" || ["OWNER","ADMIN"].includes(customer.role)) {
+      throw new ConflictException("ไม่พบบัญชีลูกค้าที่เปิดใช้งานอยู่");
+    }
+    const slot = await this.db.one(
+      "SELECT ls.id,bi.mt5_account_id,bi.mode instance_mode,bi.actual_state,bi.desired_state, " +
+      "COALESCE(NULLIF(bi.metrics->>'positions','')::int,0) positions, " +
+      "COALESCE(NULLIF(bi.metrics->>'accountScenovaPendingOrders','')::int,0) pending_orders " +
+      "FROM license_slots ls LEFT JOIN bot_instances bi ON bi.slot_id=ls.id " +
+      "WHERE ls.id=$1 AND ls.assigned_user_id=$2 AND ls.mode='CLOUD' AND ls.status='ACTIVE'",
+      [slotId,userId]
+    );
+    if (!slot) throw new ConflictException("ไม่พบ Cloud VPS Slot ที่เปิดใช้งานของลูกค้า");
+    if (
+      slot.mt5_account_id ||
+      (slot.instance_mode && slot.instance_mode !== "CLOUD") ||
+      ["RUNNING","SAFE_STOP"].includes(String(slot.actual_state || "").toUpperCase()) ||
+      ["RUNNING","SAFE_STOP"].includes(String(slot.desired_state || "").toUpperCase()) ||
+      Number(slot.positions || 0) > 0 || Number(slot.pending_orders || 0) > 0
+    ) {
+      throw new ConflictException("Slot มี MT5 หรือออเดอร์ค้างอยู่ ต้องหยุดและตัดการเชื่อมต่อเดิมอย่างปลอดภัยก่อน");
+    }
+    // The shared path enforces Cloud entitlement, MT5 identity uniqueness,
+    // safe runtime stop/lease, encryption, and symbol discovery.
+    // This operation never issues a START command.
+    const result = await this.linkMt5(
+      { user: { sub: userId } },
+      { slotId, accountNumber, broker, brokerServer, mode: "CLOUD", tradingPassword }
+    );
+    await this.db.query(
+      "INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail) " +
+      "VALUES($1,'ADMIN_CONNECT_CUSTOMER_CLOUD_MT5','bot_instance',$2,$3::jsonb)",
+      [
+        ("ADMIN:" + actorId).slice(0,160),
+        result.instance.id,
+        JSON.stringify({ userId, slotId, mt5AccountId: result.account.id, accountNumber, brokerServer })
+      ]
+    );
+    return {
+      ok: true,
+      slotId,
+      accountNumber,
+      connectionStatus: "PENDING_WORKER",
+      message: "บันทึกข้อมูล MT5 แล้ว · รอ Cloud Worker เชื่อมต่อจริง (บอทยังไม่ Start)"
     };
   }
 

@@ -1,10 +1,11 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, Fragment, useEffect, useMemo, useState } from "react";
 import { adminApi } from "../../lib/api";
 import { OwnerMobileNav, OwnerSidebar } from "../../components/OwnerSidebar";
 import { ScenovaBrand } from "../../components/ScenovaBrand";
 import { CloudConsole } from "../../components/CloudConsole";
+import { AdminCloudMt5Connect } from "../../components/AdminCloudMt5Connect";
 import { useSystemPopup } from "../../components/SystemPopupProvider";
 
 type Menu = "overview"|"customers"|"workers";
@@ -1553,7 +1554,8 @@ export default function AdminPage() {
                             </div>
                             <div className="owner-slot-list">
                               {customerSlots(selectedCustomer).map((slot:any)=>(
-                                <div className="owner-slot-row" key={slot.id}>
+                                <Fragment key={slot.id}>
+                                <div className="owner-slot-row">
                                   <span className={"owner-mode-badge "+String(slot.mode).toLowerCase()}>{slot.mode==="CLOUD"?"CLOUD VPS":"LOCAL"}</span>
                                   <div>
                                     <b>Slot #{Number(slot.slot_number || 0)} · {slot.account_number?"MT5 "+slot.account_number:"รอเชื่อม MT5"}</b>
@@ -1615,6 +1617,13 @@ export default function AdminPage() {
                                     )}
                                   </div>
                                 </div>
+                                {slot.mode==="CLOUD" && !slot.account_number && (
+                                  <AdminCloudMt5Connect key={selectedCustomer.id+":"+slot.id}
+                                    userId={selectedCustomer.id} userCode={selectedCustomer.user_code}
+                                    slotId={slot.id} slotNumber={Number(slot.slot_number||0)}
+                                    onMessage={setMessage} onLinked={()=>search(undefined,true)}/>
+                                )}
+                                </Fragment>
                               ))}
                               {!customerSlots(selectedCustomer).length && <div className="owner-control-empty">ยังไม่มี Slot</div>}
                             </div>
