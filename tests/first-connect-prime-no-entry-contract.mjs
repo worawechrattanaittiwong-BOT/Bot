@@ -35,7 +35,9 @@ assertContains(worker, 'string.IsNullOrWhiteSpace(prepared.Symbol)', "Worker mus
 assertContains(symbols, "'symbolResolutionMode','EXACT'", "Customer confirmation must create exact Symbol authority");
 assertContains(symbols, "SET desired_state=CASE WHEN $7::boolean THEN 'STOPPED' ELSE 'SAFE_STOP' END", "Cloud Symbol confirmation must reload while bot remains stopped");
 assertContains(dashboard, "symbolDiscoveryReady === true", "Dashboard must wait for real MT5 Symbol discovery");
-assertContains(dashboard, "ระบบจะไม่เติมหรือลอง suffix ให้อัตโนมัติ", "Dashboard must state the no-guess rule");
+// The picker is intentionally concise; enforce the exact-choices behavior, not technical copy.
+assertContains(dashboard, "tradingSymbolOptions.map(item=><option key={item} value={item}", "Dashboard must present only discovered Symbol choices");
+assertContains(dashboard, "onClick={applyTradingSymbol}", "Dashboard must require explicit customer confirmation");
 
 // Keep the independent EA entry-suppression protections for legacy/repair
 // first-connect flows. They remain a defense in depth even though new Cloud

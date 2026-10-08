@@ -38,7 +38,9 @@ Assert-NotContains $dashboard 'symbolAccountType' 'legacy connect profile state'
 Assert-Contains $dashboard 'discoveredXauSymbols' 'Web consumes XAU symbols discovered by the VPS'
 Assert-Contains $dashboard 'symbolDiscoveryReady === true' 'Web waits for real MT5 discovery before prompting'
 Assert-Contains $dashboard 'symbolAutoPromptedSlotRef' 'Web opens customer confirmation once per discovery cycle'
-Assert-Contains $dashboard 'ระบบจะไม่เติมหรือลอง suffix ให้อัตโนมัติ' 'Web explains exact no-guess policy'
+# The customer asked to remove developer-oriented copy from the picker.
+# Preserve the contract by asserting that the picker only lists exact choices.
+Assert-Contains $dashboard 'tradingSymbolOptions.map(item=><option key={item} value={item}' 'Web renders exact discovered choices without guessed suffixes'
 Assert-Contains $dashboard 'Market Watch' 'Web shows Market Watch discovery progress'
 
 # The API may accept only an exact XAU string reported by the actual runtime.
@@ -80,7 +82,7 @@ Assert-NotContains $cloudRuntime 'prepared.StartupSymbols' 'Worker startup candi
 Assert-Contains $workerApi 'discoveredXauSymbols?: string[]' 'Worker heartbeat accepts discovered XAU list'
 Assert-Contains $workerApi '/^XAU[A-Za-z0-9._#-]{3,29}$/i' 'Server sanitizes Worker discovery to XAU names'
 Assert-Contains $dashboard 'Market Watch ของ MT5 บัญชีนี้' 'Web explains that customer choices come from Market Watch'
-Assert-Contains $dashboard 'ลูกค้าเป็นผู้ยืนยัน Symbol เอง' 'Web records customer as final Symbol authority'
+Assert-Contains $dashboard 'onClick={applyTradingSymbol}' 'Web requires explicit customer Symbol confirmation'
 
 # Release and self-test must carry the new protocol.
 Assert-Contains $workerLoop 'Version = "2.2.38"' 'Worker version bumped for Symbol discovery protocol'

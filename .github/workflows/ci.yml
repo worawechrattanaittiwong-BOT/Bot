@@ -25,6 +25,8 @@ jobs:
           node-version: 20
       - run: npm install
       - run: npm run typecheck
+      - name: MT5 connection progress and timeout regression
+        run: node --test ./tests/mt5-connect-progress.test.cjs
       - run: npm run build
       - name: Web production runtime smoke
         run: |
