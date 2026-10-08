@@ -3,11 +3,11 @@
     "eaVersion":  "1.1.30",
     "brain":  "AUTO",
     "probeFile":  "ScenovaSymbolProbe.ex5",
-    "buildId":  "974c62ba579dfc549373d27e68a575f7233a2667",
-    "sourceCommit":  "974c62ba579dfc549373d27e68a575f7233a2667",
-    "probeSha256":  "97d843bbcd9804a2f21486ae9481b589321d23fcf8b7e15d151e1e3e329b48d6",
-    "sha256":  "b99a8c101ebe4fd605fc1f95fafb03f03ebe22f72870a389f11b3b9139d2d14e",
+    "buildId":  "daf8fe896e85a52c619692fc2ecc6130bfce2fd2",
+    "sourceCommit":  "daf8fe896e85a52c619692fc2ecc6130bfce2fd2",
+    "probeSha256":  "7054ef01dee6490d2a6f8627600d72eb6cc6df9cee9c4009f4d6bb40f0c73073",
+    "sha256":  "3fe0edd01b751cdacdb02fb5f4708c63bf4d6a57efe9485943e54aff09805461",
     "policy":  "AUTO",
-    "builtAt":  "2026-10-07T17:05:21.9042937Z",
+    "builtAt":  "2026-10-08T01:15:39.8607422Z",
     "file":  "FastBasketBot.ex5"
 }
