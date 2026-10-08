@@ -16,76 +16,26 @@ bool StartsWithXau(const string value)
    return prefix == "XAU";
 }
 
-bool CandidateTradeEnabled(const string symbol)
+int CollectMarketWatchXau(string &symbols[])
 {
-   if(!SymbolSelect(symbol,true))
-      return false;
+   ArrayResize(symbols,0);
 
-   long tradeMode = SymbolInfoInteger(symbol,SYMBOL_TRADE_MODE);
-   if(tradeMode == SYMBOL_TRADE_MODE_DISABLED ||
-      tradeMode == SYMBOL_TRADE_MODE_CLOSEONLY)
-      return false;
-
-   double point = SymbolInfoDouble(symbol,SYMBOL_POINT);
-   double tickSize = SymbolInfoDouble(symbol,SYMBOL_TRADE_TICK_SIZE);
-   double volumeMin = SymbolInfoDouble(symbol,SYMBOL_VOLUME_MIN);
-   return point > 0.0 && tickSize > 0.0 && volumeMin > 0.0;
-}
-
-bool HasUsableM5Series(const string symbol)
-{
-   if(!SymbolIsSynchronized(symbol))
-      return false;
-
-   long synchronized = 0;
-   if(!SeriesInfoInteger(symbol,PERIOD_M5,SERIES_SYNCHRONIZED,synchronized) ||
-      synchronized == 0)
-      return false;
-
-   MqlRates rates[];
-   ArraySetAsSeries(rates,true);
-   ResetLastError();
-   int copied = CopyRates(symbol,PERIOD_M5,0,3,rates);
-   if(copied <= 0)
-      return false;
-
-   for(int i=0;i<copied;i++)
-   {
-      if(rates[i].time > 0 &&
-         rates[i].high > 0.0 &&
-         rates[i].low > 0.0 &&
-         rates[i].high >= rates[i].low)
-         return true;
-   }
-   return false;
-}
-
-int CollectUsable(string &usable[], bool &pendingSeries)
-{
-   ArrayResize(usable,0);
-   pendingSeries = false;
-
-   int total = SymbolsTotal(false);
+   // true = symbols currently selected in MT5 Market Watch.
+   // Return those exact broker-native names only. No suffix guessing,
+   // no chart validation and no trade-mode substitution.
+   int total = SymbolsTotal(true);
    for(int i=0;i<total;i++)
    {
-      string symbol = SymbolName(i,false);
+      string symbol = SymbolName(i,true);
       if(!StartsWithXau(symbol))
          continue;
-      if(!CandidateTradeEnabled(symbol))
-         continue;
 
-      if(!HasUsableM5Series(symbol))
-      {
-         pendingSeries = true;
-         continue;
-      }
-
-      int size = ArraySize(usable);
-      ArrayResize(usable,size+1);
-      usable[size] = symbol;
+      int size = ArraySize(symbols);
+      ArrayResize(symbols,size+1);
+      symbols[size] = symbol;
    }
 
-   return ArraySize(usable);
+   return ArraySize(symbols);
 }
 
 void WriteResult(string &usable[])
@@ -118,19 +68,12 @@ void OnTimer()
       return;
 
    int age = (int)(TimeLocal() - g_started);
-   if(age < 8)
+   if(age < 2)
       return;
 
-   string usable[];
-   bool pendingSeries = false;
-   CollectUsable(usable,pendingSeries);
-
-   // Wait for MT5 to finish synchronizing M5 data so the customer never sees
-   // a name that exists in the catalog but cannot actually open a usable chart.
-   if(pendingSeries && age < 25)
-      return;
-
-   WriteResult(usable);
+   string marketWatchXau[];
+   CollectMarketWatchXau(marketWatchXau);
+   WriteResult(marketWatchXau);
    if(g_completed)
       ExpertRemove();
 }
