@@ -3765,7 +3765,7 @@ export default function DashboardPage() {
 
   function openTradingSymbolPicker() {
     if (cloudSymbolFlow && !cloudSymbolPickerReady) {
-      setError("กำลังรอ VPS ยืนยันรายการ Symbol XAU จาก MT5 บัญชีนี้ · กรุณารอสักครู่");
+      setError("กำลังรอ VPS ตรวจสอบ Symbol XAU จาก Market Watch ของ MT5 บัญชีนี้ · กรุณารอสักครู่");
       return;
     }
     const desired = desiredTradingSymbol;
