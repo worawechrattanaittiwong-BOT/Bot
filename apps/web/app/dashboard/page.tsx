@@ -5975,7 +5975,10 @@ function VpsSlotManager(props:{
       <div className="vps-slot-manager-head">
         <div>
           <div className="eyebrow">VPS SLOT MANAGER</div>
-          <h2>VPS Slots ของคุณ</h2>
+          <div className="vps-slot-manager-title-row">
+            <h2>VPS Slots ของคุณ</h2>
+            {props.ownerDirectAdd && <small className="vps-slot-owner-note">OWNER · ไม่ต้องชำระเงิน · ไม่จำกัดเวลา</small>}
+          </div>
         </div>
         <div className="vps-slot-manager-actions">
           {props.ownerCanPrice && (
