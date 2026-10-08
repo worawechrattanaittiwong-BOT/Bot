@@ -12,7 +12,7 @@ new Function("require","module","exports",code)(
   mod,mod.exports
 );
 const steps=mod.exports.getMt5ConnectSteps;
-const base={acknowledged:false,isCloud:true,accountMatches:false,runnerOnline:false,terminalOnline:false,eaHeartbeat:false,cloudControlReady:false,brokerConnected:null,symbolsFound:0,symbolConfirmed:false,localSymbol:false,status:"RUNNING"};
+const base={acknowledged:false,isCloud:true,accountMatches:false,runnerOnline:false,terminalOnline:false,eaHeartbeat:false,cloudControlReady:false,brokerConnected:null,symbolsFound:0,symbolConfirmed:false,activeSymbolMatches:false,localSymbol:false,status:"RUNNING"};
 test("only receiving data is active before server confirmation",()=>{
   assert.deepEqual(steps(base).map(x=>x.state),["active","waiting","waiting","waiting","waiting","waiting"]);
 });
@@ -30,7 +30,7 @@ test("confirmed symbol must wait for EA readiness",()=>{
   assert.equal(s[5].state,"active");
 });
 test("all steps complete only after verified EA and control",()=>{
-  const s=steps({...base,acknowledged:true,accountMatches:true,runnerOnline:true,terminalOnline:true,symbolsFound:1,symbolConfirmed:true,eaHeartbeat:true,cloudControlReady:true});
+  const s=steps({...base,acknowledged:true,accountMatches:true,runnerOnline:true,terminalOnline:true,symbolsFound:1,symbolConfirmed:true,activeSymbolMatches:true,eaHeartbeat:true,cloudControlReady:true});
   assert.ok(s.every(x=>x.state==="done"));
 });
 test("explicit provisioning failure still shows error",()=>{
@@ -49,4 +49,32 @@ test("no browser-only hard timeout failure in MT5 connect path",()=>{
   const page=fs.readFileSync("apps/web/app/dashboard/page.tsx","utf8");
   assert.doesNotMatch(page,/operationAgeMs\s*>=\s*30_000\s*&&\s*terminalConnected\s*===\s*false/);
   assert.doesNotMatch(page,/operationAgeMs\s*>=\s*180_000\s*&&\s*Boolean\(op\.target\)/);
+});
+
+test("confirmed exact Symbol and live EA complete after discovery cache becomes empty",()=>{
+  const input={...base,acknowledged:true,accountMatches:true,runnerOnline:true,terminalOnline:true,
+    eaHeartbeat:true,cloudControlReady:true,brokerConnected:true,symbolsFound:0,
+    symbolConfirmed:true,activeSymbolMatches:true};
+  assert.equal(mod.exports.isCloudMt5ConnectionComplete(input),true);
+  assert.ok(steps(input).every(x=>x.state==="done"));
+});
+test("a mismatched live EA Symbol must not complete the connection",()=>{
+  const input={...base,acknowledged:true,accountMatches:true,runnerOnline:true,terminalOnline:true,
+    eaHeartbeat:true,cloudControlReady:true,brokerConnected:true,
+    symbolConfirmed:true,activeSymbolMatches:false};
+  assert.equal(mod.exports.isCloudMt5ConnectionComplete(input),false);
+  assert.equal(steps(input)[5].state,"active");
+  assert.match(steps(input)[5].detail,/Symbol/);
+});
+test("a known Broker disconnection blocks completed state",()=>{
+  const input={...base,acknowledged:true,accountMatches:true,runnerOnline:true,terminalOnline:true,
+    eaHeartbeat:true,cloudControlReady:true,brokerConnected:false,
+    symbolConfirmed:true,activeSymbolMatches:true};
+  assert.equal(mod.exports.isCloudMt5ConnectionComplete(input),false);
+  assert.equal(steps(input)[3].state,"active");
+});
+test("success logic must not reintroduce a discovery-array requirement",()=>{
+  const dashboard=fs.readFileSync("apps/web/app/dashboard/page.tsx","utf8");
+  assert.match(dashboard,/isCloudMt5ConnectionComplete\(/);
+  assert.doesNotMatch(dashboard,/cloudDiscoveryReady\s*&&\s*cloudSymbolConfirmed/);
 });

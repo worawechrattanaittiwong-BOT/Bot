@@ -6,7 +6,7 @@ import { CustomerMobileNav, CustomerSidebar, OwnerMobileNav, OwnerSidebar } from
 import { ScenovaIcon } from "../../components/ScenovaIcon";
 import { ScenovaBrand } from "../../components/ScenovaBrand";
 import { Mt5ConnectionExperience, VpsMigrationProgressCard } from "../../components/Mt5ConnectionExperience";
-import { Mt5ConnectChecklist } from "../../components/Mt5ConnectChecklist";
+import { Mt5ConnectChecklist, isCloudMt5ConnectionComplete } from "../../components/Mt5ConnectChecklist";
 import { EaDecisionCenter } from "../../components/EaDecisionCenter";
 import { BotPerformanceSummary } from "../../components/BotPerformanceSummary";
 import { useSystemPopup } from "../../components/SystemPopupProvider";
@@ -1506,15 +1506,28 @@ export default function DashboardPage() {
       const mt5Ready = Boolean(data?.instance?.mt5_online);
       const mt5GraceReady = Boolean(data?.instance?.mt5_connection_online);
       const cloudDiscoveryReady = runtimeIsCloud && discoveredXauSymbols.length > 0;
+      const confirmedSymbol = String(data?.settings?.startupSymbol || "").trim();
       const cloudSymbolConfirmed = String(data?.settings?.symbolResolutionMode || "").toUpperCase() === "EXACT" &&
-        Boolean(String(data?.settings?.startupSymbol || "").trim());
+        Boolean(confirmedSymbol);
+      const activeSymbolMatches = cloudSymbolConfirmed &&
+        String(liveMetrics.symbol || "").trim().toUpperCase() === confirmedSymbol.toUpperCase();
       const terminalConnected = liveMetrics.terminalConnected;
       // Broker-side XAU discovery is affirmative login evidence before the
       // EA heartbeat exists (the first connect requires Symbol selection).
       const brokerVerified = accountMatches && (terminalConnected === true ||
         (mt5Ready && terminalConnected !== false) ||
         (runtimeIsCloud && cloudDiscoveryReady && mt5GraceReady));
-      const eaReady = mt5Ready && (!runtimeIsCloud || Boolean(data?.instance?.cloud_control_ready));
+      const cloudConnectionComplete = isCloudMt5ConnectionComplete({
+        isCloud:runtimeIsCloud,
+        accountMatches,
+        runnerOnline:runnerReady,
+        terminalOnline:mt5GraceReady || mt5Ready,
+        eaHeartbeat:mt5Ready,
+        cloudControlReady:Boolean(data?.instance?.cloud_control_ready),
+        brokerConnected:typeof terminalConnected === "boolean" ? terminalConnected : null,
+        symbolConfirmed:cloudSymbolConfirmed,
+        activeSymbolMatches
+      });
       const accountTradeAllowed = liveMetrics.accountTradeAllowed;
       const accountTradeExpert = liveMetrics.accountTradeExpert;
       const terminalTradeAllowed = liveMetrics.terminalTradeAllowed;
@@ -1525,15 +1538,7 @@ export default function DashboardPage() {
       if (op.kind === "MT5_SWITCH" && !data?.account) {
         complete = true;
         message = "ตัดการเชื่อมต่อ MT5 เดิมแล้ว · พร้อมเชื่อมบัญชีใหม่";
-      } else if (
-        runtimeIsCloud &&
-        accountMatches &&
-        runnerReady &&
-        brokerVerified &&
-        cloudDiscoveryReady &&
-        cloudSymbolConfirmed &&
-        eaReady
-      ) {
+      } else if (cloudConnectionComplete) {
         complete = true;
         message = "เชื่อม MT5 สำเร็จ · ยืนยัน Symbol และ EA พร้อมทำงานแล้ว";
       } else if (!runtimeIsCloud && accountMatches && runnerReady && mt5Ready && brokerVerified) {
@@ -1557,7 +1562,9 @@ export default function DashboardPage() {
       } else if (runtimeIsCloud && cloudDiscoveryReady && !cloudSymbolConfirmed && brokerVerified) {
         message = "พบ Symbol ทองคำแล้ว · กรุณาเลือกและยืนยัน Symbol เพื่อเตรียม EA";
       } else if (runtimeIsCloud && cloudSymbolConfirmed && brokerVerified) {
-        message = "ยืนยัน Symbol แล้ว · กำลังรอ EA ยืนยันความพร้อม";
+        message = activeSymbolMatches
+          ? "ยืนยัน Symbol แล้ว · กำลังรอ EA ยืนยันความพร้อม"
+          : "ยืนยัน Symbol แล้ว · กำลังรอ EA โหลด Symbol ที่เลือก";
       } else if (mt5GraceReady) {
         message = runtimeIsCloud
           ? "MT5 เริ่มทำงานแล้ว · กำลังตรวจสอบบัญชีและค้นหา Symbol"
@@ -4413,6 +4420,11 @@ export default function DashboardPage() {
                       symbolsFound:discoveredXauSymbols.length,
                       symbolConfirmed:String(data?.settings?.symbolResolutionMode || "").toUpperCase() === "EXACT" &&
                         Boolean(String(data?.settings?.startupSymbol || "").trim()),
+                      activeSymbolMatches:Boolean(
+                        String(data?.settings?.startupSymbol || "").trim() &&
+                        String(data?.instance?.metrics?.symbol || "").trim().toUpperCase() ===
+                          String(data?.settings?.startupSymbol || "").trim().toUpperCase()
+                      ),
                       localSymbol:Boolean(String(data?.instance?.metrics?.symbol || "").trim()),
                       status:String(operationTerminal.status || "RUNNING")
                     }}
