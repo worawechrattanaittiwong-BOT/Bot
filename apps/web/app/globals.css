@@ -10133,7 +10133,7 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
   min-height:42px;
   padding:8px 13px;
 }
-.vps-slot-manager .vps-slot-stats span{font-size:10px}
+.vps-slot-manager .vps-slot-stats span{font-size:11px}
 .vps-slot-manager .vps-slot-stats b{font-size:17px}
 .vps-slot-manager .vps-slot-grid{
   grid-template-columns:repeat(2,minmax(0,1fr));
@@ -10166,13 +10166,13 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
 .vps-slot-manager .vps-slot-kind{
   margin:0;
   padding:3px 7px;
-  font-size:10px;
+  font-size:11px;
   line-height:1.25;
 }
 .vps-slot-manager .vps-slot-status{
   flex-shrink:0;
   padding:5px 8px;
-  font-size:10px;
+  font-size:11px;
 }
 .vps-slot-manager .vps-slot-card-details{
   display:grid;
@@ -10187,7 +10187,7 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
   border-radius:9px;
 }
 .vps-slot-manager .vps-slot-account small{
-  font-size:10px;
+  font-size:11px;
   letter-spacing:.03em;
 }
 .vps-slot-manager .vps-slot-account b{
@@ -10195,7 +10195,7 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
   line-height:1.35;
 }
 .vps-slot-manager .vps-slot-account span{
-  font-size:10px;
+  font-size:11px;
   line-height:1.4;
 }
 .vps-slot-manager .vps-slot-meta{
@@ -10213,7 +10213,7 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
 }
 .vps-slot-manager .vps-slot-meta span{
   flex-shrink:0;
-  font-size:10px;
+  font-size:11px;
 }
 .vps-slot-manager .vps-slot-meta b{
   margin:0;
@@ -10251,7 +10251,7 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
 .vps-slot-manager .vps-slot-add-card b{font-size:12px}
 .vps-slot-manager .vps-slot-add-card small{
   max-width:none;
-  font-size:10px;
+  font-size:11px;
 }
 @media(max-width:900px){
   .vps-slot-manager .vps-slot-card-details{
