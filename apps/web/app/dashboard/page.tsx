@@ -1741,8 +1741,10 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (serverOperation?.status !== "SUCCESS") return;
-    const delayMs = serverOperation?.kind === "START" ? 550
-      : ["MT5_CONNECT","MT5_RECONNECT","LOCAL_MT5_BIND","MT5_SWITCH"].includes(String(serverOperation?.kind)) ? 4200 : 1200;
+    // Keep START/other-operation UX unchanged; MT5 connect gets a longer
+    // verified-success display so customers can read the six completed stages.
+    const delayMs = ["MT5_CONNECT","MT5_RECONNECT","LOCAL_MT5_BIND","MT5_SWITCH"].includes(String(serverOperation?.kind))
+      ? 4200 : serverOperation?.kind === "START" ? 550 : 1200;
     const id = window.setTimeout(() => setServerOperation(null), delayMs);
     return () => clearTimeout(id);
   }, [serverOperation?.id, serverOperation?.kind, serverOperation?.status]);
