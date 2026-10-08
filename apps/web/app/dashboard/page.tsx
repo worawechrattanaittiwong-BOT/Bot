@@ -1458,7 +1458,6 @@ export default function DashboardPage() {
       (
         operationAgeMs >= 90_000 &&
         (
-          op.kind === "SYMBOL" ||
           op.kind === "START" ||
           op.kind === "CLOSE_ALL"
         )
@@ -1478,21 +1477,6 @@ export default function DashboardPage() {
       message = connectionOperation
         ? "เชื่อม MT5 ไม่สำเร็จภายในเวลาที่กำหนด · ตรวจ Login, Trading Password และ Server ก่อน หากข้อมูลถูกต้อง Broker อาจต้องใช้ MT5 Terminal ของตัวเอง"
         : "Server ไม่ได้รับสถานะยืนยันภายในเวลาที่กำหนด · กรุณาตรวจ MT5/EA แล้วลองใหม่";
-    } else if (op.kind === "SYMBOL") {
-      const target = String(op.target || "");
-      const current = String(liveMetrics.symbol || "");
-      const symbolStatus = String(liveMetrics.symbolChangeStatus || liveMetrics.manualMt5ActionStatus || "").toUpperCase();
-      if (symbolStatus === "FAILED") {
-        failed = true;
-        message = String(liveMetrics.manualMt5ActionMessage || "Cloud Worker เปลี่ยน Symbol ไม่สำเร็จ");
-      } else if (target && current.toUpperCase() === target.toUpperCase() && heartbeatOk) {
-        complete = true;
-        message = "MT5 เปิด " + target + " และ EA ส่ง Heartbeat ยืนยันแล้ว";
-      } else if (symbolStatus === "RELOADED" || current.toUpperCase() === target.toUpperCase()) {
-        message = "Worker เปิดกราฟ " + target + " แล้ว · กำลังรอ EA Heartbeat ยืนยัน";
-      } else {
-        message = "Server ส่งคำสั่งไป Cloud Worker แล้ว · กำลังเปิดกราฟ " + target + " และโหลด FastBasketBot";
-      }
     } else if (op.kind === "START") {
       if (actual === "RUNNING" && wanted === "RUNNING" && heartbeatOk) {
         complete = true;
@@ -3741,17 +3725,6 @@ export default function DashboardPage() {
     setSymbolBusy(true);
     setError("");
     setNotice("");
-    const operationId = Date.now() + "-" + Math.random().toString(36).slice(2);
-    setServerOperationMinimized(false);
-    setServerOperation({
-      id:operationId,
-      kind:"SYMBOL",
-      title:"กำลังยืนยัน Symbol XAU",
-      target:next,
-      status:"RUNNING",
-      message:"กำลังยืนยันชื่อ Symbol ตรงกับรายการที่ VPS อ่านจาก MT5 จริง...",
-      startedAt:Date.now()
-    });
     try {
       const result = await api(
         "/bot/trading-symbol?slotId=" + encodeURIComponent(selectedSlotIdRef.current),
@@ -3762,28 +3735,10 @@ export default function DashboardPage() {
       );
       const resolved = String(result?.resolvedSymbol || result?.symbol || next);
       symbolDialogRef.current?.close();
-      setServerOperation((current:any) =>
-        current?.id === operationId
-          ? {
-              ...current,
-              target:resolved,
-              message:"Server ยืนยัน " + resolved + " แล้ว · กำลังสั่ง Worker เปิดกราฟและโหลด EA",
-              updatedAt:Date.now()
-            }
-          : current
-      );
+      setNotice("ยืนยัน " + resolved + " แล้ว · กำลังโหลด EA");
       await load(selectedSlotIdRef.current, true);
     } catch (e:any) {
-      setServerOperation((current:any) =>
-        current?.id === operationId
-          ? {
-              ...current,
-              status:"FAILED",
-              message:String(e?.message || "เปลี่ยน Symbol ไม่สำเร็จ"),
-              updatedAt:Date.now()
-            }
-          : current
-      );
+      setError(String(e?.message || "เปลี่ยน Symbol ไม่สำเร็จ"));
     } finally {
       setSymbolBusy(false);
     }
