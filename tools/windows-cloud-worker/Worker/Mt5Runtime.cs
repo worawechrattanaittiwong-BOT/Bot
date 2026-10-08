@@ -238,18 +238,28 @@ internal sealed class Mt5Runtime
         }
 
         string brokerServer = "";
+        string accountNumber = "";
         try
         {
-            brokerServer = File.ReadLines(startupPath)
+            var startupLines = File.ReadLines(startupPath)
                 .Select(line => line.Trim())
+                .ToArray();
+            brokerServer = startupLines
                 .FirstOrDefault(line =>
                     line.StartsWith("Server=", StringComparison.OrdinalIgnoreCase))?
                 .Substring("Server=".Length)
                 .Trim() ?? "";
+            accountNumber = startupLines
+                .FirstOrDefault(line =>
+                    line.StartsWith("Login=", StringComparison.OrdinalIgnoreCase))?
+                .Substring("Login=".Length)
+                .Trim() ?? "";
         }
         catch { }
 
-        if (string.IsNullOrWhiteSpace(brokerServer))
+        if (string.IsNullOrWhiteSpace(brokerServer) ||
+            string.IsNullOrWhiteSpace(accountNumber) ||
+            !accountNumber.All(char.IsDigit))
         {
             var empty = Array.Empty<string>();
             _xauDiscoveryCache[instancePath] = (DateTimeOffset.UtcNow, empty);
@@ -301,7 +311,7 @@ internal sealed class Mt5Runtime
             found.Add(value);
         }
 
-        void ScanSymbolsSel(string path)
+        void ScanSelectedSymbolsDat(string path)
         {
             byte[] data;
             try
@@ -316,9 +326,10 @@ internal sealed class Mt5Runtime
                 return;
             }
 
-            // symbols.sel is MT5's persisted Market Watch selection.
-            // Read exact broker-native names only; never inspect symbols.raw
-            // and never manufacture a suffix.
+            // MT5 stores the current Market Watch database in
+            // bases/<server>/Symbols/selected-<login>.dat. Read only that
+            // account-specific selected-symbol database. Never inspect the
+            // full symbol catalog and never manufacture a broker suffix.
             for (var i = 0; i < data.Length;)
             {
                 if (!IsSymbolChar(data[i]))
@@ -363,11 +374,21 @@ internal sealed class Mt5Runtime
         {
             foreach (var root in serverRoots)
             {
-                foreach (var file in Directory.EnumerateFiles(
-                             root,
-                             "symbols.sel",
-                             SearchOption.AllDirectories))
-                    ScanSymbolsSel(file);
+                var symbolsDir = Path.Combine(root, "Symbols");
+                if (!Directory.Exists(symbolsDir))
+                    continue;
+
+                var selectedFile = Directory.EnumerateFiles(
+                        symbolsDir,
+                        "selected-*.dat",
+                        SearchOption.TopDirectoryOnly)
+                    .FirstOrDefault(path => string.Equals(
+                        Path.GetFileName(path),
+                        "selected-" + accountNumber + ".dat",
+                        StringComparison.OrdinalIgnoreCase));
+
+                if (!string.IsNullOrWhiteSpace(selectedFile))
+                    ScanSelectedSymbolsDat(selectedFile);
             }
         }
         catch
