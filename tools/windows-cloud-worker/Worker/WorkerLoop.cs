@@ -2,7 +2,7 @@ namespace Scenova.CloudWorker;
 
 internal sealed class WorkerLoop
 {
-    internal const string Version = "2.2.36";
+    internal const string Version = "2.2.34";
     private static readonly TimeSpan HeartbeatInterval = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan HeartbeatRequestTimeout = TimeSpan.FromSeconds(8);
     private static readonly TimeSpan TelemetryInterval = TimeSpan.FromSeconds(30);
@@ -48,15 +48,7 @@ internal sealed class WorkerLoop
                     // It replaces/restarts only Worker/Setup and leaves terminals running.
                     phase = "server-update";
                     if (await _serverUpdates.ProcessNextAsync(cancellationToken))
-                    {
-                        // Keep heartbeat/telemetry alive until Setup explicitly
-                        // replaces this Worker. If Setup fails before takeover,
-                        // the current Worker remains online instead of stranding
-                        // the server offline.
-                        phase = "server-update-handoff";
-                        await Task.Delay(TimeSpan.FromSeconds(20), cancellationToken);
-                        continue;
-                    }
+                        return;
 
                     phase = "commands";
                     var commands = await _client.PostAsync<CommandEnvelope>(

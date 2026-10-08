@@ -61,7 +61,6 @@ internal sealed class Mt5Runtime
     public bool TemplateReady =>
         File.Exists(Path.Combine(_templatePath, "terminal64.exe")) &&
         File.Exists(Path.Combine(_templatePath, "MQL5", "Experts", "FastBasketBot.ex5")) &&
-        File.Exists(Path.Combine(_templatePath, "MQL5", "Experts", "ScenovaSymbolProbe.ex5")) &&
         File.Exists(Path.Combine(_templatePath, "cloud-template.ready"));
 
     public IReadOnlyList<BrokerServerDirectoryEntry> BrokerServers() =>
@@ -207,7 +206,7 @@ internal sealed class Mt5Runtime
                 BrokerPlatformError = ReadSmallText(
                     Path.Combine(instancePath, "broker-platform-error.txt")),
                 DiscoveredXauSymbols = discoveryPending
-                    ? ReadValidatedXauSymbols(instancePath)
+                    ? DiscoverXauSymbols(instancePath)
                     : Array.Empty<string>()
             });
         }
@@ -220,7 +219,7 @@ internal sealed class Mt5Runtime
         _xauDiscoveryCache.Remove(instancePath);
     }
 
-    private IReadOnlyList<string> DiscoverRawXauCandidates(string instancePath)
+    private IReadOnlyList<string> DiscoverXauSymbols(string instancePath)
     {
         if (_xauDiscoveryCache.TryGetValue(instancePath, out var cached) &&
             DateTimeOffset.UtcNow - cached.At < TimeSpan.FromSeconds(15))
@@ -377,169 +376,6 @@ internal sealed class Mt5Runtime
         return symbols;
     }
 
-    private static IReadOnlyList<string> ReadValidatedXauSymbols(string instancePath)
-    {
-        var path = Path.Combine(
-            instancePath,
-            "MQL5",
-            "Files",
-            "scenova-xau-usable.txt");
-        try
-        {
-            if (!File.Exists(path)) return Array.Empty<string>();
-            var lines = File.ReadAllLines(path);
-            if (lines.Length == 0 ||
-                !string.Equals(lines[0].Trim(), "READY", StringComparison.OrdinalIgnoreCase))
-                return Array.Empty<string>();
-
-            return lines
-                .Skip(1)
-                .Select(value => value.Trim())
-                .Where(value =>
-                    value.Length >= 6 &&
-                    value.Length <= 32 &&
-                    value.StartsWith("XAU", StringComparison.OrdinalIgnoreCase) &&
-                    value.All(ch =>
-                        char.IsLetterOrDigit(ch) ||
-                        ch is '.' or '_' or '#' or '-'))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-        }
-        catch
-        {
-            return Array.Empty<string>();
-        }
-    }
-
-    private bool EnsureSymbolDiscoveryProbe(
-        CloudJob job,
-        string instancePath,
-        string terminalPath)
-    {
-        if (!job.SymbolDiscoveryPending)
-            return false;
-
-        var resultPath = Path.Combine(
-            instancePath,
-            "MQL5",
-            "Files",
-            "scenova-xau-usable.txt");
-        if (File.Exists(resultPath))
-            return false;
-
-        var rawCandidates = DiscoverRawXauCandidates(instancePath);
-        if (rawCandidates.Count == 0)
-            return false;
-
-        var statePath = Path.Combine(instancePath, "symbol-probe.state");
-        var attemptsPath = Path.Combine(instancePath, "symbol-probe.attempts");
-        var attempted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        try
-        {
-            if (File.Exists(attemptsPath))
-            {
-                foreach (var value in File.ReadAllLines(attemptsPath))
-                {
-                    var clean = value.Trim();
-                    if (!string.IsNullOrWhiteSpace(clean))
-                        attempted.Add(clean);
-                }
-            }
-        }
-        catch { }
-
-        if (File.Exists(statePath))
-        {
-            try
-            {
-                var parts = File.ReadAllText(statePath).Trim().Split('|', 2);
-                if (parts.Length > 0 &&
-                    DateTimeOffset.TryParse(parts[0], out var startedAt) &&
-                    DateTimeOffset.UtcNow - startedAt < TimeSpan.FromSeconds(20))
-                    return false;
-            }
-            catch { }
-        }
-
-        var candidate = rawCandidates.FirstOrDefault(value => !attempted.Contains(value));
-        if (string.IsNullOrWhiteSpace(candidate))
-        {
-            attempted.Clear();
-            try { File.Delete(attemptsPath); } catch { }
-            candidate = rawCandidates.FirstOrDefault();
-        }
-        if (string.IsNullOrWhiteSpace(candidate))
-            return false;
-
-        if (!StopInstance(job.InstanceId))
-            return false;
-
-        var probePath = Path.Combine(
-            instancePath,
-            "MQL5",
-            "Experts",
-            "ScenovaSymbolProbe.ex5");
-        if (!File.Exists(probePath))
-            throw new InvalidOperationException("SYMBOL_PROBE_MISSING");
-
-        try { if (File.Exists(resultPath)) File.Delete(resultPath); } catch { }
-        ResetCloudChartWorkspace(instancePath);
-
-        var startupPath = Path.Combine(instancePath, "cloud-start.ini");
-        File.WriteAllLines(
-            startupPath,
-            new[]
-            {
-                "[Common]",
-                "Login=" + SafeIniValue(job.AccountNumberText),
-                "Password=" + SafeIniValue(job.TradingPassword),
-                "Server=" + SafeIniValue(job.BrokerServer),
-                "KeepPrivate=1",
-                "NewsEnable=0",
-                "ProxyEnable=0",
-                "CertInstall=0",
-                "EnableDpiAware=1",
-                "[Charts]",
-                "MaxBars=5000",
-                "[Experts]",
-                "Enabled=1",
-                "AllowLiveTrading=0",
-                "AllowDllImport=0",
-                "WebRequest=0",
-                "[StartUp]",
-                "Expert=ScenovaSymbolProbe",
-                "Symbol=" + SafeIniValue(candidate),
-                "Period=M5"
-            },
-            Encoding.Unicode);
-
-        _autoLaunchAttempted.Remove(job.InstanceId);
-        LaunchPrepared(
-            new PreparedInstance(
-                instancePath,
-                terminalPath,
-                Path.Combine(instancePath, "MQL5", "Presets", "SCENOVA-Cloud.set"),
-                startupPath,
-                candidate),
-            requireEaAttach: false);
-
-        try
-        {
-            File.AppendAllLines(
-                attemptsPath,
-                new[] { candidate },
-                new UTF8Encoding(false));
-            File.WriteAllText(
-                statePath,
-                DateTimeOffset.UtcNow.ToString("O") + "|" + candidate,
-                new UTF8Encoding(false));
-        }
-        catch { }
-
-        return true;
-    }
-
     private static DateTime SafeLastWriteTimeUtc(string path)
     {
         try
@@ -693,25 +529,14 @@ internal sealed class Mt5Runtime
                     "MQL5",
                     "Experts",
                     "FastBasketBot.ex5");
-                var brokerProbe = Path.Combine(
-                    instancePath,
-                    "MQL5",
-                    "Experts",
-                    "ScenovaSymbolProbe.ex5");
                 var templateEa = Path.Combine(
                     _templatePath,
                     "MQL5",
                     "Experts",
                     "FastBasketBot.ex5");
-                var templateProbeSource = Path.Combine(
-                    _templatePath,
-                    "MQL5",
-                    "Experts",
-                    "ScenovaSymbolProbe.ex5");
 
                 Directory.CreateDirectory(Path.GetDirectoryName(brokerEa)!);
                 File.Copy(templateEa, brokerEa, overwrite: true);
-                File.Copy(templateProbeSource, brokerProbe, overwrite: true);
             }
             else
             {
@@ -726,27 +551,8 @@ internal sealed class Mt5Runtime
 
         var terminal = Path.Combine(instancePath, "terminal64.exe");
         var ea = Path.Combine(instancePath, "MQL5", "Experts", "FastBasketBot.ex5");
-        var probe = Path.Combine(instancePath, "MQL5", "Experts", "ScenovaSymbolProbe.ex5");
-        var templateProbe = Path.Combine(_templatePath, "MQL5", "Experts", "ScenovaSymbolProbe.ex5");
-        if (File.Exists(templateProbe))
-        {
-            try
-            {
-                Directory.CreateDirectory(Path.GetDirectoryName(probe)!);
-                if (!File.Exists(probe) ||
-                    !string.Equals(
-                        HashFile(probe),
-                        HashFile(templateProbe),
-                        StringComparison.OrdinalIgnoreCase))
-                    File.Copy(templateProbe, probe, overwrite: true);
-            }
-            catch
-            {
-                // Discovery will fail closed below if the verified probe cannot be refreshed.
-            }
-        }
-        if (!File.Exists(terminal) || !File.Exists(ea) || !File.Exists(probe))
-            throw new InvalidOperationException("Missing MT5, EA or Symbol Probe");
+        if (!File.Exists(terminal) || !File.Exists(ea))
+            throw new InvalidOperationException("Missing MT5 or EA");
 
         var presetDir = Path.Combine(instancePath, "MQL5", "Presets");
         Directory.CreateDirectory(presetDir);
@@ -805,16 +611,8 @@ internal sealed class Mt5Runtime
 
         try
         {
-            foreach (var name in new[]
-            {
-                "symbol-discovery.started",
-                "symbol-probe.state",
-                "symbol-probe.attempts"
-            })
-            {
-                var cleanupMarker = Path.Combine(instancePath, name);
-                if (File.Exists(cleanupMarker)) File.Delete(cleanupMarker);
-            }
+            var discoveryMarker = Path.Combine(instancePath, "symbol-discovery.started");
+            if (File.Exists(discoveryMarker)) File.Delete(discoveryMarker);
         }
         catch { }
         _xauDiscoveryCache.Remove(instancePath);
@@ -1156,10 +954,6 @@ internal sealed class Mt5Runtime
         if (HasExactTerminal(terminal))
         {
             ShouldAutoLaunch(job.InstanceId, terminalRunning: true);
-            if (job.SymbolDiscoveryPending &&
-                EnsureSymbolDiscoveryProbe(job, instancePath, terminal))
-                return;
-
             TryApplyChartLayout(job, terminal);
 
             if (job.EaOnline)
@@ -1502,12 +1296,6 @@ internal sealed class Mt5Runtime
         }
 
         return false;
-    }
-
-    private static string HashFile(string path)
-    {
-        using var stream = File.OpenRead(path);
-        return Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
     }
 
     private static bool EaReadyMarkerMatches(string markerPath, string instanceId)

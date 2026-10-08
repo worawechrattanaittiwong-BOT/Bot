@@ -6,7 +6,6 @@ on:
       - "tools/windows-cloud-worker/Setup/**"
       - "tools/windows-cloud-worker/Worker/**"
       - "mt5/release/FastBasketBot.ex5"
-      - "mt5/release/ScenovaSymbolProbe.ex5"
       - "apps/web/components/CloudConsole.tsx"
       - "apps/api/src/worker.controller.ts"
       - "apps/api/src/cloud.controller.ts"
@@ -19,7 +18,6 @@ on:
       - "tools/windows-cloud-worker/Setup/**"
       - "tools/windows-cloud-worker/Worker/**"
       - "mt5/release/FastBasketBot.ex5"
-      - "mt5/release/ScenovaSymbolProbe.ex5"
       - "apps/web/components/CloudConsole.tsx"
       - "apps/api/src/server-enrollment.controller.ts"
       - "apps/api/src/server-enrollment.service.ts"
@@ -89,15 +87,7 @@ jobs:
           if ($releaseSha -ne ([string]$manifest.sha256).ToLowerInvariant()) {
             throw "Cloud Setup refuses EX5 whose SHA256 does not match mt5/release/manifest.json"
           }
-          if (-not (Test-Path "mt5/release/ScenovaSymbolProbe.ex5")) {
-            throw "Cloud Setup requires ScenovaSymbolProbe.ex5"
-          }
-          $probeSha = (Get-FileHash "mt5/release/ScenovaSymbolProbe.ex5" -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($probeSha -ne ([string]$manifest.probeSha256).ToLowerInvariant()) {
-            throw "Cloud Setup refuses Symbol Probe whose SHA256 does not match mt5/release/manifest.json"
-          }
           Write-Host "Cloud Setup embedded EA verified: v$sourceVersion $releaseSha"
-          Write-Host "Cloud Setup embedded Symbol Probe verified: $probeSha"
 
       - name: Publish Cloud Setup with embedded Worker and EA
         shell: powershell

@@ -12,13 +12,11 @@ on:
     branches: [main]
     paths:
       - "mt5/FastBasketBot.mq5"
-      - "mt5/ScenovaSymbolProbe.mq5"
       - "mt5/include/**"
       - ".github/workflows/build-mt5-ea.yml"
   pull_request:
     paths:
       - "mt5/FastBasketBot.mq5"
-      - "mt5/ScenovaSymbolProbe.mq5"
       - "mt5/include/**"
       - ".github/workflows/build-mt5-ea.yml"
 
@@ -129,21 +127,7 @@ jobs:
             if ($compileLog -match '(?i)\b[1-9][0-9]*\s+errors?\b') { throw "MetaEditor reported compile errors" }
           }
           Copy-Item -Force $ex5 "$env:RUNNER_TEMP\FastBasketBot.ex5"
-
-          $probeSource = (Resolve-Path "mt5\ScenovaSymbolProbe.mq5").Path
-          $probeLog = "$env:RUNNER_TEMP\ScenovaSymbolProbe-compile.log"
-          Start-Process -FilePath "$env:METAEDITOR" -ArgumentList "/compile:`"$probeSource`" /log:`"$probeLog`"" -Wait
-          if (Test-Path $probeLog) { Get-Content $probeLog }
-          $probeEx5 = [System.IO.Path]::ChangeExtension($probeSource, ".ex5")
-          if (-not (Test-Path $probeEx5)) { throw "ScenovaSymbolProbe.ex5 was not produced" }
-          if (Test-Path $probeLog) {
-            $probeCompileLog = Get-Content $probeLog -Raw
-            if ($probeCompileLog -match '(?i)\b[1-9][0-9]*\s+errors?\b') { throw "MetaEditor reported probe compile errors" }
-          }
-          Copy-Item -Force $probeEx5 "$env:RUNNER_TEMP\ScenovaSymbolProbe.ex5"
-
           $hash = (Get-FileHash -Algorithm SHA256 $ex5).Hash.ToLowerInvariant()
-          $probeHash = (Get-FileHash -Algorithm SHA256 $probeEx5).Hash.ToLowerInvariant()
           @{
             file = "FastBasketBot.ex5"
             sha256 = $hash
@@ -151,8 +135,6 @@ jobs:
             runtimeContract = $env:EA_RUNTIME_CONTRACT
             buildId = $env:EA_BUILD_ID
             sourceCommit = "${{ github.sha }}"
-            probeFile = "ScenovaSymbolProbe.ex5"
-            probeSha256 = $probeHash
             builtAt = (Get-Date).ToUniversalTime().ToString("o")
             brain = "AUTO"
             policy = "AUTO"
@@ -170,7 +152,7 @@ jobs:
             git fetch origin main
             if ($LASTEXITCODE -ne 0) { Start-Sleep -Seconds 2; continue }
 
-            git diff --quiet "${{ github.sha }}" origin/main -- mt5/FastBasketBot.mq5 mt5/ScenovaSymbolProbe.mq5 mt5/include
+            git diff --quiet "${{ github.sha }}" origin/main -- mt5/FastBasketBot.mq5 mt5/include
             if ($LASTEXITCODE -eq 1) {
               Write-Host "A newer EA source exists on main; skipping obsolete compiled artifact."
               exit 0
@@ -180,9 +162,8 @@ jobs:
             git reset --hard origin/main
             New-Item -ItemType Directory -Force -Path "mt5\release" | Out-Null
             Copy-Item -Force "$env:RUNNER_TEMP\FastBasketBot.ex5" "mt5\release\FastBasketBot.ex5"
-            Copy-Item -Force "$env:RUNNER_TEMP\ScenovaSymbolProbe.ex5" "mt5\release\ScenovaSymbolProbe.ex5"
             Copy-Item -Force "$env:RUNNER_TEMP\FastBasketBot-manifest.json" "mt5\release\manifest.json"
-            git add -f mt5/release/FastBasketBot.ex5 mt5/release/ScenovaSymbolProbe.ex5
+            git add -f mt5/release/FastBasketBot.ex5
             git add mt5/release/manifest.json
             git diff --cached --quiet
             if ($LASTEXITCODE -eq 0) { $published = $true; break }

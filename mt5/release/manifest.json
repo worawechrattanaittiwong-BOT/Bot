@@ -2,12 +2,10 @@
     "runtimeContract":  "RACE_CONFIGURED_LOSS_ONLY_V1",
     "eaVersion":  "1.1.30",
     "brain":  "AUTO",
-    "probeFile":  "ScenovaSymbolProbe.ex5",
-    "buildId":  "974c62ba579dfc549373d27e68a575f7233a2667",
-    "sourceCommit":  "974c62ba579dfc549373d27e68a575f7233a2667",
-    "probeSha256":  "97d843bbcd9804a2f21486ae9481b589321d23fcf8b7e15d151e1e3e329b48d6",
-    "sha256":  "b99a8c101ebe4fd605fc1f95fafb03f03ebe22f72870a389f11b3b9139d2d14e",
+    "buildId":  "38cdc2b03980b96d6b4cad97b2cc6d7dca679b3f",
+    "sourceCommit":  "38cdc2b03980b96d6b4cad97b2cc6d7dca679b3f",
+    "builtAt":  "2026-10-07T03:44:06.9317433Z",
+    "sha256":  "42d3b09b012eaa1e485cc310c5e91f01922677fe0904e3014636f70f95703883",
     "policy":  "AUTO",
-    "builtAt":  "2026-10-07T17:05:21.9042937Z",
     "file":  "FastBasketBot.ex5"
 }

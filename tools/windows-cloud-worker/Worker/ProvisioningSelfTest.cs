@@ -22,9 +22,6 @@ internal static class ProvisioningSelfTest
             File.WriteAllBytes(
                 Path.Combine(template, "MQL5", "Experts", "FastBasketBot.ex5"),
                 Encoding.ASCII.GetBytes("SCENOVA-EA-SELF-TEST"));
-            File.WriteAllBytes(
-                Path.Combine(template, "MQL5", "Experts", "ScenovaSymbolProbe.ex5"),
-                Encoding.ASCII.GetBytes("SCENOVA-SYMBOL-PROBE-SELF-TEST"));
             File.WriteAllText(Path.Combine(template, "cloud-template.ready"), "SELF_TEST", new UTF8Encoding(false));
             File.WriteAllText(Path.Combine(template, "template-sentinel.txt"), "UNCHANGED", new UTF8Encoding(false));
 

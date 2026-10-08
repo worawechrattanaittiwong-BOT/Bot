@@ -935,7 +935,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const slotId = String(data?.selectedSlot?.id || "");
-    if (!cloudSymbolFlow || !slotId) {
+    if (!cloudSymbolFlow || !slotId || !data?.account) {
       setDiscoveredXauSymbols([]);
       return;
     }
@@ -1549,7 +1549,7 @@ export default function DashboardPage() {
         cloudDiscoveryReady
       ) {
         complete = true;
-        message = "เชื่อม MT5 สำเร็จ · พบ Symbol XAU ใน Market Watch " + discoveredXauSymbols.length + " รายการ · กรุณาเลือก Symbol ที่ต้องการใช้";
+        message = "เชื่อม MT5 สำเร็จ · พบ Symbol XAU จริง " + discoveredXauSymbols.length + " รายการ · กรุณาเลือก Symbol ที่ต้องการใช้";
       } else if (accountMatches && runnerReady && mt5Ready) {
         complete = true;
 
@@ -1570,7 +1570,7 @@ export default function DashboardPage() {
         message = "กำลังตรวจสอบบัญชี MT5 ใหม่...";
       } else if (mt5GraceReady) {
         message = runtimeIsCloud
-          ? "MT5 เปิดและเชื่อม Broker แล้ว · กำลังอ่าน Symbol XAU จาก Market Watch"
+          ? "MT5 เปิดและเชื่อม Broker แล้ว · กำลังตรวจหา Symbol XAU จากข้อมูลจริงของ MT5"
           : "MT5 ตอบกลับแล้ว · กำลังยืนยัน Heartbeat ให้เสถียร";
       } else {
         message = op.kind === "LOCAL_MT5_BIND"
@@ -3276,8 +3276,8 @@ export default function DashboardPage() {
       symbolAutoPromptedSlotRef.current = "";
       setDiscoveredXauSymbols([]);
       setNotice(cloudMt5DialogMode === "RECONNECT"
-        ? "บันทึกรหัสแล้ว · VPS กำลังเชื่อม MT5 และอ่าน Symbol XAU จาก Market Watch"
-        : "เชื่อมบัญชีแล้ว · VPS กำลังเปิด MT5 และอ่าน Symbol XAU จาก Market Watch");
+        ? "บันทึกรหัสแล้ว · VPS กำลังเชื่อม MT5 และตรวจหา Symbol XAU จากบัญชีจริง"
+        : "เชื่อมบัญชีแล้ว · VPS กำลังเปิด MT5 และตรวจหา Symbol XAU ที่ใช้งานได้จริง");
       setServerOperation((current:any) =>
         current?.id === operationId
           ? { ...current, message:"Server รับข้อมูลแล้ว · กำลังเชื่อม MT5 และอ่านรายการ XAU จากบัญชีจริง", updatedAt:Date.now() }
@@ -3716,7 +3716,7 @@ export default function DashboardPage() {
 
   function openTradingSymbolPicker() {
     if (cloudSymbolFlow && tradingSymbolOptions.length === 0) {
-      setError("กำลังรอ VPS อ่าน Symbol XAU จาก Market Watch ของ MT5 บัญชีนี้ · กรุณารอสักครู่");
+      setError("กำลังรอ VPS ตรวจหา Symbol XAU จาก MT5 บัญชีจริง · กรุณารอสักครู่");
       return;
     }
     const desired = desiredTradingSymbol;
@@ -4720,9 +4720,9 @@ export default function DashboardPage() {
                   <p className="cc-symbol-picker-source">
                     {desiredTradingSymbol
                       ? <>Symbol ที่ยืนยันแล้ว: <b>{desiredTradingSymbol}</b>{symbolSelectionPending ? " · กำลังเปิดบน MT5" : activeTradingSymbol ? " · ใช้งานจริงแล้ว" : ""}</>
-                      : <>พบ <b>{tradingSymbolOptions.length}</b> Symbol XAU ใน Market Watch ของ MT5 บัญชีนี้</>}
+                      : <>VPS ตรวจพบ <b>{tradingSymbolOptions.length}</b> Symbol XAU จาก MT5 บัญชีนี้</>}
                   </p>
-                  <p className="cc-symbol-picker-source">แสดงเฉพาะชื่อ Symbol XAU ที่อยู่ใน Market Watch ของ MT5 บัญชีนี้ · ระบบจะไม่เติมหรือลอง suffix ให้อัตโนมัติ และลูกค้าเป็นผู้ยืนยัน Symbol เอง</p>
+                  <p className="cc-symbol-picker-source">เลือกจากชื่อที่ MT5 ตรวจพบจริงเท่านั้น · ระบบจะไม่เติมหรือลอง suffix ให้อัตโนมัติ</p>
                   <select
                     autoFocus
                     value={tradingSymbol}

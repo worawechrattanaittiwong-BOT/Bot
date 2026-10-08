@@ -284,7 +284,7 @@ export class OwnerManagementService {
       const worker = await this.db.one("SELECT last_seen_at,telemetry FROM worker_nodes WHERE runner_id=$1", [slot.runner_id]);
       const online = Boolean(worker?.last_seen_at && Date.now()-new Date(worker.last_seen_at).getTime()<=30_000);
       if (!online) throw new ConflictException("Cloud Worker Offline");
-      if (!versionAtLeast(worker?.telemetry?.version, "2.2.36")) {
+      if (!versionAtLeast(worker?.telemetry?.version, "2.2.34")) {
         throw new ConflictException("Cloud Worker ยังไม่รองรับ Symbol Discovery รุ่นใหม่");
       }
       const workerInstance = Array.isArray(worker?.telemetry?.instances)
