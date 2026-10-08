@@ -4672,12 +4672,6 @@ export default function DashboardPage() {
                     <b>เลือก Symbol ทองคำ</b>
                     <button type="button" aria-label="ปิด" disabled={symbolBusy} onClick={()=>symbolDialogRef.current?.close()}>×</button>
                   </div>
-                  <p className="cc-symbol-picker-source">
-                    {desiredTradingSymbol
-                      ? <>Symbol ที่ยืนยันแล้ว: <b>{desiredTradingSymbol}</b>{symbolSelectionPending ? " · กำลังเปิดบน MT5" : activeTradingSymbol ? " · ใช้งานจริงแล้ว" : ""}</>
-                      : <>พบ <b>{tradingSymbolOptions.length}</b> Symbol XAU ใน Market Watch ของ MT5 บัญชีนี้</>}
-                  </p>
-                  <p className="cc-symbol-picker-source">แสดงเฉพาะชื่อ Symbol XAU ที่อยู่ใน Market Watch ของ MT5 บัญชีนี้ · ระบบจะไม่เติมหรือลอง suffix ให้อัตโนมัติ และลูกค้าเป็นผู้ยืนยัน Symbol เอง</p>
                   <select
                     autoFocus
                     value={tradingSymbol}
