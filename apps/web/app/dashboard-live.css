@@ -1871,3 +1871,27 @@
     grid-template-columns:1fr 1.35fr;
   }
 }
+
+/* Six-step MT5 connection progress; no strategy or EA settings affected. */
+.cc-mt5-checklist{display:grid;gap:0;padding:4px 0 2px;font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+.cc-mt5-check-step{display:grid;grid-template-columns:30px minmax(0,1fr);gap:10px;align-items:start;padding:7px 0}
+.cc-mt5-check-mark{display:grid;place-items:center;width:24px;height:24px;border:2px solid #586075;border-radius:50%;color:#586075}
+.cc-mt5-check-step.state-done .cc-mt5-check-mark{border-color:#42ce90;color:#42ce90}
+.cc-mt5-check-step.state-active .cc-mt5-check-mark{border-color:#8f7cff;border-top-color:transparent;animation:cc-mt5-check-spin .9s linear infinite}
+.cc-mt5-check-step.state-failed .cc-mt5-check-mark{border-color:#ff738c;color:#ff738c}
+.cc-mt5-check-dot{width:5px;height:5px;border-radius:50%;background:currentColor}
+.cc-mt5-check-step.state-active .cc-mt5-check-dot{background:#a594ff}
+.cc-mt5-check-copy{min-width:0;display:grid;gap:2px}
+.cc-mt5-check-copy b{font-size:14px;font-weight:750;line-height:1.5;color:#f0eeff}
+.cc-mt5-check-copy small{font-size:12px;line-height:1.5;color:#9ba7c2}
+.cc-mt5-check-step.state-waiting .cc-mt5-check-copy b{color:#7c859b}
+.cc-mt5-check-step.state-done .cc-mt5-check-copy small{color:#8ba99d}
+.cc-mt5-pick-symbol{justify-self:start;margin-top:7px;border:1px solid #8e7aff;border-radius:9px;background:rgba(112,88,231,.2);padding:8px 12px;color:#ebe6ff;font-size:12px;font-weight:700;cursor:pointer}
+.cc-mt5-pick-symbol:hover{background:rgba(112,88,231,.36)}
+@keyframes cc-mt5-check-spin{to{transform:rotate(360deg)}}
+@media(max-width:600px){.cc-server-operation-terminal.mt5-connect-view .cc-server-operation-body{padding:14px}.cc-mt5-check-step{padding:5px 0}.cc-mt5-check-copy b{font-size:13px}.cc-mt5-check-copy small{font-size:11px}}
+@media(prefers-reduced-motion:reduce){.cc-mt5-check-step.state-active .cc-mt5-check-mark{animation:none;border-top-color:#8f7cff}}
+
+.cc-server-operation-terminal.mt5-connect-view{display:flex;flex-direction:column;max-height:calc(100dvh - 32px)}
+.cc-server-operation-terminal.mt5-connect-view .cc-server-operation-body{overflow-y:auto;min-height:0;gap:10px}
+.cc-server-operation-terminal.mt5-connect-view>header,.cc-server-operation-terminal.mt5-connect-view>footer{flex-shrink:0}

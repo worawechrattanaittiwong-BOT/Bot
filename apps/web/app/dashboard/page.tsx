@@ -6,6 +6,7 @@ import { CustomerMobileNav, CustomerSidebar, OwnerMobileNav, OwnerSidebar } from
 import { ScenovaIcon } from "../../components/ScenovaIcon";
 import { ScenovaBrand } from "../../components/ScenovaBrand";
 import { Mt5ConnectionExperience, VpsMigrationProgressCard } from "../../components/Mt5ConnectionExperience";
+import { Mt5ConnectChecklist } from "../../components/Mt5ConnectChecklist";
 import { EaDecisionCenter } from "../../components/EaDecisionCenter";
 import { BotPerformanceSummary } from "../../components/BotPerformanceSummary";
 import { useSystemPopup } from "../../components/SystemPopupProvider";
@@ -640,7 +641,11 @@ export default function DashboardPage() {
           setSelectedSlotId(savedSlotId);
           void load(savedSlotId, true);
         }
-        setServerOperation(op);
+        const recoverable = String(op.status || "") === "FAILED" &&
+          /ภายในเวลา|เกินเวลา|time.?out|timed out/i.test(String(op.message || ""));
+        setServerOperation(recoverable
+          ? { ...op, status:"RUNNING", message:"กำลังตรวจสอบสถานะ MT5 ล่าสุดจากเซิร์ฟเวอร์" }
+          : op);
         setServerOperationMinimized(false);
         setActiveView("account");
         window.history.replaceState({}, "", "/dashboard?view=account");
@@ -1377,6 +1382,10 @@ export default function DashboardPage() {
   // stale connect/switch operation restored from the browser from covering the
   // authoritative Local <-> VPS handoff state.
   const operationTerminal = migrationOperation || serverOperation || cloudUpdateOperation;
+  const isMt5ConnectOperation = Boolean(operationTerminal && (
+    ["MT5_CONNECT","MT5_RECONNECT","LOCAL_MT5_BIND"].includes(String(operationTerminal.kind)) ||
+    (operationTerminal.kind === "MT5_SWITCH" && operationTerminal.target)
+  ));
   const operationTerminalRunning = operationTerminal?.status === "RUNNING";
   const minimizedOperationInStatus =
     serverOperationMinimized && operationTerminalRunning ? operationTerminal : null;
@@ -1455,28 +1464,11 @@ export default function DashboardPage() {
       failed = true;
       message = provisioningFailure;
     } else if (
-      (
-        operationAgeMs >= 90_000 &&
-        (
-          op.kind === "START" ||
-          op.kind === "CLOSE_ALL"
-        )
-      ) ||
-      (
-        operationAgeMs >= 180_000 &&
-        Boolean(op.target) &&
-        (
-          op.kind === "MT5_CONNECT" ||
-          op.kind === "MT5_RECONNECT" ||
-          op.kind === "MT5_SWITCH" ||
-          op.kind === "LOCAL_MT5_BIND"
-        )
-      )
+      operationAgeMs >= 90_000 &&
+      (op.kind === "START" || op.kind === "CLOSE_ALL")
     ) {
       failed = true;
-      message = connectionOperation
-        ? "เชื่อม MT5 ไม่สำเร็จภายในเวลาที่กำหนด · ตรวจ Login, Trading Password และ Server ก่อน หากข้อมูลถูกต้อง Broker อาจต้องใช้ MT5 Terminal ของตัวเอง"
-        : "Server ไม่ได้รับสถานะยืนยันภายในเวลาที่กำหนด · กรุณาตรวจ MT5/EA แล้วลองใหม่";
+      message = "Server ไม่ได้รับสถานะยืนยันภายในเวลาที่กำหนด · กรุณาตรวจ MT5/EA แล้วลองใหม่";
     } else if (op.kind === "START") {
       if (actual === "RUNNING" && wanted === "RUNNING" && heartbeatOk) {
         complete = true;
@@ -1514,27 +1506,37 @@ export default function DashboardPage() {
       const mt5Ready = Boolean(data?.instance?.mt5_online);
       const mt5GraceReady = Boolean(data?.instance?.mt5_connection_online);
       const cloudDiscoveryReady = runtimeIsCloud && discoveredXauSymbols.length > 0;
+      const cloudSymbolConfirmed = String(data?.settings?.symbolResolutionMode || "").toUpperCase() === "EXACT" &&
+        Boolean(String(data?.settings?.startupSymbol || "").trim());
       const terminalConnected = liveMetrics.terminalConnected;
+      // Broker-side XAU discovery is affirmative login evidence before the
+      // EA heartbeat exists (the first connect requires Symbol selection).
+      const brokerVerified = accountMatches && (terminalConnected === true ||
+        (mt5Ready && terminalConnected !== false) ||
+        (runtimeIsCloud && cloudDiscoveryReady && mt5GraceReady));
+      const eaReady = mt5Ready && (!runtimeIsCloud || Boolean(data?.instance?.cloud_control_ready));
       const accountTradeAllowed = liveMetrics.accountTradeAllowed;
       const accountTradeExpert = liveMetrics.accountTradeExpert;
       const terminalTradeAllowed = liveMetrics.terminalTradeAllowed;
       const mqlTradeAllowed = liveMetrics.mqlTradeAllowed;
 
-      if (operationAgeMs >= 30_000 && terminalConnected === false) {
-        failed = true;
-        message = "MT5 เปิดแล้วแต่ยังเชื่อม Broker ไม่สำเร็จ · ตรวจ Login, Trading Password และชื่อ Server ให้ตรงกับบัญชี";
-      } else if (op.kind === "MT5_SWITCH" && !data?.account) {
+      // A transient offline terminal does not prove login failure; the
+      // Worker reports definitive provisioning errors separately.
+      if (op.kind === "MT5_SWITCH" && !data?.account) {
         complete = true;
         message = "ตัดการเชื่อมต่อ MT5 เดิมแล้ว · พร้อมเชื่อมบัญชีใหม่";
       } else if (
         runtimeIsCloud &&
         accountMatches &&
         runnerReady &&
-        cloudDiscoveryReady
+        brokerVerified &&
+        cloudDiscoveryReady &&
+        cloudSymbolConfirmed &&
+        eaReady
       ) {
         complete = true;
-        message = "เชื่อม MT5 สำเร็จ · พบ Symbol XAU ใน Market Watch " + discoveredXauSymbols.length + " รายการ · กรุณาเลือก Symbol ที่ต้องการใช้";
-      } else if (accountMatches && runnerReady && mt5Ready) {
+        message = "เชื่อม MT5 สำเร็จ · ยืนยัน Symbol และ EA พร้อมทำงานแล้ว";
+      } else if (!runtimeIsCloud && accountMatches && runnerReady && mt5Ready && brokerVerified) {
         complete = true;
 
         const tradingWarning = accountTradeAllowed === false
@@ -1549,17 +1551,25 @@ export default function DashboardPage() {
           ? "ยืนยันบัญชี Local MT5 สำเร็จ · EA Heartbeat ตรงกับบัญชีใหม่แล้ว" + tradingWarning
           : "เชื่อม MT5 สำเร็จ · Server ตรวจบัญชีและ Heartbeat เรียบร้อยแล้ว" + tradingWarning;
       } else if (!runnerReady) {
-        message = "กำลังรอ VPS Worker ออนไลน์...";
+        message = "กำลังเตรียมเซิร์ฟเวอร์ VPS...";
       } else if (!accountMatches) {
         message = "กำลังตรวจสอบบัญชี MT5 ใหม่...";
+      } else if (runtimeIsCloud && cloudDiscoveryReady && !cloudSymbolConfirmed && brokerVerified) {
+        message = "พบ Symbol ทองคำแล้ว · กรุณาเลือกและยืนยัน Symbol เพื่อเตรียม EA";
+      } else if (runtimeIsCloud && cloudSymbolConfirmed && brokerVerified) {
+        message = "ยืนยัน Symbol แล้ว · กำลังรอ EA ยืนยันความพร้อม";
       } else if (mt5GraceReady) {
         message = runtimeIsCloud
-          ? "MT5 เปิดและเชื่อม Broker แล้ว · กำลังอ่าน Symbol XAU จาก Market Watch"
+          ? "MT5 เริ่มทำงานแล้ว · กำลังตรวจสอบบัญชีและค้นหา Symbol"
           : "MT5 ตอบกลับแล้ว · กำลังยืนยัน Heartbeat ให้เสถียร";
       } else {
         message = op.kind === "LOCAL_MT5_BIND"
           ? "บัญชีถูกยืนยันแล้ว · กำลังรอ EA Heartbeat ล่าสุด"
           : "VPS ออนไลน์แล้ว · กำลังเปิด MT5 และรอ EA เชื่อมต่อ";
+      }
+      if (operationAgeMs >= 180_000 && !failed && !complete &&
+          !message.includes("กรุณาเลือก")) {
+        message += " · ยังคงตรวจสอบสถานะจริงจากเซิร์ฟเวอร์";
       }
     }
 
@@ -1589,6 +1599,15 @@ export default function DashboardPage() {
     }
   }, [
     data?.instance?.last_seen_at,
+    data?.instance?.runner_online,
+    data?.instance?.mt5_online,
+    data?.instance?.mt5_connection_online,
+    data?.instance?.cloud_control_ready,
+    data?.instance?.metrics?.terminalConnected,
+    data?.account?.account_number,
+    data?.selectedSlot?.mode,
+    data?.settings?.symbolResolutionMode,
+    data?.settings?.startupSymbol,
     data?.instance?.actual_state,
     data?.instance?.desired_state,
     data?.instance?.metrics?.symbol,
@@ -1722,7 +1741,8 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (serverOperation?.status !== "SUCCESS") return;
-    const delayMs = serverOperation?.kind === "START" ? 550 : 1200;
+    const delayMs = serverOperation?.kind === "START" ? 550
+      : ["MT5_CONNECT","MT5_RECONNECT","LOCAL_MT5_BIND","MT5_SWITCH"].includes(String(serverOperation?.kind)) ? 4200 : 1200;
     const id = window.setTimeout(() => setServerOperation(null), delayMs);
     return () => clearTimeout(id);
   }, [serverOperation?.id, serverOperation?.kind, serverOperation?.status]);
@@ -3259,24 +3279,35 @@ export default function DashboardPage() {
       cloudMt5DialogRef.current?.close();
       symbolAutoPromptedSlotRef.current = "";
       setDiscoveredXauSymbols([]);
-      setNotice(cloudMt5DialogMode === "RECONNECT"
-        ? "บันทึกรหัสแล้ว · VPS กำลังเชื่อม MT5 และอ่าน Symbol XAU จาก Market Watch"
-        : "เชื่อมบัญชีแล้ว · VPS กำลังเปิด MT5 และอ่าน Symbol XAU จาก Market Watch");
+      setNotice("รับข้อมูลบัญชีแล้ว · กำลังติดตามสถานะการเชื่อมต่อ MT5");
       setServerOperation((current:any) =>
         current?.id === operationId
-          ? { ...current, message:"Server รับข้อมูลแล้ว · กำลังเชื่อม MT5 และอ่านรายการ XAU จากบัญชีจริง", updatedAt:Date.now() }
+          ? { ...current, acknowledged:true, message:"Server รับข้อมูลแล้ว · กำลังเชื่อม MT5", updatedAt:Date.now() }
           : current
       );
       await load(selectedSlotIdRef.current,true);
     } catch (e:any) {
       const message = String(e?.message || "เชื่อม MT5 ไม่สำเร็จ");
-      setCloudMt5DialogError(message);
-      setError(message);
-      setServerOperation((current:any) =>
-        current?.id === operationId
-          ? { ...current, status:"FAILED", message, updatedAt:Date.now(), canClose:true }
-          : current
-      );
+      const responseUnknown = /timed out|timeout|Failed to fetch|NetworkError|Load failed/i.test(message);
+      if (responseUnknown) {
+        // An HTTP client timeout does not prove the server rejected the request.
+        setNotice("ยังไม่ได้รับคำตอบจากเซิร์ฟเวอร์ · กำลังตรวจสอบสถานะจริงต่อ");
+        setServerOperation((current:any) =>
+          current?.id === operationId
+            ? { ...current, message:"กำลังตรวจสอบผลคำขอเชื่อมต่อจากเซิร์ฟเวอร์", updatedAt:Date.now() }
+            : current
+        );
+        void load(selectedSlotIdRef.current, true);
+        cloudMt5DialogRef.current?.close();
+      } else {
+        setCloudMt5DialogError(message);
+        setError(message);
+        setServerOperation((current:any) =>
+          current?.id === operationId
+            ? { ...current, status:"FAILED", message, updatedAt:Date.now(), canClose:true }
+            : current
+        );
+      }
     } finally {
       setBusy(false);
     }
@@ -4326,7 +4357,7 @@ export default function DashboardPage() {
           >
             <section
               id="cc-server-operation-dialog"
-              className={"cc-server-operation-terminal status-" + String(operationTerminal.status || "RUNNING").toLowerCase()}
+              className={"cc-server-operation-terminal status-" + String(operationTerminal.status || "RUNNING").toLowerCase() + (isMt5ConnectOperation ? " mt5-connect-view" : "")}
               role="dialog"
               aria-modal="true"
               aria-labelledby="cc-server-operation-title"
@@ -4335,8 +4366,8 @@ export default function DashboardPage() {
                 <div>
                   <span className="cc-server-operation-icon">&gt;_</span>
                   <div>
-                    <small>SCENOVA OPERATIONS CONSOLE</small>
-                    <h3 id="cc-server-operation-title">{operationTerminal.title}</h3>
+                    <small>{isMt5ConnectOperation ? "สถานะการเชื่อมต่อ" : "SCENOVA OPERATIONS CONSOLE"}</small>
+                    <h3 id="cc-server-operation-title">{isMt5ConnectOperation ? "การเชื่อมต่อ MT5" : operationTerminal.title}</h3>
                   </div>
                 </div>
                 {(operationTerminalRunning || operationTerminal.status === "FAILED" || operationTerminal.canClose) && (
@@ -4360,9 +4391,33 @@ export default function DashboardPage() {
               <div className="cc-server-operation-body">
                 <div className="cc-server-operation-line">
                   <span className="prompt">STATUS</span>
-                  <b>{operationTerminal.status === "RUNNING" ? "IN PROGRESS" : operationTerminal.status === "SUCCESS" ? "COMPLETED" : "FAILED"}</b>
+                  <b>{isMt5ConnectOperation
+                    ? (operationTerminal.status === "RUNNING" ? "กำลังเชื่อมต่อ" : operationTerminal.status === "SUCCESS" ? "เชื่อมต่อสำเร็จ" : "พบข้อผิดพลาด")
+                    : (operationTerminal.status === "RUNNING" ? "IN PROGRESS" : operationTerminal.status === "SUCCESS" ? "COMPLETED" : "FAILED")}</b>
                 </div>
-                <p>{operationTerminal.message}</p>
+                {isMt5ConnectOperation && (
+                  <Mt5ConnectChecklist
+                    input={{
+                      acknowledged:Boolean(operationTerminal.acknowledged),
+                      isCloud:String(data?.selectedSlot?.mode || "").toUpperCase() === "CLOUD",
+                      accountMatches:Boolean(operationTerminal.target && data?.account?.account_number &&
+                        String(operationTerminal.target) === String(data.account.account_number)),
+                      runnerOnline:Boolean(data?.instance?.runner_online),
+                      terminalOnline:Boolean(data?.instance?.mt5_connection_online || data?.instance?.mt5_online),
+                      eaHeartbeat:Boolean(data?.instance?.mt5_online),
+                      cloudControlReady:Boolean(data?.instance?.cloud_control_ready),
+                      brokerConnected:typeof data?.instance?.metrics?.terminalConnected === "boolean"
+                        ? data.instance.metrics.terminalConnected : null,
+                      symbolsFound:discoveredXauSymbols.length,
+                      symbolConfirmed:String(data?.settings?.symbolResolutionMode || "").toUpperCase() === "EXACT" &&
+                        Boolean(String(data?.settings?.startupSymbol || "").trim()),
+                      localSymbol:Boolean(String(data?.instance?.metrics?.symbol || "").trim()),
+                      status:String(operationTerminal.status || "RUNNING")
+                    }}
+                    onPickSymbol={openTradingSymbolPicker}
+                  />
+                )}
+                <p aria-live="polite">{operationTerminal.message}</p>
                 {operationTerminal.kind === "SYMBOL" && operationTerminal.target && (
                   <div className="cc-server-operation-meta"><span>SYMBOL</span><b>{operationTerminal.target}</b></div>
                 )}
