@@ -6013,32 +6013,36 @@ function VpsSlotManager(props:{
           return (
             <article key={slot.id} className={"vps-slot-card tone-"+tone+(selected ? " selected" : "")}>
               <header>
-                <div>
-                  <span>{primary ? "PRIMARY VPS PACKAGE" : "VPS ADD-ON SLOT"}</span>
+                <div className="vps-slot-identity">
                   <h3>Slot #{slot.slot_number}</h3>
+                  <span className={"vps-slot-kind "+(primary ? "primary" : "addon")}>
+                    {primary ? "แพ็กเกจหลัก" : "Slot เสริม"}
+                  </span>
                 </div>
                 <span className={"vps-slot-status "+tone}><i/>{slotLabel(slot)}</span>
               </header>
 
-              <div className={"vps-slot-kind "+(primary ? "primary" : "addon")}>
-                {primary ? "แพ็กเกจหลัก" : "Slot เสริม"}
-              </div>
-
-              <div className="vps-slot-account">
-                <small>MT5 ACCOUNT</small>
-                <b>{slot.account_number || "ยังไม่ได้เชื่อม MT5"}</b>
-                <span>
-                  {tone==="blocked"
+              <div className="vps-slot-card-details">
+                <div className="vps-slot-account">
+                  <small>บัญชี MT5</small>
+                  <b>{slot.account_number || "ยังไม่ได้เชื่อม MT5"}</b>
+                  <span title={tone==="blocked"
                     ? "แพ็กเกจหลักหมดอายุ · ระงับการใช้งานชั่วคราว"
                     : slot.account_number
                       ? ((slot.broker || "Broker")+" · "+(slot.broker_server || "Server"))
-                      : "พร้อมสำหรับเชื่อมบัญชีใหม่"}
-                </span>
-              </div>
+                      : "พร้อมสำหรับเชื่อมบัญชีใหม่"}>
+                    {tone==="blocked"
+                      ? "แพ็กเกจหลักหมดอายุ · ระงับการใช้งานชั่วคราว"
+                      : slot.account_number
+                        ? ((slot.broker || "Broker")+" · "+(slot.broker_server || "Server"))
+                        : "พร้อมสำหรับเชื่อมบัญชีใหม่"}
+                  </span>
+                </div>
 
-              <div className="vps-slot-meta">
-                <div><span>EA</span><b>{tone==="blocked" ? "BLOCKED" : slot.actual_state || (slot.instance_id ? "STOPPED" : "NOT INSTALLED")}</b></div>
-                <div><span>หมดอายุ</span><b>{formatExpiry(slot.subscription_expires_at)}</b></div>
+                <div className="vps-slot-meta">
+                  <div><span>EA</span><b>{tone==="blocked" ? "BLOCKED" : slot.actual_state || (slot.instance_id ? "STOPPED" : "NOT INSTALLED")}</b></div>
+                  <div><span>หมดอายุ</span><b>{formatExpiry(slot.subscription_expires_at)}</b></div>
+                </div>
               </div>
 
               <footer>

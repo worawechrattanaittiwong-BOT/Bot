@@ -10107,3 +10107,213 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
   }
 }
 /* ===== /Large reading confirm ===== */
+
+/* ===== MT5 & EA — compact VPS Slot manager =====
+   Visual density only. All Slot selection/renew/delete actions stay intact. */
+.vps-slot-manager .vps-slot-manager-head{
+  padding:12px 16px;
+  gap:12px;
+}
+.vps-slot-manager .vps-slot-manager-head h2{
+  font-size:18px;
+}
+.vps-slot-manager .vps-slot-manager-actions{
+  gap:7px;
+}
+.vps-slot-manager .vps-slot-manager-actions .btn{
+  min-height:34px;
+  padding:6px 11px;
+  font-size:12px;
+}
+.vps-slot-manager .vps-capacity-pill{
+  min-height:30px;
+  padding:5px 9px;
+}
+.vps-slot-manager .vps-slot-stats>div{
+  min-height:42px;
+  padding:8px 13px;
+}
+.vps-slot-manager .vps-slot-stats span{font-size:10px}
+.vps-slot-manager .vps-slot-stats b{font-size:17px}
+.vps-slot-manager .vps-slot-grid{
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:9px;
+  padding:11px;
+  align-items:stretch;
+}
+.vps-slot-manager .vps-slot-card{
+  min-height:0;
+  padding:12px;
+  gap:9px;
+  border-radius:13px;
+  background:linear-gradient(155deg,rgba(14,18,31,.98),rgba(9,12,21,.98));
+}
+.vps-slot-manager .vps-slot-card header{
+  align-items:center;
+}
+.vps-slot-manager .vps-slot-identity{
+  display:flex;
+  min-width:0;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:8px;
+}
+.vps-slot-manager .vps-slot-card h3{
+  margin:0;
+  font-size:17px;
+  line-height:1.25;
+}
+.vps-slot-manager .vps-slot-kind{
+  margin:0;
+  padding:3px 7px;
+  font-size:10px;
+  line-height:1.25;
+}
+.vps-slot-manager .vps-slot-status{
+  flex-shrink:0;
+  padding:5px 8px;
+  font-size:10px;
+}
+.vps-slot-manager .vps-slot-card-details{
+  display:grid;
+  grid-template-columns:minmax(0,1.2fr) minmax(0,.85fr);
+  align-items:center;
+  gap:13px;
+}
+.vps-slot-manager .vps-slot-account{
+  margin:0;
+  padding:8px 10px;
+  gap:2px;
+  border-radius:9px;
+}
+.vps-slot-manager .vps-slot-account small{
+  font-size:10px;
+  letter-spacing:.03em;
+}
+.vps-slot-manager .vps-slot-account b{
+  font-size:13px;
+  line-height:1.35;
+}
+.vps-slot-manager .vps-slot-account span{
+  font-size:10px;
+  line-height:1.4;
+}
+.vps-slot-manager .vps-slot-meta{
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  gap:7px;
+  margin:0;
+}
+.vps-slot-manager .vps-slot-meta>div{
+  display:flex;
+  align-items:baseline;
+  justify-content:space-between;
+  gap:8px;
+}
+.vps-slot-manager .vps-slot-meta span{
+  flex-shrink:0;
+  font-size:10px;
+}
+.vps-slot-manager .vps-slot-meta b{
+  margin:0;
+  font-size:11px;
+  text-align:right;
+}
+.vps-slot-manager .vps-slot-card footer{
+  margin-top:auto;
+  padding-top:8px;
+  border-top:1px solid rgba(140,117,189,.1);
+}
+.vps-slot-manager .vps-slot-card footer .btn{
+  min-height:31px;
+  padding:5px 8px;
+  font-size:11px;
+  border-radius:8px;
+}
+.vps-slot-manager .vps-slot-add-card{
+  grid-column:1/-1;
+  display:flex;
+  flex-direction:row;
+  align-items:center;
+  justify-content:center;
+  gap:10px;
+  min-height:46px;
+  padding:8px 12px;
+  border-radius:12px;
+}
+.vps-slot-manager .vps-slot-add-icon{
+  width:26px;
+  height:26px;
+  border-radius:8px;
+  font-size:19px;
+}
+.vps-slot-manager .vps-slot-add-card b{font-size:12px}
+.vps-slot-manager .vps-slot-add-card small{
+  max-width:none;
+  font-size:10px;
+}
+@media(max-width:900px){
+  .vps-slot-manager .vps-slot-card-details{
+    grid-template-columns:minmax(0,1fr);
+    gap:7px;
+  }
+  .vps-slot-manager .vps-slot-meta{
+    display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:8px;
+  }
+  .vps-slot-manager .vps-slot-meta>div{
+    display:block;
+  }
+  .vps-slot-manager .vps-slot-meta b{
+    display:block;
+    text-align:left;
+    margin-top:2px;
+  }
+}
+@media(max-width:720px){
+  .vps-slot-manager .vps-slot-grid{
+    grid-template-columns:minmax(0,1fr);
+    padding:10px;
+    gap:8px;
+  }
+  .vps-slot-manager .vps-slot-manager-head{
+    align-items:stretch;
+    padding:12px;
+    gap:9px;
+  }
+  .vps-slot-manager .vps-slot-manager-actions{
+    justify-content:flex-start;
+  }
+  .vps-slot-manager .vps-slot-stats>div{
+    min-height:39px;
+    padding:7px 10px;
+  }
+  .vps-slot-manager .vps-slot-card{padding:11px}
+  .vps-slot-manager .vps-slot-card-details{
+    grid-template-columns:minmax(0,1.2fr) minmax(0,.8fr);
+  }
+  .vps-slot-manager .vps-slot-meta{
+    display:flex;
+    flex-direction:column;
+  }
+  .vps-slot-manager .vps-slot-meta>div{
+    display:flex;
+    align-items:baseline;
+  }
+  .vps-slot-manager .vps-slot-meta b{text-align:right;margin:0}
+}
+@media(max-width:440px){
+  .vps-slot-manager .vps-slot-card-details{
+    grid-template-columns:minmax(0,1fr);
+    gap:7px;
+  }
+  .vps-slot-manager .vps-slot-meta{
+    display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+  .vps-slot-manager .vps-slot-meta>div{display:block}
+  .vps-slot-manager .vps-slot-meta b{text-align:left;margin-top:2px}
+  .vps-slot-manager .vps-slot-add-card small{display:none}
+}
