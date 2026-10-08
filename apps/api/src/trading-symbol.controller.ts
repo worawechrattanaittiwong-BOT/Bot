@@ -63,17 +63,115 @@ function marketWatchSymbols(metrics: any) {
   return Array.from(unique.values());
 }
 
-function xauSymbols(value: unknown) {
-  const source = Array.isArray(value) ? value : [];
-  const unique = new Map<string, string>();
-  for (const raw of source) {
-    const symbol = normalizeSymbol(raw);
-    if (!symbol || !symbol.toUpperCase().startsWith("XAU")) continue;
-    const key = symbol.toUpperCase();
-    if (!unique.has(key)) unique.set(key, symbol);
-    if (unique.size >= 32) break;
+function instrumentRoot(value: unknown) {
+  const normalized = normalizeSymbol(value).toUpperCase().replace(/^XBT/, "BTC");
+  if (normalized === "BTCUSD" || normalized.startsWith("BTCUSD")) return "BTCUSD";
+  if (normalized === "XAUUSD" || normalized.startsWith("XAUUSD")) return "XAUUSD";
+  return normalized;
+}
+
+function normalizeSymbolAccountType(value: unknown) {
+  const profile = String(value || "").trim().toUpperCase();
+  if (profile === "USD") return "USD";
+  if (["USD_CENT","USDC","CENT"].includes(profile)) return "USD_CENT";
+  return "";
+}
+
+function accountProfileCandidate(symbol: string, root: string, profile: string) {
+  const upper = normalizeSymbol(symbol).toUpperCase();
+  if (!upper) return false;
+
+  if (root === "XAUUSD" && profile === "USD_CENT" && upper === "XAUUSC") {
+    return true;
   }
-  return Array.from(unique.values()).sort((a,b)=>a.localeCompare(b));
+  if (root === "BTCUSD" && profile === "USD_CENT" && ["BTCUSC","XBTUSC"].includes(upper)) {
+    return true;
+  }
+
+  const normalizedRoot = root === "BTCUSD" && upper.startsWith("XBTUSD")
+    ? "XBTUSD"
+    : root;
+  if (!upper.startsWith(normalizedRoot)) return false;
+
+  const suffix = upper.slice(normalizedRoot.length).replace(/[._#-]/g, "");
+  if (profile === "USD_CENT") return suffix === "C" || suffix === "CENT";
+  if (profile === "USD") return suffix === "" || suffix === "M";
+  return false;
+}
+
+function resolveAccountProfileTradingSymbol(
+  requested: unknown,
+  metrics: any,
+  profileValue: unknown
+) {
+  const symbol = normalizeSymbol(requested);
+  const profile = normalizeSymbolAccountType(profileValue);
+  if (!symbol || !profile) return symbol;
+
+  const root = instrumentRoot(symbol);
+  if (!["XAUUSD","BTCUSD"].includes(root)) return symbol;
+
+  const candidates = marketWatchSymbols(metrics).filter(item =>
+    accountProfileCandidate(item, root, profile)
+  );
+  const exact = candidates.find(
+    item => item.toUpperCase() === symbol.toUpperCase()
+  );
+  if (exact) return exact;
+
+  return candidates
+    .sort((a, b) => {
+      const aRoot = a.toUpperCase() === root ? 0 : 1;
+      const bRoot = b.toUpperCase() === root ? 0 : 1;
+      return aRoot - bRoot || a.length - b.length || a.localeCompare(b);
+    })[0] || symbol;
+}
+
+function isExnessBroker(broker: unknown, brokerServer: unknown) {
+  const name = String(broker || "").trim();
+  const server = String(brokerServer || "").trim();
+  return /exness/i.test(name) || /^Exness-/i.test(server);
+}
+
+function resolveBrokerTradingSymbol(
+  requested: unknown,
+  metrics: any,
+  broker: unknown,
+  brokerServer: unknown
+) {
+  const symbol = normalizeSymbol(requested);
+  if (!symbol) return "";
+
+  const symbols = marketWatchSymbols(metrics);
+  const exact = symbols.find(
+    item => item.toUpperCase() === symbol.toUpperCase()
+  );
+  // A symbol selected from the live MT5 Market Watch is already broker-native.
+  // Never rewrite an exact account symbol merely because the broker is Exness.
+  if (exact) return exact;
+  const root = instrumentRoot(symbol);
+
+  // If the Web already supplied a broker-native variant (suffix/prefix),
+  // preserve it. Exact Market Watch spelling wins when available.
+  const canonicalRequest =
+    symbol.toUpperCase() === root ||
+    (root === "BTCUSD" && symbol.toUpperCase() === "XBTUSD");
+  if (!canonicalRequest) return exact || symbol;
+
+  const family = symbols
+    .filter(item => instrumentRoot(item) === root)
+    .sort((a, b) => a.length - b.length || a.localeCompare(b));
+
+  // Exness Cloud terminals used by SCENOVA expose Gold and BTC with the
+  // broker-native "m" suffix. Prefer a real Market Watch match, otherwise use
+  // the known Exness native name instead of opening a blank canonical chart.
+  if (isExnessBroker(broker, brokerServer) && (root === "BTCUSD" || root === "XAUUSD")) {
+    const native = family.find(item => item.toUpperCase().endsWith("M"));
+    if (native) return native;
+    return root + "m";
+  }
+
+  return exact || family[0] || symbol;
 }
 
 @Controller("bot/trading-symbol")
@@ -92,25 +190,11 @@ export class TradingSymbolController {
          bs.settings,
          COALESCE(NULLIF(bi.metrics->>'positions','')::int,0) AS positions,
          (bi.last_seen_at IS NOT NULL AND bi.last_seen_at > now() - interval '20 seconds') AS mt5_online,
-         (bi.agent_last_seen_at IS NOT NULL AND bi.agent_last_seen_at > now() - interval '90 seconds') AS agent_online,
-         (wn.last_seen_at IS NOT NULL AND wn.last_seen_at > now() - interval '90 seconds') AS worker_online,
-         EXISTS(
-           SELECT 1
-           FROM jsonb_array_elements(COALESCE(wn.telemetry->'instances','[]'::jsonb)) worker_instance
-           WHERE worker_instance->>'instanceId'=bi.id::text
-             AND worker_instance->>'terminalRunning'='true'
-         ) AS terminal_online,
-         COALESCE((
-           SELECT worker_instance->'discoveredXauSymbols'
-           FROM jsonb_array_elements(COALESCE(wn.telemetry->'instances','[]'::jsonb)) worker_instance
-           WHERE worker_instance->>'instanceId'=bi.id::text
-           LIMIT 1
-         ), '[]'::jsonb) AS discovered_xau_symbols
+         (bi.agent_last_seen_at IS NOT NULL AND bi.agent_last_seen_at > now() - interval '90 seconds') AS agent_online
        FROM license_slots ls
        JOIN bot_instances bi ON bi.slot_id=ls.id
        LEFT JOIN mt5_accounts ma ON ma.id=bi.mt5_account_id
        LEFT JOIN bot_settings bs ON bs.bot_instance_id=bi.id
-       LEFT JOIN worker_nodes wn ON wn.runner_id=bi.runner_id
        WHERE ls.id=$1
          AND ls.assigned_user_id=$2
          AND ls.status IN ('ACTIVE','AVAILABLE')
@@ -124,42 +208,63 @@ export class TradingSymbolController {
   private snapshot(instance: any) {
     const settings = instance.settings || {};
     const metrics = instance.metrics || {};
-    const resolutionMode = String(settings.symbolResolutionMode || "").toUpperCase();
-    const confirmedSymbol = resolutionMode === "EXACT"
-      ? normalizeSymbol(settings.startupSymbol || settings.symbol)
-      : "";
+    const explicitRequestedSymbol = normalizeSymbol(settings.startupSymbol);
     const activeSymbol = normalizeSymbol(metrics.symbol);
-    const mode = String(instance.mode || "").toUpperCase();
-    const availableSymbols = mode === "CLOUD"
-      ? xauSymbols(instance.discovered_xau_symbols)
-      : marketWatchSymbols(metrics).filter(item => item.toUpperCase().startsWith("XAU"));
+    const fallbackRequestedSymbol = normalizeSymbol(settings.symbol);
+    const desiredRequestedSymbol =
+      explicitRequestedSymbol || activeSymbol || fallbackRequestedSymbol || "XAUUSD";
+    const resolutionMode = String(settings.symbolResolutionMode || "").toUpperCase();
+    const exactResolution = resolutionMode === "EXACT";
+    const accountProfileResolution = resolutionMode === "ACCOUNT_PROFILE";
+    const resolveConfiguredSymbol = (value: string) =>
+      accountProfileResolution
+        ? resolveAccountProfileTradingSymbol(
+            value,
+            metrics,
+            settings.symbolAccountType
+          )
+        : resolveBrokerTradingSymbol(
+            value,
+            metrics,
+            instance.account_broker,
+            instance.account_broker_server
+          );
+    const explicitSymbol = explicitRequestedSymbol
+      ? exactResolution
+        ? explicitRequestedSymbol
+        : resolveConfiguredSymbol(explicitRequestedSymbol)
+      : "";
+    const desiredSymbol = exactResolution
+      ? desiredRequestedSymbol
+      : resolveConfiguredSymbol(desiredRequestedSymbol);
     const tradeMode = parseTradeMode(metrics.symbolTradeMode);
     const tradingAllowed = symbolTradeAllowed(tradeMode);
     const matches = Boolean(
-      confirmedSymbol &&
       activeSymbol &&
-      activeSymbol.toUpperCase() === confirmedSymbol.toUpperCase()
+      desiredSymbol &&
+      activeSymbol.toUpperCase() === desiredSymbol.toUpperCase()
     );
 
+    const bitcoin = isBitcoinSymbol(desiredSymbol);
+
     return {
-      desiredSymbol: confirmedSymbol,
-      requestedSymbol: confirmedSymbol,
-      symbolResolutionMode: resolutionMode || "DISCOVERY",
-      explicitSymbol: confirmedSymbol || null,
+      desiredSymbol,
+      requestedSymbol: desiredRequestedSymbol,
+      symbolAccountType: normalizeSymbolAccountType(settings.symbolAccountType) || null,
+      symbolResolutionMode: resolutionMode || null,
+      explicitSymbol: explicitSymbol || null,
       activeSymbol: activeSymbol || null,
-      instrumentProfile: "GOLD",
-      supportedControlModes: ["AUTO", "RACE", "COUNTER", "FLIP_LOCK", "ZERO_GRID", "MANUAL"],
-      blockedControlModes: [],
+      instrumentProfile: bitcoin ? "BTC" : "STANDARD",
+      supportedControlModes: bitcoin
+        ? ["AUTO", "RACE", "COUNTER", "FLIP_LOCK", "MANUAL"]
+        : ["AUTO", "RACE", "COUNTER", "FLIP_LOCK", "ZERO_GRID", "MANUAL"],
+      blockedControlModes: bitcoin ? ["ZERO_GRID"] : [],
       brokerSymbolTradeMode: tradeMode,
       brokerTradingAllowed: tradingAllowed,
-      marketWatchSymbols: availableSymbols,
-      discoveredXauSymbols: availableSymbols,
-      symbolDiscoveryPending: !confirmedSymbol,
-      symbolDiscoveryReady: Boolean(instance.terminal_online && availableSymbols.length > 0),
-      terminalOnline: Boolean(instance.terminal_online),
-      workerOnline: Boolean(instance.worker_online),
+      marketWatchSymbols: marketWatchSymbols(metrics),
+      marketWatchCapturedAt: Number(metrics.marketWatchCapturedAt || 0) || null,
       symbolReady: matches && tradingAllowed !== false,
-      pendingRestart: Boolean(confirmedSymbol && !matches),
+      pendingRestart: Boolean(explicitSymbol && !matches),
       positions: Math.max(0, Number(instance.positions || 0)),
       actualState: String(instance.actual_state || "STOPPED"),
       desiredState: String(instance.desired_state || "STOPPED"),
@@ -182,43 +287,47 @@ export class TradingSymbolController {
     @Body() body: { symbol?: string }
   ) {
     const requestedSymbol = normalizeSymbol(body.symbol);
-    if (!requestedSymbol || !requestedSymbol.toUpperCase().startsWith("XAU")) {
+    if (!requestedSymbol) {
       throw new BadRequestException(
-        "กรุณาเลือก Symbol XAU จากรายการที่ตรวจพบใน MT5 บัญชีนี้"
+        "Symbol ไม่ถูกต้อง กรุณาเลือก Symbol ที่ต้องการเทรด"
       );
     }
 
     const instance = await this.selectedInstance(req.user.sub, slotId);
+    const liveSymbols = marketWatchSymbols(instance.metrics);
+    if (!instance.mt5_online || liveSymbols.length === 0) {
+      throw new ConflictException(
+        "ยังเลือก Symbol ไม่ได้: รอ MT5/EA ส่ง Market Watch ล่าสุดมายัง Server ก่อน"
+      );
+    }
+
+    const candidate = resolveBrokerTradingSymbol(
+      requestedSymbol,
+      instance.metrics,
+      instance.account_broker,
+      instance.account_broker_server
+    );
+    const symbol = liveSymbols.find(
+      item => item.toUpperCase() === candidate.toUpperCase()
+    );
+    if (!candidate || !symbol) {
+      throw new BadRequestException(
+        "Symbol นี้ไม่มีอยู่ใน Market Watch จริงของบัญชี MT5 กรุณาเลือกจากรายการที่ Server แสดง"
+      );
+    }
+
+    const savedControlMode = String(
+      instance.settings?.controlMode || instance.settings?.engineMode || "AUTO"
+    ).toUpperCase();
+    if (isBitcoinSymbol(symbol) && savedControlMode === "ZERO_GRID") {
+      throw new ConflictException(
+        "เปลี่ยนโหมดจาก ZERO GRID เป็น AUTO, RACE, COUNTER, FLIP LOCK หรือ MANUAL ก่อนเลือก BTC/XBT"
+      );
+    }
+    const positions = Math.max(0, Number(instance.positions || 0));
+    const waitingForFlat = positions > 0;
     const mode = String(instance.mode || "").toUpperCase();
     const isCloud = mode === "CLOUD";
-    const liveSymbols = isCloud
-      ? xauSymbols(instance.discovered_xau_symbols)
-      : xauSymbols(marketWatchSymbols(instance.metrics));
-    const sourceReady = isCloud ? Boolean(instance.terminal_online) : Boolean(instance.mt5_online);
-    if (!sourceReady || liveSymbols.length === 0) {
-      throw new ConflictException(
-        isCloud
-          ? "ยังเลือก Symbol ไม่ได้ · VPS กำลังเชื่อม MT5 และตรวจรายการ XAU จากบัญชีจริง"
-          : "ยังเลือก Symbol ไม่ได้ · รอ MT5 ส่งรายการ Symbol ล่าสุดก่อน"
-      );
-    }
-
-    const symbol = liveSymbols.find(
-      item => item.toUpperCase() === requestedSymbol.toUpperCase()
-    );
-    if (!symbol) {
-      throw new BadRequestException(
-        "Symbol นี้ไม่ได้อยู่ในรายการ XAU ที่ตรวจพบจาก MT5 บัญชีจริง กรุณาเลือกจากรายการที่ระบบแสดง"
-      );
-    }
-
-    const positions = Math.max(0, Number(instance.positions || 0));
-    if (positions > 0) {
-      throw new ConflictException(
-        "กรุณาหยุดบอทและปิด Position ให้หมดก่อนเปลี่ยน Symbol"
-      );
-    }
-    const waitingForFlat = false;
 
     const before = this.snapshot(instance);
     const changed =
@@ -233,19 +342,21 @@ export class TradingSymbolController {
            'startupSymbol',$2::text,
            'symbol',$2::text,
            'symbolResolutionMode','EXACT',
-           'symbolSelectedBy','CUSTOMER',
-           'symbolDiscoveryState','CONFIRMED'
+           'symbolSelectedBy','CUSTOMER'
          ),
          now()
        )
        ON CONFLICT(bot_instance_id)
        DO UPDATE SET
-         settings=(COALESCE(bot_settings.settings,'{}'::jsonb) - 'symbolAccountType') || jsonb_build_object(
-           'startupSymbol',$2::text,
-           'symbol',$2::text,
-           'symbolResolutionMode','EXACT',
-           'symbolSelectedBy','CUSTOMER',
-           'symbolDiscoveryState','CONFIRMED'
+         settings=jsonb_set(
+           jsonb_set(
+             jsonb_set(
+               jsonb_set(COALESCE(bot_settings.settings,'{}'::jsonb),'{startupSymbol}',to_jsonb($2::text),true),
+               '{symbol}',to_jsonb($2::text),true
+             ),
+             '{symbolResolutionMode}',to_jsonb('EXACT'::text),true
+           ),
+           '{symbolSelectedBy}',to_jsonb('CUSTOMER'::text),true
          ),
          updated_at=now()`,
       [instance.id, symbol]
@@ -263,7 +374,7 @@ export class TradingSymbolController {
     if (requiresReconnect) {
       await this.db.query(
         `UPDATE bot_instances
-         SET desired_state=CASE WHEN $7::boolean THEN 'STOPPED' ELSE 'SAFE_STOP' END,
+         SET desired_state='SAFE_STOP',
              metrics=COALESCE(metrics,'{}'::jsonb) || jsonb_build_object(
                'requestedStartupSymbol',$2::text,
                'symbolChangeStatus',$3::text,
@@ -282,25 +393,24 @@ export class TradingSymbolController {
           waitingForFlat ? "WAITING_FLAT" : "QUEUED",
           requestedAt,
           actionId,
-          isCloud
-            ? "ยืนยัน Symbol จาก MT5 จริงแล้ว · Cloud Worker กำลังเปิดกราฟและโหลด EA บน Symbol นี้"
-            : "ยืนยัน Symbol จาก MT5 จริงแล้ว · ระบบกำลังเปิด Chart/EA บน Symbol นี้",
-          isCloud
+          waitingForFlat
+            ? "เว็บกำหนด Symbol ใหม่แล้ว · ระบบ Safe Stop และจะบังคับ MT5 เปิด Symbol นี้ทันทีเมื่อไม่มี Position"
+            : isCloud
+              ? "เว็บกำหนด Symbol ใหม่แล้ว · Cloud Worker กำลัง Reload MT5 ให้เหลือ Chart เดียวบน Symbol นี้"
+              : "เว็บกำหนด Symbol ใหม่แล้ว · ระบบกำลังบังคับ MT5 เปิด Chart/EA บน Symbol นี้"
         ]
       );
 
-      if (!isCloud) {
-        await this.db.query(
-          "UPDATE bot_commands SET status='ACKED',acked_at=now() WHERE bot_instance_id=$1 AND status IN ('PENDING','DELIVERED') AND command IN ('START','SAFE_STOP')",
-          [instance.id]
-        );
-        await this.db.query(
-          "INSERT INTO bot_commands(bot_instance_id,command) VALUES($1,'SAFE_STOP')",
-          [instance.id]
-        );
-      }
+      await this.db.query(
+        "UPDATE bot_commands SET status='ACKED',acked_at=now() WHERE bot_instance_id=$1 AND status IN ('PENDING','DELIVERED') AND command IN ('START','SAFE_STOP')",
+        [instance.id]
+      );
+      await this.db.query(
+        "INSERT INTO bot_commands(bot_instance_id,command) VALUES($1,'SAFE_STOP')",
+        [instance.id]
+      );
 
-      if (isCloud && instance.runner_id) {
+      if (isCloud && !waitingForFlat && instance.runner_id) {
         await this.db.query(
           `INSERT INTO worker_commands(runner_id,bot_instance_id,execution_generation,command,status)
            SELECT $1,$2,$3,'RELOAD_INSTANCE','PENDING'
@@ -408,13 +518,21 @@ export class EaTradingSymbolController {
 
     const settings = row.settings || {};
     const metrics = row.metrics || {};
+    const explicitRequestedSymbol = normalizeSymbol(settings.startupSymbol);
+    const currentSymbol = normalizeSymbol(metrics.symbol);
+    const legacySavedSymbol = normalizeSymbol(settings.symbol);
+    const desiredRequestedSymbol =
+      explicitRequestedSymbol || currentSymbol || legacySavedSymbol || "XAUUSD";
     const exactResolution =
       String(settings.symbolResolutionMode || "").toUpperCase() === "EXACT";
     const desiredSymbol = exactResolution
-      ? normalizeSymbol(settings.startupSymbol || settings.symbol)
-      : "";
-    const explicitRequestedSymbol = desiredSymbol;
-    const currentSymbol = normalizeSymbol(metrics.symbol);
+      ? desiredRequestedSymbol
+      : resolveBrokerTradingSymbol(
+          desiredRequestedSymbol,
+          metrics,
+          row.account_broker,
+          row.account_broker_server
+        );
     const tradeMode = parseTradeMode(metrics.symbolTradeMode);
     const tradingAllowed = symbolTradeAllowed(tradeMode);
     const currentMatchesDesired = Boolean(

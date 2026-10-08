@@ -27,6 +27,32 @@ function isBitcoinTradingSymbol(value: unknown) {
   return symbol.includes("BTC") || symbol.includes("XBT");
 }
 
+type SymbolAccountType = "USD" | "USD_CENT";
+
+function normalizeSymbolAccountType(value: unknown): SymbolAccountType | "" {
+  const profile = String(value || "").trim().toUpperCase();
+  if (profile === "USD") return "USD";
+  if (["USD_CENT","USDC","CENT"].includes(profile)) return "USD_CENT";
+  return "";
+}
+
+function inferSymbolAccountType(value: unknown): SymbolAccountType | "" {
+  const symbol = String(value || "").trim().toUpperCase();
+  if (!symbol) return "";
+  if (symbol === "XAUUSC" || symbol === "BTCUSC" || symbol === "XBTUSC") return "USD_CENT";
+  const roots = ["XAUUSD","BTCUSD","XBTUSD"];
+  const root = roots.find(item => symbol.startsWith(item));
+  if (!root) return "";
+  const suffix = symbol.slice(root.length).replace(/[._#-]/g, "");
+  if (suffix === "C" || suffix === "CENT") return "USD_CENT";
+  if (suffix === "" || suffix === "M") return "USD";
+  return "";
+}
+
+function startupSymbolForAccountType(profile: SymbolAccountType) {
+  return profile === "USD_CENT" ? "XAUUSDc" : "XAUUSD";
+}
+
 @Controller("bot")
 @UseGuards(JwtGuard)
 export class BotController {
@@ -635,6 +661,7 @@ export class BotController {
          a.broker,
          a.broker_server,
          a.status account_status,
+         bs.settings->>'symbolAccountType' symbol_account_type,
          bs.settings->>'startupSymbol' startup_symbol,
          bi.metrics->>'symbol' active_symbol,
          (ls.assigned_user_id=$1 AND ls.status IN ('ACTIVE','AVAILABLE')) can_control,
@@ -2457,12 +2484,22 @@ export class BotController {
       brokerServer: string;
       mode: "CLOUD" | "LOCAL";
       tradingPassword?: string;
+      symbolAccountType?: "USD" | "USD_CENT";
     }
   ) {
     const mode: "CLOUD" | "LOCAL" = body.mode === "CLOUD" ? "CLOUD" : "LOCAL";
     const accountNumber = String(body.accountNumber || "").trim();
     const brokerServer = String(body.brokerServer || "").trim();
     const brokerName = String(body.broker || "").trim() || "Other";
+    const symbolAccountType = mode === "CLOUD"
+      ? normalizeSymbolAccountType(body.symbolAccountType || "USD")
+      : "";
+    if (mode === "CLOUD" && !symbolAccountType) {
+      throw new BadRequestException("ประเภท Symbol ต้องเป็น USD หรือ USDc");
+    }
+    const accountStartupSymbol = symbolAccountType
+      ? startupSymbolForAccountType(symbolAccountType)
+      : "";
 
     if (!/^\d{3,20}$/.test(accountNumber)) {
       throw new BadRequestException("MT5 Login ไม่ถูกต้อง · กรุณาตรวจเลขบัญชี MT5");
@@ -2638,35 +2675,31 @@ export class BotController {
       await this.db.query("INSERT INTO bot_settings(bot_instance_id) VALUES($1)", [instance.id]);
     }
 
-    if (mode === "CLOUD") {
+    if (mode === "CLOUD" && symbolAccountType) {
       await this.db.query(
         `INSERT INTO bot_settings(bot_instance_id,settings,updated_at)
          VALUES(
            $1,
            jsonb_build_object(
-             'symbolResolutionMode','DISCOVERY',
-             'symbolSelectedBy','MT5_DISCOVERY',
-             'symbolDiscoveryState','SCANNING'
-           ),
-           now()
-         )
-         ON CONFLICT(bot_instance_id)
-         DO UPDATE SET
-           settings=(
-             COALESCE(bot_settings.settings,'{}'::jsonb)
-             - 'startupSymbol'
-             - 'symbol'
-             - 'symbolAccountType'
-             - 'firstConnectPrimePending'
-             - 'firstConnectPrimeRequestedAt'
-             - 'firstConnectPrimeStartedAt'
-           ) || jsonb_build_object(
-             'symbolResolutionMode','DISCOVERY',
-             'symbolSelectedBy','MT5_DISCOVERY',
-             'symbolDiscoveryState','SCANNING'
-           ),
-           updated_at=now()`,
-        [instance.id]
+             'symbolAccountType',$2::text,
+           'startupSymbol',$3::text,
+           'symbol',$3::text,
+           'symbolResolutionMode','ACCOUNT_PROFILE',
+           'symbolSelectedBy','ACCOUNT_CONNECT'
+         ),
+         now()
+       )
+       ON CONFLICT(bot_instance_id)
+       DO UPDATE SET
+         settings=COALESCE(bot_settings.settings,'{}'::jsonb) || jsonb_build_object(
+           'symbolAccountType',$2::text,
+           'startupSymbol',$3::text,
+           'symbol',$3::text,
+           'symbolResolutionMode','ACCOUNT_PROFILE',
+           'symbolSelectedBy','ACCOUNT_CONNECT'
+         ),
+         updated_at=now()`,
+        [instance.id, symbolAccountType, accountStartupSymbol]
       );
     }
 
@@ -2688,15 +2721,22 @@ export class BotController {
     }
 
     await this.trials.claimPendingAuthorization(req.user.sub, account.id);
+    const firstConnectPrimeArmed =
+      mode === "CLOUD" &&
+      body.tradingPassword !== undefined &&
+      await this.armFirstConnectPrime(
+        instance.id,
+        String(req.user?.code || req.user?.sub || "USER"),
+        true
+      );
     return {
       account,
       instance,
       installToken: null,
-      firstConnectPrimeArmed: false,
-      symbolDiscoveryPending: mode === "CLOUD",
-      note: mode === "CLOUD"
-        ? "MT5 credentials accepted. VPS will connect to the real account and return XAU symbols for customer confirmation."
-        : "Install token is held encrypted for the runtime."
+      firstConnectPrimeArmed,
+      symbolAccountType,
+      startupSymbol: accountStartupSymbol,
+      note: "Cloud install token is held encrypted for the assigned worker."
     };
   }
 
@@ -2856,12 +2896,19 @@ export class BotController {
     @Body() body: {
       mt5AccountId: string;
       tradingPassword: string;
+      symbolAccountType?: "USD" | "USD_CENT";
     }
   ) {
     const account = await this.db.one(
       "SELECT * FROM mt5_accounts WHERE id=$1 AND user_id=$2 AND mode='CLOUD'",
       [body.mt5AccountId, req.user.sub]
     );
+    const requestedSymbolAccountType = body.symbolAccountType === undefined
+      ? ""
+      : normalizeSymbolAccountType(body.symbolAccountType);
+    if (body.symbolAccountType !== undefined && !requestedSymbolAccountType) {
+      throw new BadRequestException("ประเภท Symbol ต้องเป็น USD หรือ USDc");
+    }
     if (!account) throw new ConflictException("cloud MT5 account not found");
     if (!body.tradingPassword || /[\r\n\x00]/.test(body.tradingPassword)) throw new ConflictException("Trading Password ไม่ถูกต้อง");
     const bound = await this.db.one(
@@ -2957,36 +3004,59 @@ export class BotController {
       }
     }
 
-    if (bound) {
-      await this.db.query(
-        `INSERT INTO bot_settings(bot_instance_id,settings,updated_at)
-         VALUES(
-           $1,
-           jsonb_build_object(
-             'symbolResolutionMode','DISCOVERY',
-             'symbolSelectedBy','MT5_DISCOVERY',
-             'symbolDiscoveryState','SCANNING'
-           ),
-           now()
-         )
-         ON CONFLICT(bot_instance_id)
-         DO UPDATE SET
-           settings=(
-             COALESCE(bot_settings.settings,'{}'::jsonb)
-             - 'startupSymbol'
-             - 'symbol'
-             - 'symbolAccountType'
-             - 'firstConnectPrimePending'
-             - 'firstConnectPrimeRequestedAt'
-             - 'firstConnectPrimeStartedAt'
-           ) || jsonb_build_object(
-             'symbolResolutionMode','DISCOVERY',
-             'symbolSelectedBy','MT5_DISCOVERY',
-             'symbolDiscoveryState','SCANNING'
-           ),
-           updated_at=now()`,
+    if (bound && requestedSymbolAccountType) {
+      const settingsRow = await this.db.one(
+        "SELECT settings FROM bot_settings WHERE bot_instance_id=$1",
         [bound.id]
       );
+      const currentSettings = settingsRow?.settings || {};
+      const currentSymbolAccountType =
+        normalizeSymbolAccountType(currentSettings.symbolAccountType) ||
+        inferSymbolAccountType(currentSettings.startupSymbol || currentSettings.symbol);
+
+      if (currentSymbolAccountType && currentSymbolAccountType === requestedSymbolAccountType) {
+        await this.db.query(
+          `INSERT INTO bot_settings(bot_instance_id,settings,updated_at)
+           VALUES($1,jsonb_build_object('symbolAccountType',$2::text),now())
+           ON CONFLICT(bot_instance_id)
+           DO UPDATE SET
+             settings=jsonb_set(
+               COALESCE(bot_settings.settings,'{}'::jsonb),
+               '{symbolAccountType}',
+               to_jsonb($2::text),
+               true
+             ),
+             updated_at=now()`,
+          [bound.id, requestedSymbolAccountType]
+        );
+      } else {
+        const reconnectStartupSymbol = startupSymbolForAccountType(requestedSymbolAccountType);
+        await this.db.query(
+          `INSERT INTO bot_settings(bot_instance_id,settings,updated_at)
+           VALUES(
+             $1,
+             jsonb_build_object(
+               'symbolAccountType',$2::text,
+               'startupSymbol',$3::text,
+               'symbol',$3::text,
+               'symbolResolutionMode','ACCOUNT_PROFILE',
+               'symbolSelectedBy','ACCOUNT_RECONNECT'
+             ),
+             now()
+           )
+           ON CONFLICT(bot_instance_id)
+           DO UPDATE SET
+             settings=COALESCE(bot_settings.settings,'{}'::jsonb) || jsonb_build_object(
+               'symbolAccountType',$2::text,
+               'startupSymbol',$3::text,
+               'symbol',$3::text,
+               'symbolResolutionMode','ACCOUNT_PROFILE',
+               'symbolSelectedBy','ACCOUNT_RECONNECT'
+             ),
+             updated_at=now()`,
+          [bound.id, requestedSymbolAccountType, reconnectStartupSymbol]
+        );
+      }
     }
 
     const enc = this.crypto.encrypt(String(body.tradingPassword || ""));
@@ -3004,17 +3074,7 @@ export class BotController {
            cloud_recovery_last_error=NULL,
            provisioning_error=NULL,
            actual_state='OFFLINE',
-           last_seen_at=NULL,
-           metrics=(
-             COALESCE(metrics,'{}'::jsonb)
-             - 'symbol'
-             - 'symbolTradeMode'
-             - 'marketWatchSymbols'
-             - 'marketWatchCapturedAt'
-             - 'requestedStartupSymbol'
-             - 'symbolChangeStatus'
-             - 'symbolChangeRequestedAt'
-           )
+           last_seen_at=NULL
          WHERE id=$1`,
         [bound.id]
       );
@@ -3053,11 +3113,17 @@ export class BotController {
         ]
       );
     }
+    const firstConnectPrimeArmed = bound
+      ? await this.armFirstConnectPrime(
+          bound.id,
+          String(req.user?.code || req.user?.sub || "USER"),
+          false
+        )
+      : false;
     return {
       ok: true,
       recoveryRequested: Boolean(bound),
-      firstConnectPrimeArmed: false,
-      symbolDiscoveryPending: Boolean(bound)
+      firstConnectPrimeArmed
     };
   }
 
@@ -3300,16 +3366,6 @@ export class BotController {
       const savedControlMode = String(
         savedSettings.controlMode || savedSettings.engineMode || "AUTO"
       ).toUpperCase();
-      const symbolResolutionMode = String(savedSettings.symbolResolutionMode || "").toUpperCase();
-      const confirmedStartupSymbol = String(savedSettings.startupSymbol || "").trim();
-      if (
-        String(instance.mode || "").toUpperCase() === "CLOUD" &&
-        (symbolResolutionMode !== "EXACT" || !confirmedStartupSymbol)
-      ) {
-        throw new ConflictException(
-          "ยังเริ่มบอทไม่ได้ · กรุณารอ VPS ตรวจ Symbol XAU จากบัญชี MT5 แล้วเลือก Symbol ที่ต้องการก่อน"
-        );
-      }
       const savedTradingSymbol = String(
         savedSettings.startupSymbol ||
         metrics.symbol ||

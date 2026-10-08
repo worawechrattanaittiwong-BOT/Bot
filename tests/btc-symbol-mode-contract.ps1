@@ -60,12 +60,10 @@ Need $api 'function isBitcoinTradingSymbol' 'Bot API BTC classifier missing'
 Need $api 'ZERO GRID ไม่รองรับ BTC/XBT' 'Bot API must reject BTC ZERO GRID'
 Need $api 'BTC/XBT รองรับ AUTO, RACE, COUNTER, FLIP LOCK และ MANUAL เท่านั้น' 'Start guard must reject stale BTC ZERO GRID'
 
-# Cloud Symbol provisioning is intentionally XAU-only. BTC/XBT runtime support remains
-# in the EA and settings safety gates, but the Cloud discovery/selection endpoint
-# must never offer or infer BTC symbols.
-Need $symbolApi '!requestedSymbol.toUpperCase().startsWith("XAU")' 'Cloud Trading Symbol API must reject non-XAU selection'
-Need $symbolApi 'discoveredXauSymbols' 'Cloud Trading Symbol API must use MT5-discovered XAU names only'
-Need $symbolApi 'item.toUpperCase() === requestedSymbol.toUpperCase()' 'Cloud Trading Symbol API must require an exact discovered symbol'
+Need $symbolApi 'supportedControlModes: bitcoin' 'Trading Symbol API must expose BTC-supported modes'
+Need $symbolApi '["AUTO", "RACE", "COUNTER", "FLIP_LOCK", "MANUAL"]' 'BTC supported modes must include COUNTER'
+Need $symbolApi 'blockedControlModes: bitcoin ? ["ZERO_GRID"] : []' 'Trading Symbol API must publish BTC ZERO block'
+Need $symbolApi 'เปลี่ยนโหมดจาก ZERO GRID' 'Selecting BTC while ZERO is active must be blocked safely'
 
 Need $web 'const isBitcoinSymbol = tradingSymbol.includes("BTC") || tradingSymbol.includes("XBT");' 'Dashboard BTC classifier missing'
 Need $web 'zeroGridBlockedForSymbol' 'Dashboard BTC ZERO gate missing'

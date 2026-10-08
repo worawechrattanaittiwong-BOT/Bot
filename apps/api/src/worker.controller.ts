@@ -50,7 +50,6 @@ export class WorkerController {
         latestJournalLog?: string;
         brokerPlatform?: string;
         brokerPlatformError?: string;
-        discoveredXauSymbols?: string[];
       }>;
     };
   }) {
@@ -132,16 +131,7 @@ export class WorkerController {
               latestJournalLog: String(item?.latestJournalLog || "").slice(0,1800),
               brokerPlatform: String(item?.brokerPlatform || "")
                 .toUpperCase().replace(/[^A-Z0-9_-]/g,"").slice(0,32),
-              brokerPlatformError: String(item?.brokerPlatformError || "").slice(0,240),
-              discoveredXauSymbols: Array.isArray(item?.discoveredXauSymbols)
-                ? Array.from(new Map(
-                    item.discoveredXauSymbols
-                      .slice(0,32)
-                      .map(value => String(value || "").trim())
-                      .filter(value => /^XAU[A-Za-z0-9._#-]{3,29}$/i.test(value))
-                      .map(value => [value.toUpperCase(), value] as const)
-                  ).values())
-                : []
+              brokerPlatformError: String(item?.brokerPlatformError || "").slice(0,240)
             }))
           : []
       };

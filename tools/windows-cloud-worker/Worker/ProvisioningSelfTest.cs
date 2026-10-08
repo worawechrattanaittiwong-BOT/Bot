@@ -65,11 +65,39 @@ internal static class ProvisioningSelfTest
                         StringComparison.Ordinal))
                     throw new InvalidOperationException("Exness broker platform mapping failed");
 
-                if (!exnessJob.SymbolDiscoveryPending ||
-                    !string.IsNullOrWhiteSpace(exnessJob.Symbol))
-                    throw new InvalidOperationException("new Cloud account must enter symbol discovery without a guessed symbol");
+                if (!string.Equals(
+                        CloudJob.ResolveBrokerSymbol("XAUUSD", "Exness", "Exness-MT5Trial14"),
+                        "XAUUSDm",
+                        StringComparison.Ordinal))
+                    throw new InvalidOperationException("Exness Gold symbol was not resolved to XAUUSDm");
+                if (!string.Equals(
+                        CloudJob.ResolveBrokerSymbol("BTCUSD", "Exness", "Exness-MT5Real38"),
+                        "BTCUSDm",
+                        StringComparison.Ordinal))
+                    throw new InvalidOperationException("Exness BTC symbol was not resolved to BTCUSDm");
+                if (!string.Equals(
+                        CloudJob.ResolveBrokerSymbol("BTCUSDm", "Exness", "Exness-MT5Real38"),
+                        "BTCUSDm",
+                        StringComparison.Ordinal))
+                    throw new InvalidOperationException("resolved Exness BTC symbol was changed unexpectedly");
+                if (!string.Equals(
+                        CloudJob.ResolveBrokerSymbol("XAUUSD", "Other", "Other-MT5"),
+                        "XAUUSD",
+                        StringComparison.Ordinal))
+                    throw new InvalidOperationException("generic broker symbol was rewritten");
 
-                using (var exactSettings = JsonDocument.Parse("{\"startupSymbol\":\"XAUUSDm\",\"symbolResolutionMode\":\"EXACT\"}"))
+                if (!string.Equals(exnessJob.Symbol, "XAUUSDm", StringComparison.Ordinal) ||
+                    !string.Equals(exnessJob.FallbackSymbol, "XAUUSD", StringComparison.Ordinal))
+                    throw new InvalidOperationException("Exness Gold bootstrap fallback was not prepared");
+
+                var goldCandidates = exnessJob.StartupSymbolCandidates.ToArray();
+                foreach (var required in new[] { "XAUUSDm", "XAUUSD", "XAUUSDc", "XAUUSC" })
+                {
+                    if (!goldCandidates.Contains(required, StringComparer.OrdinalIgnoreCase))
+                        throw new InvalidOperationException("Gold bootstrap candidate missing: " + required);
+                }
+
+                using (var exactSettings = JsonDocument.Parse("{\"startupSymbol\":\"XAUUSD\",\"symbolResolutionMode\":\"EXACT\"}"))
                 {
                     var exactJob = new CloudJob
                     {
@@ -79,9 +107,12 @@ internal static class ProvisioningSelfTest
                         BrokerServer = "Exness-MT5Trial14",
                         Settings = exactSettings.RootElement.Clone()
                     };
-                    if (exactJob.SymbolDiscoveryPending ||
-                        !string.Equals(exactJob.Symbol, "XAUUSDm", StringComparison.Ordinal))
-                        throw new InvalidOperationException("customer-confirmed exact symbol must be preserved byte-for-byte");
+                    if (!string.Equals(exactJob.Symbol, "XAUUSD", StringComparison.Ordinal) ||
+                        !string.IsNullOrWhiteSpace(exactJob.FallbackSymbol))
+                        throw new InvalidOperationException("exact symbol selection must not be rewritten or fallback");
+                    if (exactJob.StartupSymbolCandidates.Count != 1 ||
+                        !string.Equals(exactJob.StartupSymbolCandidates[0], "XAUUSD", StringComparison.Ordinal))
+                        throw new InvalidOperationException("exact symbol selection must not probe alternative symbols");
                 }
 
                 var genericJob = new CloudJob
@@ -108,7 +139,7 @@ internal static class ProvisioningSelfTest
             {
                 var id = Guid.NewGuid().ToString();
                 using var accountJson = JsonDocument.Parse((900000 + i).ToString());
-                using var settingsJson = JsonDocument.Parse("{\"startupSymbol\":\"XAUUSDm\",\"symbol\":\"XAUUSDm\",\"symbolResolutionMode\":\"EXACT\"}");
+                using var settingsJson = JsonDocument.Parse("{\"startupSymbol\":\"BTCUSD\",\"symbol\":\"XAUUSD\"}");
 
                 var job = new CloudJob
                 {
@@ -147,11 +178,11 @@ internal static class ProvisioningSelfTest
                 AssertContains(preset, "InpInstanceId=" + item.Job.InstanceId, "instance id");
                 AssertContains(preset, "InpInstallToken=install-token-" + number, "install token");
                 AssertContains(preset, "InpCloudRelay=true", "Cloud heartbeat relay");
-                AssertContains(preset, "InpStartupSymbol=XAUUSDm", "customer-confirmed startup symbol passed to EA");
+                AssertContains(preset, "InpStartupSymbol=BTCUSD", "canonical startup symbol passed to EA");
                 AssertContains(startup, "Login=" + (900000 + number), "account");
                 AssertContains(startup, "Password=demo-password-" + number, "password");
                 AssertContains(startup, "Server=SCENOVA-Demo-" + number, "broker server");
-                AssertContains(startup, "Symbol=XAUUSDm", "customer-confirmed startup symbol");
+                AssertContains(startup, "Symbol=BTCUSD", "web-authoritative startup symbol");
                 AssertContains(startup, "ProxyEnable=0", "proxy disabled");
                 AssertContains(startup, "WebRequest=1", "WebRequest enabled");
                 AssertContains(startup, "Chart=0", "chart-change trading remains enabled");
@@ -214,7 +245,7 @@ internal static class ProvisioningSelfTest
             Console.WriteLine("PASS: SCENOVA API base is canonicalized before writing EA presets");
             Console.WriteLine("PASS: per-instance account, credential, token and startup files remain isolated");
             Console.WriteLine("PASS: duplicate MT5 chart profiles are cleared before Cloud startup");
-            Console.WriteLine("PASS: Cloud provisioning never guesses broker symbol suffixes; exact customer selection is preserved");
+            Console.WriteLine("PASS: Cloud broker symbol resolver maps Exness Gold/BTC to native m-suffix charts");
             Console.WriteLine("PASS: MT5 manual close rearms one automatic reopen without a launch loop");
             Console.WriteLine("PASS: MetaTrader automatic installer accepts success exit codes 0/1");
             Console.WriteLine("PASS: live broker MT5 server directory is read from servers.dat without inventing names");
