@@ -47,6 +47,9 @@ export default function AdminPage() {
   const [newAccessGroupName, setNewAccessGroupName] = useState("");
   const [groupAction, setGroupAction] = useState("");
   const [customerAction, setCustomerAction] = useState("");
+  const [announcementTitle,setAnnouncementTitle] = useState("ประกาศจาก SCENOVA");
+  const [announcementMessage,setAnnouncementMessage] = useState("");
+  const [announcementBusy,setAnnouncementBusy] = useState(false);
 
   async function search(e?: FormEvent, preserveMessage = false) {
     e?.preventDefault();
@@ -717,6 +720,37 @@ export default function AdminPage() {
     });
   }
 
+  async function publishAnnouncement() {
+    const title=announcementTitle.trim();
+    const message=announcementMessage.trim();
+    if (!title || !message) return setMessage("กรุณาระบุหัวข้อและข้อความประกาศ");
+    setAnnouncementBusy(true);
+    try {
+      await adminApi("/admin/announcements/publish",{
+        method:"POST",body:JSON.stringify({title,message})
+      });
+      setMessage("เผยแพร่ประกาศทั่วไปให้ลูกค้าแล้ว โดยไม่ตั้งเวลาและไม่หยุดบอท");
+      await search(undefined,true);
+    } catch(e:any) { setMessage(e.message); }
+    finally { setAnnouncementBusy(false); }
+  }
+
+  async function clearAnnouncement() {
+    const ok=await confirmPopup({
+      title:"ยกเลิกประกาศทั่วไป",tone:"warning",
+      message:"นำข้อความประกาศนี้ออกจาก Dashboard ลูกค้าหรือไม่? ไม่มีผลต่อบอทและ Maintenance",
+      confirmLabel:"ยกเลิกประกาศ"
+    });
+    if (!ok) return;
+    setAnnouncementBusy(true);
+    try {
+      await adminApi("/admin/announcements/clear",{method:"POST"});
+      setMessage("ยกเลิกประกาศทั่วไปแล้ว");
+      await search(undefined,true);
+    } catch(e:any) { setMessage(e.message); }
+    finally { setAnnouncementBusy(false); }
+  }
+
   async function announceMaintenance() {
     if (!maintenanceAt) return setMessage("กรุณากำหนดวันและเวลา Maintenance");
     setMaintenanceBusy(true);
@@ -1006,6 +1040,47 @@ export default function AdminPage() {
               <OwnerKpi label="ผู้ใช้ Active" value={system?.users?.active ?? "—"} meta="พร้อมใช้งาน" tone="green"/>
               <OwnerKpi label="Bots Running" value={system?.bots?.running ?? "—"} meta="กำลังทำงาน" tone="purple"/>
               <OwnerKpi label="Bots Offline" value={system?.bots?.offline ?? "—"} meta={(system?.slots?.active ?? 0) + " access records active"} tone={(system?.bots?.offline||0)>0?"red":"neutral"}/>
+            </section>
+
+            <section className="owner-card" aria-label="ประกาศทั่วไปให้ลูกค้า">
+              <div className="owner-card-head">
+                <div>
+                  <span className="owner-card-kicker">ANNOUNCEMENT</span>
+                  <h3>ประกาศทั่วไป · ไม่กำหนดวันเวลา</h3>
+                  <p>แสดงประกาศบน Dashboard ลูกค้าจนกว่าแอดมินจะยกเลิก โดยไม่หยุดบอทหรือเปลี่ยนสถานะ Maintenance</p>
+                </div>
+              </div>
+              {system?.announcement && (
+                <div className="owner-maintenance-current" role="status">
+                  <b>ประกาศที่แสดงอยู่: {system.announcement.title}</b>
+                  <span style={{whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{system.announcement.message}</span>
+                </div>
+              )}
+              <div className="owner-maintenance-form">
+                <div className="owner-maintenance-copy">
+                  <div className="field">
+                    <label htmlFor="general-announcement-title">หัวข้อประกาศ</label>
+                    <input id="general-announcement-title" className="input" maxLength={160}
+                      value={announcementTitle} onChange={e=>setAnnouncementTitle(e.target.value)}/>
+                  </div>
+                  <div className="field">
+                    <label htmlFor="general-announcement-message">ข้อความประกาศ</label>
+                    <textarea id="general-announcement-message" className="input" rows={4} maxLength={3000}
+                      placeholder="พิมพ์ประกาศที่จะให้ลูกค้าทุกคนเห็น"
+                      value={announcementMessage} onChange={e=>setAnnouncementMessage(e.target.value)}
+                      style={{width:"100%",resize:"vertical",minHeight:100,boxSizing:"border-box"}}/>
+                  </div>
+                </div>
+              </div>
+              <div className="owner-maintenance-actions">
+                <button className="btn primary" type="button"
+                  disabled={announcementBusy || !announcementTitle.trim() || !announcementMessage.trim()}
+                  onClick={()=>void publishAnnouncement()}>
+                  {announcementBusy?"กำลังดำเนินการ...":system?.announcement?"อัปเดตประกาศ":"เผยแพร่ประกาศ"}
+                </button>
+                {system?.announcement && <button className="btn" type="button"
+                  disabled={announcementBusy} onClick={()=>void clearAnnouncement()}>ยกเลิกประกาศ</button>}
+              </div>
             </section>
 
             <section className={"owner-card owner-maintenance-card status-" + String(maintenance.status || "OFF").toLowerCase()}>

@@ -1774,6 +1774,7 @@ export class BotController {
         )
       : null;
     const maintenance = await this.maintenance.current();
+    const announcement = await this.db.one("SELECT title,message,published_at FROM system_announcements WHERE id=1 AND active=true");
     const partner = await this.partner.dashboardSummary(userId);
 
     return {
@@ -1791,6 +1792,7 @@ export class BotController {
       startTransition,
       runSummary,
       maintenance,
+      announcement,
       partner,
       tradeJournal,
       raceVNextEvaluation

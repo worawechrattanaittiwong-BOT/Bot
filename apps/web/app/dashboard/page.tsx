@@ -27,6 +27,7 @@ type Dashboard = {
   cloudUpdate: any;
   startTransition: any;
   maintenance: any;
+  announcement?: {title?:string;message?:string} | null;
   partner: any;
   tradeJournal: any;
 };
@@ -4366,6 +4367,23 @@ export default function DashboardPage() {
         )}
 
                 {activeView === "overview" && <BotPerformanceSummary dashboard={data} />}
+
+        {data?.announcement && (
+          <aside className="system-maintenance-banner status-scheduled" role="status"
+            aria-label="ประกาศจาก SCENOVA">
+            <div className="system-maintenance-icon">i</div>
+            <div className="system-maintenance-copy">
+              <b>{data.announcement.title || "ประกาศจาก SCENOVA"}</b>
+              <span style={{whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>
+                {data.announcement.message}
+              </span>
+            </div>
+            <div className="system-maintenance-side">
+              <strong>ประกาศทั่วไป</strong>
+              <small>ไม่มีผลต่อการทำงานของบอท</small>
+            </div>
+          </aside>
+        )}
 
         {maintenance.status !== "OFF" && (
           <div className={"system-maintenance-banner status-" + String(maintenance.status).toLowerCase()} role="alert">

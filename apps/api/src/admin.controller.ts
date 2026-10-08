@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   ConflictException,
   Controller,
@@ -908,7 +909,8 @@ export class AdminController {
       "SELECT runner_id,region,hostname,capacity,active_instances,status,last_seen_at, CASE WHEN last_seen_at > now() - interval '30 seconds' THEN 'ONLINE' ELSE 'STALE' END health FROM worker_nodes ORDER BY runner_id"
     );
     const maintenance = await this.maintenance.snapshot();
-    return { users, bots, slots, workers: workers.rows, maintenance };
+    const announcement = await this.db.one("SELECT title,message,published_at FROM system_announcements WHERE id=1 AND active=true");
+    return { users, bots, slots, workers: workers.rows, maintenance, announcement };
   }
 
   @Post("trials/authorize")
@@ -2655,6 +2657,39 @@ export class AdminController {
   async suspendPartner(@Req() req: any, @Body() body: { userId: string }) {
     const actor = req.user?.sub ? "OWNER:" + String(req.user.sub) : "ADMIN_KEY";
     return this.partner.suspendPartner(body.userId, actor);
+  }
+
+  // Informational notices are separate from Maintenance. No trading commands are issued.
+  @Post("announcements/publish")
+  async publishGeneralAnnouncement(
+    @Req() req: any,
+    @Body() body: { title?: string; message?: string }
+  ) {
+    const title = String(body?.title || "").trim();
+    const message = String(body?.message || "").trim();
+    if (!title || title.length > 160 || !message || message.length > 3000) {
+      throw new BadRequestException("กรุณาระบุหัวข้อ (ไม่เกิน 160 ตัวอักษร) และข้อความประกาศ (ไม่เกิน 3000 ตัวอักษร)");
+    }
+    const actor = req.user?.sub ? "OWNER:" + String(req.user.sub) : "ADMIN_KEY";
+    const row = await this.db.one(
+      "INSERT INTO system_announcements(id,title,message,active,published_at,updated_by) "+
+      "VALUES(1,$1,$2,true,now(),$3) ON CONFLICT(id) DO UPDATE "+
+      "SET title=EXCLUDED.title,message=EXCLUDED.message,active=true,published_at=now(),updated_by=EXCLUDED.updated_by "+
+      "RETURNING title,message,published_at",
+      [title, message, actor.slice(0,120)]
+    );
+    await this.audit(actor,"PUBLISH_GENERAL_ANNOUNCEMENT","system","announcement",{
+      title, messageLength: message.length
+    });
+    return {ok:true,announcement:row};
+  }
+
+  @Post("announcements/clear")
+  async clearGeneralAnnouncement(@Req() req: any) {
+    const actor = req.user?.sub ? "OWNER:" + String(req.user.sub) : "ADMIN_KEY";
+    await this.db.query("UPDATE system_announcements SET active=false,updated_by=$1 WHERE id=1",[actor.slice(0,120)]);
+    await this.audit(actor,"CLEAR_GENERAL_ANNOUNCEMENT","system","announcement",{});
+    return {ok:true};
   }
 
   @Post("maintenance/announce")
