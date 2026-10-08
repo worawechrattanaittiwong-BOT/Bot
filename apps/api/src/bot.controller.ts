@@ -2783,6 +2783,82 @@ export class BotController {
     };
   }
 
+
+  // Read-only status for the admin-assisted Cloud connection dialog.
+  // Values come from the same worker telemetry and EA heartbeat used by Dashboard.
+  @Get("mt5/admin-connect/status")
+  @UseGuards(AdminGuard)
+  async adminCloudMt5ConnectStatus(
+    @Req() req: any,
+    @Query("userId") userId = "",
+    @Query("slotId") slotId = ""
+  ) {
+    const actorId = String(req.user?.sub || "");
+    if (!actorId || !["OWNER", "ADMIN"].includes(String(req.user?.role || ""))) {
+      throw new ForbiddenException("Owner/Admin login required");
+    }
+    const actor = await this.user(actorId);
+    if (!actor || actor.status !== "ACTIVE" || !["OWNER", "ADMIN"].includes(actor.role)) {
+      throw new ForbiddenException("บัญชีผู้ดูแลไม่ได้รับอนุญาต");
+    }
+    if (!/^[0-9a-f-]{36}$/i.test(userId) || !/^[0-9a-f-]{36}$/i.test(slotId)) {
+      throw new BadRequestException("User ID หรือ Slot ID ไม่ถูกต้อง");
+    }
+    const slot = await this.db.one(
+      "SELECT ls.id, ls.status, bi.id instance_id, a.account_number, a.broker, a.broker_server, " +
+      "bi.provisioning_error, bi.actual_state, bi.desired_state, " +
+      "(bi.last_seen_at IS NOT NULL AND bi.last_seen_at > now()-interval '20 seconds') mt5_online, " +
+      "(wn.last_seen_at IS NOT NULL AND wn.last_seen_at > now()-interval '120 seconds') runner_online, " +
+      "((bi.last_seen_at IS NOT NULL AND bi.last_seen_at > now()-interval '60 seconds') OR " +
+      "(wn.last_seen_at > now()-interval '90 seconds' AND EXISTS " +
+      "(SELECT 1 FROM jsonb_array_elements(COALESCE(wn.telemetry->'instances','[]'::jsonb)) item " +
+      "WHERE item->>'instanceId'=bi.id::text AND item->>'terminalRunning'='true'))) terminal_online, " +
+      "(wn.last_seen_at > now()-interval '30 seconds' AND EXISTS " +
+      "(SELECT 1 FROM jsonb_array_elements(COALESCE(wn.telemetry->'instances','[]'::jsonb)) item " +
+      "WHERE item->>'instanceId'=bi.id::text AND item->>'terminalRunning'='true' " +
+      "AND item->>'chartHasFastBasketBot'='true' AND item->>'presetCloudRelayEnabled'='true')) cloud_control_ready, " +
+      "bi.metrics->'marketWatchSymbols' market_watch_symbols, " +
+      "bi.metrics->>'symbol' active_symbol, bi.metrics->'terminalConnected' broker_connected, " +
+      "bs.settings->>'startupSymbol' startup_symbol, " +
+      "bs.settings->>'symbolResolutionMode' symbol_resolution_mode " +
+      "FROM license_slots ls " +
+      "LEFT JOIN bot_instances bi ON bi.slot_id=ls.id AND bi.mode='CLOUD' " +
+      "LEFT JOIN mt5_accounts a ON a.id=bi.mt5_account_id " +
+      "LEFT JOIN worker_nodes wn ON wn.runner_id=bi.runner_id " +
+      "LEFT JOIN bot_settings bs ON bs.bot_instance_id=bi.id " +
+      "WHERE ls.id=$1 AND ls.assigned_user_id=$2 AND ls.mode='CLOUD' AND ls.status<>'DELETED'",
+      [slotId, userId]
+    );
+    if (!slot) throw new ConflictException("ไม่พบ Cloud VPS Slot ของลูกค้า");
+    const symbols = Array.isArray(slot.market_watch_symbols)
+      ? slot.market_watch_symbols.filter((s:any) =>
+          typeof s === "string" && /XAU/i.test(s) && s.length <= 64
+        ).slice(0, 60)
+      : [];
+    return {
+      ok: true,
+      slotId,
+      accountNumber: slot.account_number || "",
+      broker: slot.broker || "",
+      brokerServer: slot.broker_server || "",
+      runnerOnline: Boolean(slot.runner_online),
+      terminalOnline: Boolean(slot.terminal_online),
+      eaHeartbeat: Boolean(slot.mt5_online),
+      cloudControlReady: Boolean(slot.cloud_control_ready),
+      brokerConnected: typeof slot.broker_connected === "boolean" ? slot.broker_connected : null,
+      symbols,
+      startupSymbol: slot.startup_symbol || "",
+      activeSymbol: slot.active_symbol || "",
+      symbolConfirmed: String(slot.symbol_resolution_mode || "").toUpperCase() === "EXACT" &&
+        Boolean(String(slot.startup_symbol || "").trim()),
+      provisioningError: slot.provisioning_error
+        ? (String(slot.provisioning_error).match(/^[A-Z][A-Z0-9_]{1,60}/)?.[0] || "MT5_PROVISION_FAILED")
+        : "",
+      actualState: slot.actual_state || "OFFLINE",
+      desiredState: slot.desired_state || "STOPPED"
+    };
+  }
+
   @Post("mt5/rotate-install-token")
   async rotateInstallToken(@Req() req: any, @Query("slotId") slotId = "") {
     const user = await this.user(req.user.sub);

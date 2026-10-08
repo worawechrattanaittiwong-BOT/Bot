@@ -1617,11 +1617,13 @@ export default function AdminPage() {
                                     )}
                                   </div>
                                 </div>
-                                {slot.mode==="CLOUD" && !slot.account_number && (
+                                {slot.mode==="CLOUD" && (
                                   <AdminCloudMt5Connect key={selectedCustomer.id+":"+slot.id}
                                     userId={selectedCustomer.id} userCode={selectedCustomer.user_code}
                                     slotId={slot.id} slotNumber={Number(slot.slot_number||0)}
-                                    onMessage={setMessage} onLinked={()=>search(undefined,true)}/>
+                                    linkedAccount={String(slot.account_number||"")}
+                                    onMessage={setMessage} onLinked={()=>search(undefined,true)}
+                                    onSelectSymbol={()=>void selectCustomerSlotSymbol(selectedCustomer,slot)}/>
                                 )}
                                 </Fragment>
                               ))}

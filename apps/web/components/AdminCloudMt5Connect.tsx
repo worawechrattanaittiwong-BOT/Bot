@@ -1,83 +1,256 @@
 "use client";
-import { FormEvent, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { adminApi } from "../lib/api";
+import { Mt5ConnectChecklist, isCloudMt5ConnectionComplete } from "./Mt5ConnectChecklist";
+import styles from "./AdminCloudMt5Connect.module.css";
 
+type Broker = { code:string; name:string; servers:Array<{serverName:string;environment:string}> };
+type Status = {
+  accountNumber:string; broker:string; brokerServer:string; runnerOnline:boolean;
+  terminalOnline:boolean; eaHeartbeat:boolean; cloudControlReady:boolean;
+  brokerConnected:boolean|null; symbols:string[]; startupSymbol:string;
+  activeSymbol:string; symbolConfirmed:boolean; provisioningError:string;
+  actualState:string; desiredState:string;
+};
 type Props = {
-  userId: string;
-  userCode: string;
-  slotId: string;
-  slotNumber: number;
-  onLinked: () => Promise<void>;
-  onMessage: (message: string) => void;
+  userId:string; userCode:string; slotId:string; slotNumber:number;
+  linkedAccount?:string; onLinked:()=>Promise<void>;
+  onMessage:(message:string)=>void; onSelectSymbol?:()=>void;
 };
 
-// Owner-only UI. The API independently enforces owner role, Cloud slot ownership,
-// entitlement, duplicate identity, safe stop and encrypted credential storage.
-export function AdminCloudMt5Connect({ userId, userCode, slotId, slotNumber, onLinked, onMessage }: Props) {
-  const [accountNumber, setAccountNumber] = useState("");
-  const [broker, setBroker] = useState("");
-  const [brokerServer, setBrokerServer] = useState("");
-  const [tradingPassword, setTradingPassword] = useState("");
-  const [approved, setApproved] = useState(false);
-  const [busy, setBusy] = useState(false);
+export function AdminCloudMt5Connect({
+  userId,userCode,slotId,slotNumber,linkedAccount,onLinked,onMessage,onSelectSymbol
+}:Props) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const [open,setOpen] = useState(false);
+  const [phase,setPhase] = useState<"FORM"|"STATUS">("FORM");
+  const [catalog,setCatalog] = useState<Broker[]>([]);
+  const [brokerCode,setBrokerCode] = useState("EXNESS");
+  const [customBroker,setCustomBroker] = useState("");
+  const [accountNumber,setAccountNumber] = useState("");
+  const [serverChoice,setServerChoice] = useState("");
+  const [manualServer,setManualServer] = useState("");
+  const [tradingPassword,setTradingPassword] = useState("");
+  const [approved,setApproved] = useState(false);
+  const [busy,setBusy] = useState(false);
+  const [status,setStatus] = useState<Status|null>(null);
+  const [error,setError] = useState("");
+  const [statusError,setStatusError] = useState("");
+  const [acknowledged,setAcknowledged] = useState(false);
 
-  async function submit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (busy) return;
-    if (!/^\d{3,20}$/.test(accountNumber.trim())) return onMessage("MT5 Login ต้องมีเลข 3–20 หลัก");
-    if (!brokerServer.trim() || !tradingPassword || !approved) return onMessage("กรอก Server รหัสผ่าน และยืนยันว่าลูกค้าอนุญาต");
-    setBusy(true);
+  const currentBroker = catalog.find(b=>b.code===brokerCode);
+  const servers = useMemo(()=>Array.from(new Map(
+    (currentBroker?.servers||[]).filter(s=>Boolean(s?.serverName))
+      .map(s=>[s.serverName.trim().toLowerCase(),s])
+  ).values()),[currentBroker]);
+  const broker = brokerCode==="OTHER" ? customBroker.trim() : (currentBroker?.name||brokerCode);
+  const brokerServer = (serverChoice==="CUSTOM" || !servers.length ? manualServer : serverChoice).trim();
+
+  const loadStatus=useCallback(async()=>{
     try {
-      const result = await adminApi("/bot/mt5/admin-connect", {
-        method: "POST",
-        body: JSON.stringify({
-          userId, slotId, accountNumber: accountNumber.trim(),
-          broker: broker.trim() || "Other", brokerServer: brokerServer.trim(), tradingPassword
-        })
-      });
-      setTradingPassword("");
-      onMessage(result?.message || "บันทึกแล้ว กำลังรอ Cloud Worker เชื่อม MT5");
-      await onLinked();
-    } catch (err: any) {
-      setTradingPassword("");
-      onMessage(err?.message || "ไม่สามารถเชื่อม MT5 ได้");
-    } finally {
-      setBusy(false);
+      const data=await adminApi("/bot/mt5/admin-connect/status?userId="+
+        encodeURIComponent(userId)+"&slotId="+encodeURIComponent(slotId));
+      setStatus(data as Status);
+      setStatusError("");
+    } catch(e:any) {
+      setStatusError(String(e?.message||"โหลดสถานะไม่ได้"));
+    }
+  },[userId,slotId]);
+
+  useEffect(()=>{
+    if (!open || phase!=="STATUS") return;
+    void loadStatus();
+    const id=window.setInterval(()=>void loadStatus(),3000);
+    return ()=>window.clearInterval(id);
+  },[open,phase,loadStatus]);
+
+  function close() {
+    if (busy) return;
+    dialog.current?.close();
+  }
+  function openDialog() {
+    setError("");
+    setStatusError("");
+    setStatus(null);
+    setAcknowledged(Boolean(linkedAccount));
+    setTradingPassword("");
+    setPhase(linkedAccount?"STATUS":"FORM");
+    setOpen(true);
+    dialog.current?.showModal();
+    if (!linkedAccount) {
+      void adminApi("/catalog/brokers").then((data:Broker[])=>{
+        const rows=Array.isArray(data)?data:[];
+        setCatalog(rows);
+        setBrokerCode(prev=>rows.some(b=>b.code===prev)?prev:(rows[0]?.code||"OTHER"));
+      }).catch(()=>setCatalog([]));
     }
   }
 
+  async function submit(e:FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (busy) return;
+    if (!/^\d{3,20}$/.test(accountNumber.trim())) return setError("MT5 Login ต้องเป็นตัวเลข 3–20 หลัก");
+    if (!broker || !brokerServer || brokerServer.length>160 || !tradingPassword || !approved) {
+      return setError("เลือก Broker, Server, กรอกรหัส Trading และยืนยันการอนุญาตจากลูกค้า");
+    }
+    setBusy(true);
+    setError("");
+    try {
+      const response=await adminApi("/bot/mt5/admin-connect",{
+        method:"POST",
+        body:JSON.stringify({userId,slotId,accountNumber:accountNumber.trim(),
+          broker,brokerServer,tradingPassword})
+      });
+      setTradingPassword("");
+      setAcknowledged(true);
+      setPhase("STATUS");
+      onMessage(response?.message||"เซิร์ฟเวอร์รับข้อมูลแล้ว กำลังรอ MT5 เชื่อมต่อ");
+      await onLinked();
+    } catch(e:any) {
+      const message=String(e?.message||"ไม่สามารถส่งคำขอได้");
+      setTradingPassword("");
+      if (/timed out|timeout|failed to fetch|networkerror/i.test(message)) {
+        setError("ไม่ทราบผลการส่งข้อมูล กำลังตรวจสอบกับเซิร์ฟเวอร์ กรุณาอย่ากดซ้ำ");
+        setPhase("STATUS");
+      } else setError(message);
+    } finally { setBusy(false); }
+  }
+
+  const boundNumber = status?.accountNumber || linkedAccount || "";
+  const fullReady = Boolean(status && isCloudMt5ConnectionComplete({
+    isCloud:true,
+    accountMatches:Boolean(boundNumber),
+    runnerOnline:status.runnerOnline,
+    terminalOnline:status.terminalOnline,
+    eaHeartbeat:status.eaHeartbeat,
+    cloudControlReady:status.cloudControlReady,
+    brokerConnected:status.brokerConnected,
+    symbolConfirmed:status.symbolConfirmed,
+    activeSymbolMatches:Boolean(status.startupSymbol &&
+      status.activeSymbol.toUpperCase()===status.startupSymbol.toUpperCase())
+  }));
+  const failed=Boolean(status?.provisioningError);
+  const checkInput={
+    acknowledged:acknowledged || Boolean(status?.accountNumber),
+    isCloud:true,
+    accountMatches:Boolean(status?.accountNumber),
+    runnerOnline:Boolean(status?.runnerOnline),
+    terminalOnline:Boolean(status?.terminalOnline),
+    eaHeartbeat:Boolean(status?.eaHeartbeat),
+    cloudControlReady:Boolean(status?.cloudControlReady),
+    brokerConnected:status?.brokerConnected??null,
+    symbolsFound:status?.symbols?.length||0,
+    discoveryReady:Boolean(status?.symbols?.length),
+    symbolConfirmed:Boolean(status?.symbolConfirmed),
+    activeSymbolMatches:Boolean(status?.startupSymbol &&
+      status?.activeSymbol?.toUpperCase()===status?.startupSymbol?.toUpperCase()),
+    localSymbol:false,
+    status:failed?"FAILED":fullReady?"SUCCESS":"RUNNING"
+  };
   return (
-    <details style={{border:"1px solid #26496b",borderRadius:10,padding:"10px 12px",background:"#0b1625"}}>
-      <summary style={{cursor:"pointer",color:"#93c6ff",fontWeight:600}}>
-        เชื่อม MT5 ให้ลูกค้า · Cloud VPS Slot #{slotNumber}
-      </summary>
-      <form onSubmit={submit} style={{display:"grid",gap:12,paddingTop:14}}>
-        <small style={{color:"#b9c7d9"}}>ลูกค้า: {userCode} · ต้องได้รับอนุญาตจากเจ้าของบัญชี ใช้ Trading Password (ไม่ใช่ Investor Password) ระบบไม่ Start บอทอัตโนมัติ</small>
-        <label>MT5 Login
-          <input className="input" required inputMode="numeric" pattern="[0-9]{3,20}" maxLength={20} autoComplete="off"
-            value={accountNumber} onChange={e=>setAccountNumber(e.target.value)} placeholder="เลขบัญชี MT5"/>
-        </label>
-        <label>โบรกเกอร์
-          <input className="input" maxLength={160} autoComplete="off" value={broker}
-            onChange={e=>setBroker(e.target.value)} placeholder="เช่น Exness"/>
-        </label>
-        <label>MT5 Server
-          <input className="input" required maxLength={160} autoComplete="off" value={brokerServer}
-            onChange={e=>setBrokerServer(e.target.value)} placeholder="ชื่อ Server ตามโบรกเกอร์"/>
-        </label>
-        <label>Trading Password
-          <input className="input" required type="password" autoComplete="new-password" maxLength={512}
-            value={tradingPassword} onChange={e=>setTradingPassword(e.target.value)}/>
-        </label>
-        <label style={{display:"flex",gap:8,alignItems:"center",fontSize:13}}>
-          <input type="checkbox" checked={approved} onChange={e=>setApproved(e.target.checked)}/>
-          ลูกค้าอนุญาตให้เชื่อมบัญชี MT5 นี้แล้ว
-        </label>
-        <button type="submit" className="btn primary" disabled={busy || !approved}>
-          {busy ? "กำลังบันทึก..." : "บันทึกและเชื่อมต่อ Cloud MT5"}
-        </button>
-        <small style={{color:"#9fb1ca"}}>หลังบันทึก ระบบจะรายงานสถานะ OFFLINE จนกว่า Cloud Worker จะเชื่อมสำเร็จ</small>
-      </form>
-    </details>
+    <section className={styles.launch}>
+      <button type="button" className={styles.launchButton} onClick={openDialog}>
+        {linkedAccount?"ดูสถานะการเชื่อมต่อ MT5":"เชื่อม MT5 ให้ลูกค้า"}
+        <span aria-hidden="true">→</span>
+      </button>
+      <dialog className={styles.dialog} ref={dialog}
+        onCancel={e=>{if(busy)e.preventDefault();}}
+        onClose={()=>{setOpen(false);setTradingPassword("");setApproved(false);}}
+        aria-label="เชื่อม Cloud MT5 ให้ลูกค้า">
+        <div className={styles.shell}>
+          <header className={styles.header}>
+            <div><small>SCENOVA · ADMIN CLOUD VPS</small>
+              <h2>{phase==="FORM"?"เชื่อมบัญชี MT5 ให้ลูกค้า":"สถานะการเชื่อมต่อ MT5"}</h2>
+              <p>{userCode} · Cloud VPS Slot #{slotNumber}</p>
+            </div>
+            <button type="button" className={styles.close} onClick={close} disabled={busy}
+              aria-label="ปิดหน้าต่าง">×</button>
+          </header>
+          {phase==="FORM" ? (
+            <form className={styles.form} onSubmit={submit}>
+              <p className={styles.hint}>เลือก Broker และ Server เช่นเดียวกับหน้าลูกค้า ระบบจะบันทึกรหัสผ่านอย่างเข้ารหัส ไม่สั่ง Start บอทอัตโนมัติ</p>
+              <div className={styles.grid}>
+                <label>MT5 Login
+                  <input required inputMode="numeric" autoComplete="off" maxLength={20}
+                    value={accountNumber} onChange={e=>setAccountNumber(e.target.value.replace(/\D/g,""))}
+                    placeholder="เช่น 12345678"/>
+                </label>
+                <label>Broker / โบรกเกอร์
+                  <select required value={brokerCode} onChange={e=>{
+                    setBrokerCode(e.target.value);setServerChoice("");setManualServer("");setError("");
+                  }}>
+                    {catalog.filter(b=>b.code!=="OTHER").map(b=>
+                      <option key={b.code} value={b.code}>{b.name}</option>)}
+                    {!catalog.length && <option value="EXNESS">Exness</option>}
+                    <option value="OTHER">อื่น ๆ / ระบุ Broker เอง</option>
+                  </select>
+                </label>
+                {brokerCode==="OTHER" && <label>ชื่อ Broker
+                  <input required maxLength={160} autoComplete="off" value={customBroker}
+                    onChange={e=>setCustomBroker(e.target.value)} placeholder="ชื่อโบรกเกอร์"/>
+                </label>}
+                {servers.length>0 && <label>MT5 Server
+                  <select required value={serverChoice} onChange={e=>{setServerChoice(e.target.value);setError("");}}>
+                    <option value="">เลือก MT5 Server</option>
+                    {servers.map(s=><option key={s.serverName} value={s.serverName}>
+                      {s.environment==="REAL"?"LIVE":s.environment==="DEMO"?"DEMO":"SERVER"} · {s.serverName}
+                    </option>)}
+                    <option value="CUSTOM">ไม่พบ Server / กรอกเอง</option>
+                  </select>
+                </label>}
+                {(serverChoice==="CUSTOM" || !servers.length) && <label>ระบุ MT5 Server
+                  <input required maxLength={160} value={manualServer} autoComplete="off"
+                    autoCapitalize="none" spellCheck={false}
+                    onChange={e=>setManualServer(e.target.value)} placeholder="ชื่อ Server ตรงตาม Broker"/>
+                </label>}
+                <label className={styles.full}>Trading Password
+                  <input required type="password" maxLength={512} autoComplete="new-password"
+                    value={tradingPassword} onChange={e=>setTradingPassword(e.target.value)}
+                    placeholder="รหัสผ่านสำหรับซื้อขาย (ไม่ใช่ Investor Password)"/>
+                </label>
+              </div>
+              <label className={styles.consent}>
+                <input type="checkbox" checked={approved} onChange={e=>setApproved(e.target.checked)}/>
+                ลูกค้าอนุญาตให้ผู้ดูแลเชื่อมบัญชี MT5 นี้แล้ว
+              </label>
+              {error && <p role="alert" className={styles.error}>{error}</p>}
+              <footer className={styles.actions}>
+                <button type="button" onClick={close} disabled={busy}>ยกเลิก</button>
+                <button className={styles.primary} type="submit" disabled={busy||!approved}>
+                  {busy?"กำลังส่งข้อมูล...":"เชื่อมบัญชี MT5"}
+                </button>
+              </footer>
+            </form>
+          ) : (
+            <div className={styles.progress}>
+              <div className={styles.summary}>
+                <strong>{failed?"พบข้อผิดพลาดจาก VPS":fullReady?"เชื่อมต่อและเตรียม EA สำเร็จ":
+                  status?.eaHeartbeat?"MT5 ส่งสถานะมาแล้ว · กำลังตรวจความพร้อม":
+                  "กำลังตรวจสอบการเชื่อมต่อจริง"}</strong>
+                <small>บัญชี {boundNumber||"รอข้อมูล"} · {status?.brokerServer||"รอ Server"}</small>
+              </div>
+              {status ?
+                <Mt5ConnectChecklist input={checkInput} onPickSymbol={onSelectSymbol?()=>{
+                  close();onSelectSymbol();
+                }:undefined}/> :
+                <p className={styles.hint}>กำลังรับข้อมูลสถานะจากเซิร์ฟเวอร์...</p>}
+              {status?.symbolConfirmed===false && Boolean(status?.symbols?.length) &&
+                <p className={styles.hint}>เมื่อพบ Symbol จากโบรกเกอร์แล้ว ให้เลือก Symbol ใน Slot ก่อนใช้งาน EA</p>}
+              {failed && <p role="alert" className={styles.error}>
+                VPS รายงานว่าเชื่อมต่อไม่สำเร็จ กรุณาตรวจ Login, Trading Password, Broker และ MT5 Server
+                <small>รหัสข้อผิดพลาด: {status?.provisioningError}</small>
+              </p>}
+              {error && <p role="alert" className={styles.error}>{error}</p>}
+              {statusError && <p role="alert" className={styles.error}>โหลดสถานะไม่ได้: {statusError}</p>}
+              <p className={styles.hint}>สถานะอัปเดตทุก 3 วินาทีจาก Worker และ EA · การรับข้อมูลไม่ได้แปลว่าเชื่อม Broker สำเร็จ · บอทยังไม่ Start อัตโนมัติ</p>
+              <footer className={styles.actions}>
+                <button type="button" onClick={()=>void loadStatus()}>รีเฟรชสถานะ</button>
+                <button type="button" className={styles.primary} onClick={close}>ปิดหน้าต่าง</button>
+              </footer>
+            </div>
+          )}
+        </div>
+      </dialog>
+    </section>
   );
 }
