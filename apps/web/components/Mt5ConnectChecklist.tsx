@@ -12,6 +12,7 @@ export type Mt5ProgressInput = {
   cloudControlReady: boolean;
   brokerConnected: boolean | null;
   symbolsFound: number;
+  discoveryReady: boolean;
   symbolConfirmed: boolean;
   activeSymbolMatches: boolean;
   localSymbol: boolean;
@@ -47,7 +48,7 @@ export function getMt5ConnectSteps(input: Mt5ProgressInput) {
       input.eaHeartbeat ||
       (input.isCloud && input.symbolsFound > 0));
   const found = broker && (input.isCloud
-    ? (input.symbolsFound > 0 || input.symbolConfirmed)
+    ? ((input.discoveryReady && input.symbolsFound > 0) || input.symbolConfirmed)
     : input.localSymbol);
   const confirmed = found && (!input.isCloud || input.symbolConfirmed);
   const ready = confirmed && input.eaHeartbeat &&
@@ -82,6 +83,7 @@ export function Mt5ConnectChecklist(props: {
 }) {
   const steps = getMt5ConnectSteps(props.input);
   const needsSymbol = props.input.isCloud &&
+    props.input.discoveryReady &&
     props.input.symbolsFound > 0 &&
     !props.input.symbolConfirmed &&
     props.input.accountMatches &&

@@ -12,7 +12,7 @@ new Function("require","module","exports",code)(
   mod,mod.exports
 );
 const steps=mod.exports.getMt5ConnectSteps;
-const base={acknowledged:false,isCloud:true,accountMatches:false,runnerOnline:false,terminalOnline:false,eaHeartbeat:false,cloudControlReady:false,brokerConnected:null,symbolsFound:0,symbolConfirmed:false,activeSymbolMatches:false,localSymbol:false,status:"RUNNING"};
+const base={acknowledged:false,isCloud:true,accountMatches:false,runnerOnline:false,terminalOnline:false,eaHeartbeat:false,cloudControlReady:false,brokerConnected:null,symbolsFound:0,discoveryReady:false,symbolConfirmed:false,activeSymbolMatches:false,localSymbol:false,status:"RUNNING"};
 test("only receiving data is active before server confirmation",()=>{
   assert.deepEqual(steps(base).map(x=>x.state),["active","waiting","waiting","waiting","waiting","waiting"]);
 });
@@ -21,16 +21,16 @@ test("runner and terminal do not falsely imply Broker login",()=>{
   assert.deepEqual(s.map(x=>x.state),["done","done","done","active","waiting","waiting"]);
 });
 test("broker XAU discovery waits for manual symbol confirmation",()=>{
-  const s=steps({...base,acknowledged:true,accountMatches:true,runnerOnline:true,terminalOnline:true,symbolsFound:1});
+  const s=steps({...base,acknowledged:true,accountMatches:true,runnerOnline:true,terminalOnline:true,symbolsFound:1,discoveryReady:true});
   assert.deepEqual(s.map(x=>x.state),["done","done","done","done","active","waiting"]);
   assert.match(s[4].detail,/กรุณาเลือก/);
 });
 test("confirmed symbol must wait for EA readiness",()=>{
-  const s=steps({...base,acknowledged:true,accountMatches:true,runnerOnline:true,terminalOnline:true,symbolsFound:1,symbolConfirmed:true});
+  const s=steps({...base,acknowledged:true,accountMatches:true,runnerOnline:true,terminalOnline:true,symbolsFound:1,discoveryReady:true,symbolConfirmed:true});
   assert.equal(s[5].state,"active");
 });
 test("all steps complete only after verified EA and control",()=>{
-  const s=steps({...base,acknowledged:true,accountMatches:true,runnerOnline:true,terminalOnline:true,symbolsFound:1,symbolConfirmed:true,activeSymbolMatches:true,eaHeartbeat:true,cloudControlReady:true});
+  const s=steps({...base,acknowledged:true,accountMatches:true,runnerOnline:true,terminalOnline:true,symbolsFound:1,discoveryReady:true,symbolConfirmed:true,activeSymbolMatches:true,eaHeartbeat:true,cloudControlReady:true});
   assert.ok(s.every(x=>x.state==="done"));
 });
 test("explicit provisioning failure still shows error",()=>{
@@ -77,4 +77,36 @@ test("success logic must not reintroduce a discovery-array requirement",()=>{
   const dashboard=fs.readFileSync("apps/web/app/dashboard/page.tsx","utf8");
   assert.match(dashboard,/isCloudMt5ConnectionComplete\(/);
   assert.doesNotMatch(dashboard,/cloudDiscoveryReady\s*&&\s*cloudSymbolConfirmed/);
+});
+
+test("Symbol modal mounts in every dashboard view, outside overview-only subtree",()=>{
+  const page = fs.readFileSync("apps/web/app/dashboard/page.tsx","utf8");
+  const parsed=ts.createSourceFile("page.tsx",page,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
+  const matching=[];
+  function visit(node) {
+    if(ts.isJsxOpeningElement(node) && node.tagName.getText(parsed)==="dialog" &&
+       node.attributes.properties.some(x=>ts.isJsxAttribute(x) &&
+         x.name.getText(parsed)==="ref" && x.initializer?.getText(parsed).includes("symbolDialogRef"))){
+      matching.push(node);
+    }
+    ts.forEachChild(node,visit);
+  }
+  visit(parsed);
+  assert.equal(matching.length,1,"one Symbol picker dialog must exist");
+  let parent=matching[0].parent;
+  while(parent) {
+    if(ts.isJsxExpression(parent) && parent.expression?.getText(parsed).includes('activeView === "overview"')) {
+      assert.fail("Symbol modal cannot be mounted only on Control Center");
+    }
+    parent=parent.parent;
+  }
+  assert.match(page,/if \(showTradingSymbolDialog\(\)\) symbolAutoPromptedSlotRef\.current = slotId/);
+  assert.match(page,/if \(cloudSymbolFlow && !cloudSymbolPickerReady\)/);
+});
+test("Symbol option from discovery is not actionable until the server marks ready",()=>{
+  const input={...base,acknowledged:true,accountMatches:true,runnerOnline:true,
+    terminalOnline:true,symbolsFound:1,discoveryReady:false};
+  const s=steps(input);
+  assert.equal(s[4].state,"active");
+  assert.doesNotMatch(s[4].detail,/พบ Symbol แล้ว/);
 });
