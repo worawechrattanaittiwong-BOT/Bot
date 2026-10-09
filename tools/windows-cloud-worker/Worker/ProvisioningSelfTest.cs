@@ -100,6 +100,8 @@ internal static class ProvisioningSelfTest
                 if (Environment.GetEnvironmentVariable("SCENOVA_VANTAGE_CLOUD_ENABLED") != "1" &&
                     brokerPlatforms.CanInstallWithoutDisrupting(vantageJob, vantageInstance))
                     throw new InvalidOperationException("Vantage marker without terminal bypassed the safety gate");
+                // Keep the existing 1/2/5/20 isolated instance count test unchanged.
+                Directory.Delete(vantageInstance, recursive: true);
 
                 // A locally staged Vantage installer is accepted only when
                 // the operator explicitly opts in and pins its exact SHA-256.
