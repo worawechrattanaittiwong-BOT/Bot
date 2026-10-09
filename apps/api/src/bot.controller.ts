@@ -2810,6 +2810,7 @@ export class BotController {
       "SELECT ls.id, ls.status, bi.id instance_id, a.account_number, a.broker, a.broker_server, " +
       "bi.provisioning_error, bi.actual_state, bi.desired_state, " +
       "reload.status reload_status, reload.result_code reload_result_code, " +
+      "reload.acked_at reload_acked_at, bi.last_seen_at ea_last_seen_at, wn.last_seen_at worker_last_seen_at, " +
       "(bi.last_seen_at IS NOT NULL AND bi.last_seen_at > now()-interval '20 seconds') mt5_online, " +
       "(wn.last_seen_at IS NOT NULL AND wn.last_seen_at > now()-interval '120 seconds') runner_online, " +
       "((bi.last_seen_at IS NOT NULL AND bi.last_seen_at > now()-interval '60 seconds') OR " +
@@ -2837,7 +2838,7 @@ export class BotController {
       "LEFT JOIN worker_nodes wn ON wn.runner_id=bi.runner_id " +
       "LEFT JOIN bot_settings bs ON bs.bot_instance_id=bi.id " +
       // Ignore retries made for a previous account or before the current Symbol was selected.
-      "LEFT JOIN LATERAL (SELECT wc.status,wc.result_code FROM worker_commands wc " +
+      "LEFT JOIN LATERAL (SELECT wc.status,wc.result_code,wc.acked_at FROM worker_commands wc " +
       "WHERE wc.bot_instance_id=bi.id AND wc.command='RELOAD_INSTANCE' " +
       "AND wc.execution_generation=bi.execution_generation " +
       "AND bs.settings->>'symbolResolutionMode'='EXACT' " +
@@ -2859,6 +2860,20 @@ export class BotController {
     const reloadError = reloadFailed
       ? (String(slot.reload_result_code || "").match(/^[A-Z][A-Z0-9_]{1,60}/)?.[0] || "EA_ATTACH_FAILED")
       : "";
+    // A failed reload stays in command history. Once fresh EA/Worker telemetry confirms
+    // the chart, broker and selected Symbol are healthy *after* that failure, it is
+    // no longer an active connection error. Never alter actual/desired trading state.
+    const symbolMatches = Boolean(slot.startup_symbol && slot.active_symbol &&
+      String(slot.startup_symbol).toUpperCase() === String(slot.active_symbol).toUpperCase());
+    const recoveredAfterReload = Boolean(slot.reload_acked_at &&
+      slot.ea_last_seen_at && slot.worker_last_seen_at &&
+      new Date(slot.ea_last_seen_at).getTime() > new Date(slot.reload_acked_at).getTime() &&
+      new Date(slot.worker_last_seen_at).getTime() > new Date(slot.reload_acked_at).getTime() &&
+      slot.account_number && slot.runner_online && slot.terminal_online &&
+      slot.mt5_online && slot.cloud_control_ready && slot.broker_connected === true &&
+      String(slot.symbol_resolution_mode || "").toUpperCase() === "EXACT" && symbolMatches);
+    const activeReloadError = reloadError === "EA_ATTACH_TIMEOUT" && recoveredAfterReload
+      ? "" : reloadError;
     return {
       ok: true,
       slotId,
@@ -2877,7 +2892,7 @@ export class BotController {
         Boolean(String(slot.startup_symbol || "").trim()),
       provisioningError: slot.provisioning_error
         ? (String(slot.provisioning_error).match(/^[A-Z][A-Z0-9_]{1,60}/)?.[0] || "MT5_PROVISION_FAILED")
-        : reloadError,
+        : activeReloadError,
       actualState: slot.actual_state || "OFFLINE",
       desiredState: slot.desired_state || "STOPPED"
     };

@@ -62,6 +62,48 @@ test("EA attach failure appears only for current failed reload",async()=>{
   assert.equal((await read({reload_status:"FAILED",reload_result_code:"EA_ATTACH_TIMEOUT"})).provisioningError,"EA_ATTACH_TIMEOUT");
   assert.equal((await read({reload_status:"ACKED",reload_result_code:"EA_ATTACH_TIMEOUT"})).provisioningError,"");
 });
+const healthyAfterFailedReload = {
+  reload_status:"FAILED",
+  reload_result_code:"EA_ATTACH_TIMEOUT",
+  reload_acked_at:new Date("2026-10-09T01:32:14Z"),
+  ea_last_seen_at:new Date("2026-10-09T01:36:59Z"),
+  worker_last_seen_at:new Date("2026-10-09T01:36:59Z"),
+  account_number:"414424308",
+  runner_online:true,
+  terminal_online:true,
+  mt5_online:true,
+  cloud_control_ready:true,
+  broker_connected:true,
+  symbol_resolution_mode:"EXACT",
+  startup_symbol:"XAUUSDm",
+  active_symbol:"XAUUSDm",
+  actual_state:"STOPPED",
+  desired_state:"STOPPED"
+};
+test("recovered Cloud EA no longer shows an old EA_ATTACH_TIMEOUT",async()=>{
+  const status=await read(healthyAfterFailedReload);
+  assert.equal(status.provisioningError,"");
+  assert.equal(status.eaHeartbeat,true);
+  assert.equal(status.cloudControlReady,true);
+  assert.equal(status.actualState,"STOPPED");
+  assert.equal(status.desiredState,"STOPPED");
+});
+test("EA_ATTACH_TIMEOUT remains visible when the EA is still offline",async()=>{
+  const status=await read({...healthyAfterFailedReload,mt5_online:false});
+  assert.equal(status.provisioningError,"EA_ATTACH_TIMEOUT");
+});
+test("EA_ATTACH_TIMEOUT remains visible when broker or Symbol is not ready",async()=>{
+  assert.equal((await read({...healthyAfterFailedReload,broker_connected:false})).provisioningError,"EA_ATTACH_TIMEOUT");
+  assert.equal((await read({...healthyAfterFailedReload,active_symbol:"XAUUSDz"})).provisioningError,"EA_ATTACH_TIMEOUT");
+  assert.equal((await read({...healthyAfterFailedReload,cloud_control_ready:false})).provisioningError,"EA_ATTACH_TIMEOUT");
+});
+test("old telemetry cannot hide a later EA_ATTACH_TIMEOUT",async()=>{
+  assert.equal((await read({...healthyAfterFailedReload,ea_last_seen_at:new Date("2026-10-09T01:32:05Z")})).provisioningError,"EA_ATTACH_TIMEOUT");
+  assert.equal((await read({...healthyAfterFailedReload,worker_last_seen_at:new Date("2026-10-09T01:32:05Z")})).provisioningError,"EA_ATTACH_TIMEOUT");
+});
+test("unrelated current error is not suppressed by healthy Cloud telemetry",async()=>{
+  assert.equal((await read({...healthyAfterFailedReload,reload_result_code:"RELOAD_REJECTED"})).provisioningError,"RELOAD_REJECTED");
+});
 test("Cloud Symbol selection requires deliberate admin click and no auto Start",()=>{
   const ui=fs.readFileSync("apps/web/components/AdminCloudMt5Connect.tsx","utf8");
   assert.match(ui,/setSelectedSymbol\(symbol\)/);
