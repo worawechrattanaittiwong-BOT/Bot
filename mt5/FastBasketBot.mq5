@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.1.30"
-#define SCENOVA_EA_VERSION "1.1.30"
-#define SCENOVA_PRODUCT_VERSION "1.1.30"
+#property version   "1.1.31"
+#define SCENOVA_EA_VERSION "1.1.31"
+#define SCENOVA_PRODUCT_VERSION "1.1.31"
 #define SCENOVA_BUILD_ID "SOURCE"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_CONFIGURED_LOSS_ONLY_V1"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
@@ -7921,7 +7921,12 @@ void SendHeartbeat()
    // override the latest state selected on the website.
    // Only an explicit website SAFE_STOP is allowed to preserve the active ZERO
    // ladder. Internal safety stops keep their original immediate-stop behavior.
-   g_safeStopDrainRequested = (g_access && desired == "SAFE_STOP");
+   bool ownerDisabledMode=JsonBool(response,"modeDisabled",false);
+   // Administrative mode shutdown must NOT preserve an unfilled ZERO GRID
+   // ladder. Customer-initiated SAFE_STOP retains its original drain policy.
+   if(ownerDisabledMode && desired=="RUNNING")
+      desired="SAFE_STOP";
+   g_safeStopDrainRequested = (g_access && desired == "SAFE_STOP" && !ownerDisabledMode);
    if(!g_access)
    {
       g_state = STATE_SAFE_STOP;

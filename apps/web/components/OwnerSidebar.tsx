@@ -70,6 +70,7 @@ export const ownerNavItems: NavItem[] = [
   { section:"MANAGEMENT", key:"promotion-center", href:"/admin/promotions", icon:"spark", label:"Promotion Center", hint:"Manage in-app campaigns, schedules & visibility" },
   { section:"SYSTEM", key:"admin-workers", href:"/admin?view=workers", icon:"cloud", label:"Cloud Trading", hint:"Trading nodes & execution infrastructure" },
   { section:"SYSTEM", key:"admin-overview", href:"/admin?view=overview", icon:"overview", label:"System Overview", hint:"Platform health & system status" },
+  { section:"SYSTEM", key:"trading-modes", href:"/admin/trading-modes", icon:"strategy", label:"Trading Mode Control", hint:"ปิดโหมดรายตัวแบบ Safe Stop" },
   { section:"SYSTEM", key:"system-test", href:"/admin/system-test", icon:"overview", label:"System Test", hint:"Read-only health checks & test history" },
   { section:"SYSTEM", key:"service-links", href:"/admin/service-links", icon:"strategy", label:"API & Service Links", hint:"Private links for connected services & providers" },
   { section:"SYSTEM", key:"cloud-hardening", href:"/admin/cloud-hardening", icon:"cloud", label:"Cloud Protection", hint:"สถานะ Cloud และการควบคุมฉุกเฉิน" },

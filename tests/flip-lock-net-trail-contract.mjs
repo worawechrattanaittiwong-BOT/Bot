@@ -84,7 +84,7 @@ for(const clause of expectedClauses) assert.ok(flip.includes(clause), `missing F
 assert.ok(dashboard.includes('XAU ล็อกกำไรสุทธิประมาณ $1'));
 assert.ok(dashboard.includes('Trail ห่างราคา $1.50'));
 assert.ok(dashboard.includes('Gap/Slippage ไม่รับประกันกำไรจริง'));
-assert.match(ea, /#property version\s+"1\.1\.30"/);
-assert.match(release, /DEFAULT_EA_VERSION = "1\.1\.30"/);
+assert.match(ea, /#property version\s+"1\.1\.31"/);
+assert.match(release, /DEFAULT_EA_VERSION = "1\.1\.31"/);
 assert.ok(!flip.includes('FLIP_LOCK_TRAIL_DISTANCE_POINTS 100.0'),'gold must not use the legacy points constant');
 console.log('FLIP LOCK XAU 1.50 quote trailing and projected USD 1 net floor: PASS (BUY/SELL, cents, broker min, spread, costs, swap)');

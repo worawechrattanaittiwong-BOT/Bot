@@ -27,6 +27,8 @@ jobs:
       - run: npm run typecheck
       - name: MT5 connection progress and timeout regression
         run: node --test ./tests/mt5-connect-progress.test.cjs
+      - name: Owner trading-mode Safe Stop contract
+        run: node --test ./tests/trading-mode-safe-stop.test.cjs
       - run: npm run build
       - name: Web production runtime smoke
         run: |

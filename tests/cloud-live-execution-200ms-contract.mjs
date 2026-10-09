@@ -138,7 +138,7 @@ assert.match(
 
 const eaVersion = ea.match(/#define SCENOVA_EA_VERSION "([^"]+)"/)?.[1];
 const promotedEa = release.match(/DEFAULT_EA_VERSION = "([^"]+)"/)?.[1];
-assert.equal(eaVersion, "1.1.30", "Cloud heartbeat/control readiness requires EA 1.1.30");
+assert.equal(eaVersion, "1.1.31", "Cloud heartbeat/control readiness requires EA 1.1.31");
 assert.equal(eaVersion, promotedEa, "EA source and promoted API version must match");
 
 const workerVersion = workerLoop.match(/Version = "([^"]+)"/)?.[1];

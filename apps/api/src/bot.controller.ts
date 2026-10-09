@@ -18,6 +18,7 @@ import { DbService } from "./db.service";
 import { EA_RUNTIME_CONTRACT, FIRST_CONNECT_PRIME_MIN_EA_VERSION, ZERO_GRID_MAX_LEVELS_PER_SIDE, installerDownloadPath, isEaVersionExact, isVersionAtLeast, isVersionExact, isVersionSame, latestEaRelease, latestInstallerVersion } from "./release-version";
 import { AdminGuard, CryptoService, JwtGuard } from "./security";
 import { MaintenanceService } from "./maintenance.service";
+import { TradingModeControlService, canonicalTradingMode } from "./trading-mode-control.service";
 import { PartnerService } from "./partner.service";
 import { TrialAuthorizationService } from "./trial-authorization.service";
 import { RuntimeMigrationService } from "./runtime-migration.service";
@@ -37,6 +38,7 @@ export class BotController {
     private readonly db: DbService,
     private readonly crypto: CryptoService,
     private readonly maintenance: MaintenanceService,
+    private readonly tradingModes: TradingModeControlService,
     private readonly partner: PartnerService,
     private readonly trials: TrialAuthorizationService,
     private readonly migrations: RuntimeMigrationService
@@ -954,6 +956,12 @@ export class BotController {
     }
     if (!trial) return { allowed: false, source: "NONE" };
     return { allowed: false, source: "TRIAL_EXPIRED", expiresAt: trial.expires_at || null };
+  }
+
+  @Get("trading-modes")
+  async enabledTradingModes() {
+    const rows = await this.tradingModes.list();
+    return { modes: rows.map((row:any) => ({mode:row.mode,enabled:row.enabled})) };
   }
 
   @Get("dashboard")
@@ -3347,6 +3355,7 @@ export class BotController {
       [instance.id]
     );
     const startSettings = startSettingsRow?.settings || {};
+    await this.tradingModes.assertEnabled(canonicalTradingMode(startSettings));
     if (startSettings.firstConnectPrimePending === true) {
       if (instance.mode === "CLOUD") {
         const primeRuntimeCompatible =
@@ -3577,18 +3586,9 @@ export class BotController {
         [access.trialId]
       );
     }
-    await this.db.query(
-      "UPDATE bot_instances SET desired_state='RUNNING',lock_owner=id::text WHERE id=$1",
-      [instance.id]
-    );
-    await this.db.query(
-      "UPDATE bot_commands SET status='ACKED',acked_at=now() WHERE bot_instance_id=$1 AND status IN ('PENDING','DELIVERED') AND command IN ('START','SAFE_STOP')",
-      [instance.id]
-    );
-    await this.db.query(
-      "INSERT INTO bot_commands(bot_instance_id,command) VALUES($1,'START')",
-      [instance.id]
-    );
+    // A second check narrows the time-of-check gap before writing RUNNING.
+    await this.tradingModes.assertEnabled(canonicalTradingMode(startSettings));
+    await this.tradingModes.requestStart(instance.id, canonicalTradingMode(startSettings));
       this.logger.log(JSON.stringify({
         event: "BOT_START_ACCEPTED",
         userId: req.user?.sub || null,
@@ -4091,6 +4091,15 @@ export class BotController {
             : "AUTO";
     }
 
+    const switchingToMode = canonicalTradingMode({
+      controlMode: requestedControlMode ?? (
+        requestedEngineMode === null ? storedControlMode : requestedEngineMode
+      )
+    });
+    if (switchingToMode !== canonicalTradingMode({controlMode:storedControlMode})) {
+      await this.tradingModes.assertEnabled(switchingToMode);
+    }
+
     const activeProfileMode = requestedControlMode || (
       requestedEngineMode === "RACE" ? "RACE" :
       requestedEngineMode === "COUNTER" ? "COUNTER" :
@@ -4362,26 +4371,7 @@ export class BotController {
 
     if (resumeAfterDailyProfitEdit) {
       await this.maintenance.assertStartAllowed();
-      await this.db.query(
-        `UPDATE bot_instances
-         SET desired_state='RUNNING',
-             metrics=jsonb_set(
-               COALESCE(metrics,'{}'::jsonb),
-               '{dailyProfitUnlockRequested}',
-               'true'::jsonb,
-               true
-             )
-         WHERE id=$1`,
-        [instance.id]
-      );
-      await this.db.query(
-        "UPDATE bot_commands SET status='ACKED',acked_at=now() WHERE bot_instance_id=$1 AND command IN ('START','SAFE_STOP') AND status IN ('PENDING','DELIVERED')",
-        [instance.id]
-      );
-      await this.db.query(
-        "INSERT INTO bot_commands(bot_instance_id,command) VALUES($1,'START')",
-        [instance.id]
-      );
+      await this.tradingModes.requestStart(instance.id, canonicalTradingMode(savedSettings), true);
     }
 
     return {

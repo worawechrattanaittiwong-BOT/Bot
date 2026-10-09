@@ -14,6 +14,7 @@ import {
 import { DbService } from "./db.service";
 import { AdminGuard } from "./security";
 import { MaintenanceService } from "./maintenance.service";
+import { TradingModeControlService, TRADE_MODES } from "./trading-mode-control.service";
 import { PartnerService } from "./partner.service";
 import { ReferralService } from "./referral.service";
 import { TrialAuthorizationService } from "./trial-authorization.service";
@@ -26,6 +27,7 @@ export class AdminController {
   constructor(
     private readonly db: DbService,
     private readonly maintenance: MaintenanceService,
+    private readonly tradingModes: TradingModeControlService,
     private readonly partner: PartnerService,
     private readonly referrals: ReferralService,
     private readonly trials: TrialAuthorizationService
@@ -849,6 +851,27 @@ export class AdminController {
       safeStopped: affected.rowCount || 0,
       paidMembershipsKept: true
     };
+  }
+
+  @Get("trading-modes")
+  async tradingModeControls() {
+    return { modes: await this.tradingModes.list() };
+  }
+
+  @Post("trading-modes")
+  async updateTradingModeControls(@Req() req: any, @Body() body: {mode?: string;enabled?: boolean;reason?: string}) {
+    if (String(req.user?.role || "").toUpperCase() !== "OWNER") {
+      throw new ForbiddenException("เฉพาะ OWNER เท่านั้นที่เปิดหรือปิดโหมดเทรดทั้งระบบได้");
+    }
+    const mode = String(body?.mode || "").trim().toUpperCase();
+    if (!TRADE_MODES.includes(mode as any) || typeof body?.enabled !== "boolean") {
+      throw new BadRequestException("โหมดหรือสถานะไม่ถูกต้อง");
+    }
+    const reason = String(body?.reason || "").trim();
+    if (!body.enabled && (!reason || reason.length > 240)) {
+      throw new BadRequestException("กรุณาระบุเหตุผลที่ปิดโหมดไม่เกิน 240 ตัวอักษร");
+    }
+    return this.tradingModes.setEnabled(mode, body.enabled, String(req.user?.sub || "OWNER"), reason);
   }
 
   @Get("sales-control")
