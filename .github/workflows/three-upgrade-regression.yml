@@ -59,7 +59,8 @@ jobs:
             database/043_access_group_management.sql \
             database/044_trial_group_isolation.sql \
             database/045_access_group_grants.sql \
-            database/046_global_sales_control.sql
+            database/046_global_sales_control.sql \
+            database/070_general_announcements.sql
           do
             psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f "$migration"
           done

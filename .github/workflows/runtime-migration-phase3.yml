@@ -40,6 +40,7 @@ jobs:
           psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/001_init.sql
           psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/002_slots_devices.sql
           psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/002_cloud_worker.sql
+          psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/070_general_announcements.sql
           psql -h localhost -U bot -d bot -v ON_ERROR_STOP=1 -f database/003_unique_mt5_identity.sql
 
       - name: Build API
