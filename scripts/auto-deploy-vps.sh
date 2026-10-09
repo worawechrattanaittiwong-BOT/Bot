@@ -108,7 +108,7 @@ validate_generated_ea_shape() {
   while IFS= read -r file; do
     [ -z "$file" ] && continue
     case "$file" in
-      mt5/FastBasketBot.mq5|mt5/release/FastBasketBot.ex5|mt5/release/manifest.json)
+      mt5/FastBasketBot.mq5|mt5/release/FastBasketBot.ex5|mt5/release/ScenovaSymbolProbe.ex5|mt5/release/manifest.json)
         ;;
       *)
         return 1
