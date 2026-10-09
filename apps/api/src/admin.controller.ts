@@ -2578,70 +2578,86 @@ export class AdminController {
 
   @Post("users/delete")
   async deleteUser(@Body() body: { userId: string }) {
-    const user = await this.db.one(
-      "SELECT id,user_code,email,role,status FROM users WHERE id=$1",
-      [body.userId]
-    );
-    if (!user) throw new ConflictException("user not found");
-    if (user.role === "OWNER" || user.role === "ADMIN") {
-      throw new ConflictException("owner/admin account cannot be deleted here");
-    }
+    return this.db.transaction(async tx => {
+      const user = (await tx.query(
+        "SELECT id,user_code,email,role,status FROM users WHERE id=$1 FOR UPDATE",
+        [body.userId]
+      )).rows[0];
+      if (!user) throw new ConflictException("user not found");
+      if (user.role === "OWNER" || user.role === "ADMIN") {
+        throw new ConflictException("owner/admin account cannot be deleted here");
+      }
+      if (user.status === "DELETED") {
+        throw new ConflictException("account already deleted");
+      }
 
-    const active = await this.db.one(
-      `SELECT count(*)::int active_count
-       FROM bot_instances bi
-       JOIN license_slots ls ON ls.id=bi.slot_id
-       WHERE (ls.assigned_user_id=$1 OR ls.owner_user_id=$1)
-         AND (
-           bi.actual_state='RUNNING' OR bi.desired_state='RUNNING' OR
-           COALESCE(NULLIF(bi.metrics->>'positions','')::int,0)>0
-         )`,
-      [body.userId]
-    );
-    if ((active?.active_count || 0) > 0) {
-      throw new ConflictException("stop the bot and close all positions before deleting this account");
-    }
+      const active = (await tx.query(
+        `SELECT count(*)::int active_count
+         FROM bot_instances bi
+         JOIN license_slots ls ON ls.id=bi.slot_id
+         WHERE (ls.assigned_user_id=$1 OR ls.owner_user_id=$1)
+           AND (
+             bi.actual_state='RUNNING' OR bi.desired_state='RUNNING' OR
+             COALESCE(NULLIF(bi.metrics->>'positions','')::int,0)>0
+           )`,
+        [body.userId]
+      )).rows[0];
+      if ((active?.active_count || 0) > 0) {
+        throw new ConflictException("stop the bot and close all positions before deleting this account");
+      }
 
-    const instances = await this.db.query(
-      `SELECT DISTINCT bi.id
-       FROM bot_instances bi
-       JOIN license_slots ls ON ls.id=bi.slot_id
-       WHERE ls.assigned_user_id=$1 OR ls.owner_user_id=$1`,
-      [body.userId]
-    );
-    for (const instance of instances.rows) {
-      await this.db.query(
-        "UPDATE bot_instances SET desired_state='SAFE_STOP' WHERE id=$1",
-        [instance.id]
+      const instances = await tx.query(
+        `SELECT DISTINCT bi.id,bi.actual_state,bi.desired_state,bi.runtime_stop_state
+         FROM bot_instances bi
+         JOIN license_slots ls ON ls.id=bi.slot_id
+         WHERE ls.assigned_user_id=$1 OR ls.owner_user_id=$1`,
+        [body.userId]
       );
-      await this.db.query(
-        "INSERT INTO bot_commands(bot_instance_id,command) VALUES($1,'SAFE_STOP')",
-        [instance.id]
-      );
-    }
+      for (const instance of instances.rows) {
+        // Do not queue another SAFE_STOP for an already confirmed, offline terminal.
+        if (instance.actual_state === "OFFLINE" &&
+            instance.desired_state === "SAFE_STOP" &&
+            instance.runtime_stop_state === "STOP_CONFIRMED") continue;
+        await tx.query(
+          "UPDATE bot_instances SET desired_state='SAFE_STOP' WHERE id=$1",
+          [instance.id]
+        );
+        await tx.query(
+          "INSERT INTO bot_commands(bot_instance_id,command) VALUES($1,'SAFE_STOP')",
+          [instance.id]
+        );
+      }
 
-    await this.db.query(
-      "UPDATE subscriptions SET status='CANCELLED' WHERE user_id=$1 AND status='ACTIVE'",
-      [body.userId]
-    );
-    await this.db.query(
-      "UPDATE license_slots SET status='SUSPENDED',updated_at=now() WHERE owner_user_id=$1",
-      [body.userId]
-    );
-    await this.db.query(
-      "UPDATE license_slots SET assigned_user_id=NULL,status='AVAILABLE',updated_at=now() WHERE assigned_user_id=$1 AND owner_user_id<>$1",
-      [body.userId]
-    );
-    await this.db.query(
-      "UPDATE users SET status='DELETED',updated_at=now() WHERE id=$1",
-      [body.userId]
-    );
-    await this.audit("ADMIN", "DELETE_USER", "user", body.userId, {
-      userCode: user.user_code,
-      email: user.email,
-      preservedTrialHistory: true
+      await tx.query(
+        "UPDATE subscriptions SET status='CANCELLED' WHERE user_id=$1 AND status='ACTIVE'",
+        [body.userId]
+      );
+      // Retain historical DELETED slots. Reviving them would violate the unique
+      // active Cloud Slot index when the customer has a replacement slot.
+      await tx.query(
+        "UPDATE license_slots SET status='SUSPENDED',updated_at=now() WHERE owner_user_id=$1 AND status<>'DELETED'",
+        [body.userId]
+      );
+      await tx.query(
+        "UPDATE license_slots SET assigned_user_id=NULL,status='AVAILABLE',updated_at=now() WHERE assigned_user_id=$1 AND owner_user_id<>$1 AND status<>'DELETED'",
+        [body.userId]
+      );
+      // Keep the historic user/MT5/Trial records but free this unique email
+      // for a new registration. A suspended (non-deleted) user keeps the email.
+      await tx.query(
+        `UPDATE users SET status='DELETED',
+           email='deleted.' || id::text || '@deleted.scenova.invalid',
+           updated_at=now() WHERE id=$1`,
+        [body.userId]
+      );
+      await tx.query(
+        "INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail) VALUES($1,$2,$3,$4,$5::jsonb)",
+        ["ADMIN","DELETE_USER","user",body.userId,JSON.stringify({
+          userCode:user.user_code,email:user.email,preservedTrialHistory:true
+        })]
+      );
+      return { ok: true };
     });
-    return { ok: true };
   }
 
   @Post("users/reactivate")

@@ -249,10 +249,25 @@ export class AuthController {
     if (requireVerification) this.assertVerificationConfigured();
 
     const existing = await this.db.one(
-      "SELECT id FROM users WHERE email=$1",
+      "SELECT id,status FROM users WHERE email=$1",
       [email]
     );
-    if (existing) throw new ConflictException("email already exists");
+    if (existing) {
+      if (existing.status !== "DELETED") {
+        throw new ConflictException("email already exists");
+      }
+      // Older soft-deleted accounts still occupy the unique email. Release
+      // only this deleted record; never reset its MT5/Trial history or user ID.
+      const released = await this.db.query(
+        `UPDATE users SET email='deleted.' || id::text || '@deleted.scenova.invalid',
+           updated_at=now()
+         WHERE id=$1 AND email=$2 AND status='DELETED'`,
+        [existing.id, email]
+      );
+      if (released.rowCount !== 1) {
+        throw new ConflictException("email already exists");
+      }
+    }
 
     const passwordHash = await hash(password, 12);
     const code = "BOT-" + Date.now().toString(36).toUpperCase();
