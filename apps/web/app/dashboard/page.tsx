@@ -6714,6 +6714,17 @@ function EmptySetup({onNext}:{onNext:()=>void}) {
 }
 
 function BotSettingsModal(props:any) {
+  const [modeAvailability,setModeAvailability]=useState<Record<string,boolean>>({});
+  useEffect(()=>{
+    let mounted=true;
+    api("/bot/trading-modes").then((result:any)=>{
+      if(!mounted)return;
+      const next:Record<string,boolean>={};
+      (result?.modes||[]).forEach((entry:any)=>{next[String(entry.mode||"")]=entry.enabled===true;});
+      setModeAvailability(next);
+    }).catch(()=>{}); // The API still enforces the lock if UI refresh fails.
+    return()=>{mounted=false;};
+  },[]);
   const [revealedManualRisk,setRevealedManualRisk] = useState<Record<string,boolean>>({});
   const [modeGuideOpen,setModeGuideOpen] = useState(false);
   const [modeGuideMode,setModeGuideMode] = useState("AUTO");
@@ -7051,6 +7062,7 @@ function BotSettingsModal(props:any) {
 
   const applyControlMode = (mode:string) => {
     if (mode === "ZERO_GRID" && zeroGridBlockedForSymbol) return;
+    if (modeAvailability[mode] === false) return;
     props.onEdit?.("controlMode",mode);
     props.onEdit?.("confidenceGateEnabled",false);
     const targetSizing = sizingProfiles[mode];
@@ -7239,12 +7251,12 @@ function BotSettingsModal(props:any) {
                 <label>
                   {settingHelpLabel("mode","โหมดการเทรด","เลือกวิธีที่บอทจะเข้าและจัดการออเดอร์","brain")}
                   <select className={"input cc-bot-v12-mode-select cc-bot-v19-two-thirds-control "+(["RACE","COUNTER","FLIP_LOCK","ZERO_GRID"].includes(controlMode)?"is-rated-mode":"")} value={controlMode} disabled={props.locked} onChange={e=>applyControlMode(e.target.value)} style={{colorScheme:"dark"}}>
-                    <option value="AUTO">AUTO</option>
-                    <option value="RACE" className="cc-rated-mode-option">★★★ RACE</option>
-                    <option value="COUNTER" className="cc-rated-mode-option">★★ COUNTER</option>
-                    <option value="FLIP_LOCK" className="cc-rated-mode-option">★★ FLIP LOCK</option>
-                    <option value="ZERO_GRID" className="cc-rated-mode-option" disabled={zeroGridBlockedForSymbol}>★ ZERO GRID{zeroGridBlockedForSymbol ? " · ไม่รองรับ BTC" : ""}</option>
-                    <option value="MANUAL">MANUAL</option>
+                    <option value="AUTO" disabled={modeAvailability.AUTO===false}>AUTO{modeAvailability.AUTO===false?" · ปิดชั่วคราว":""}</option>
+                    <option value="RACE" className="cc-rated-mode-option" disabled={modeAvailability.RACE===false}>★★★ RACE{modeAvailability.RACE===false?" · ปิดชั่วคราว":""}</option>
+                    <option value="COUNTER" className="cc-rated-mode-option" disabled={modeAvailability.COUNTER===false}>★★ COUNTER{modeAvailability.COUNTER===false?" · ปิดชั่วคราว":""}</option>
+                    <option value="FLIP_LOCK" className="cc-rated-mode-option" disabled={modeAvailability.FLIP_LOCK===false}>★★ FLIP LOCK{modeAvailability.FLIP_LOCK===false?" · ปิดชั่วคราว":""}</option>
+                    <option value="ZERO_GRID" className="cc-rated-mode-option" disabled={zeroGridBlockedForSymbol||modeAvailability.ZERO_GRID===false}>★ ZERO GRID{modeAvailability.ZERO_GRID===false?" · ปิดชั่วคราว":zeroGridBlockedForSymbol?" · ไม่รองรับ BTC":""}</option>
+                    <option value="MANUAL" disabled={modeAvailability.MANUAL===false}>MANUAL{modeAvailability.MANUAL===false?" · ปิดชั่วคราว":""}</option>
                   </select>
                 </label>
 
@@ -7259,10 +7271,10 @@ function BotSettingsModal(props:any) {
                   {id:"ZERO_GRID",icon:"layers",tag:zeroGridBlockedForSymbol?"ไม่รองรับ BTC":"กริดแบบ Hedging"},
                   {id:"MANUAL",icon:"settings",tag:"กำหนดรายละเอียด"}
                 ].map(mode=>{
-                  const blocked = mode.id === "ZERO_GRID" && zeroGridBlockedForSymbol;
+                  const blocked = modeAvailability[mode.id]===false || (mode.id === "ZERO_GRID" && zeroGridBlockedForSymbol);
                   return <button key={mode.id} type="button" role="radio" aria-checked={controlMode===mode.id} disabled={blocked} className={(controlMode===mode.id?"active ":"")+(blocked?"is-disabled":"")} onClick={()=>applyControlMode(mode.id)}>
                     <span className="cc-bot-v2-mode-icon"><ScenovaIcon name={mode.icon} size={22}/></span>
-                    <span><em>{mode.tag}</em><b className="cc-bot-mode-name">{modeCopy[mode.id].title}{mode.recommended?<i className="cc-race-recommended-badge">แนะนำ</i>:null}</b><small>{blocked?"BTC/XBT ใช้ ZERO GRID ไม่ได้ · เลือก AUTO, RACE, COUNTER, FLIP LOCK หรือ MANUAL":modeCopy[mode.id].subtitle}</small></span>
+                    <span><em>{mode.tag}</em><b className="cc-bot-mode-name">{modeCopy[mode.id].title}{mode.recommended?<i className="cc-race-recommended-badge">แนะนำ</i>:null}</b><small>{modeAvailability[mode.id]===false?"ผู้ดูแลปิดโหมดนี้ชั่วคราว · ไม่สามารถ Start รอบใหม่ได้":blocked?"BTC/XBT ใช้ ZERO GRID ไม่ได้ · เลือกโหมดอื่น":modeCopy[mode.id].subtitle}</small></span>
                     <i className="cc-bot-v2-radio"/>
                   </button>;
                 })}

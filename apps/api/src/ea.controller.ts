@@ -16,6 +16,7 @@ import { EA_RUNTIME_CONTRACT, FIRST_CONNECT_PRIME_MIN_EA_VERSION, installerDownl
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { MaintenanceService } from "./maintenance.service";
+import { TradingModeControlService, canonicalTradingMode } from "./trading-mode-control.service";
 import { PartnerService } from "./partner.service";
 import { TrialAuthorizationService } from "./trial-authorization.service";
 
@@ -25,6 +26,7 @@ export class EaController {
     private readonly db: DbService,
     private readonly crypto: CryptoService,
     private readonly maintenance: MaintenanceService,
+    private readonly tradingModes: TradingModeControlService,
     private readonly partner: PartnerService,
     private readonly trials: TrialAuthorizationService
   ) {}
@@ -785,6 +787,8 @@ export class EaController {
       [instance.id]
     );
     const runtimeSettings = { ...(settings?.settings || {}) };
+    const currentTradingMode = canonicalTradingMode(runtimeSettings);
+    const modeDisabled = await this.tradingModes.disabled(currentTradingMode);
 
     const firstConnectPrimePending =
       instance.mode === "CLOUD" &&
@@ -808,6 +812,7 @@ export class EaController {
     // entrySuppressed from ever receiving the automatic RUNNING intent.
     if (
       firstConnectPrimeRuntimeReady &&
+      !modeDisabled &&
       heartbeatActualState !== "RUNNING" &&
       String(latestControl?.desired_state || "").toUpperCase() === "STOPPED"
     ) {
@@ -956,6 +961,23 @@ export class EaController {
     // finish the lifecycle by moving the Server control state to STOPPED.
     // Internal risk/access locks keep their own executionStatus and are not
     // collapsed into STOPPED here.
+    // Owner mode control is authoritative even if an old START command raced
+    // with the disable request. Do not tear down MT5: only drain this EA.
+    if (modeDisabled && String(latestControl?.desired_state || "") === "RUNNING") {
+      await this.db.query(
+        "UPDATE bot_instances SET desired_state='SAFE_STOP' WHERE id=$1 AND desired_state='RUNNING'",
+        [instance.id]
+      );
+      await this.db.query(
+        "UPDATE bot_commands SET status='ACKED',acked_at=now() WHERE bot_instance_id=$1 AND command='START' AND status IN ('PENDING','DELIVERED')",
+        [instance.id]
+      );
+      await this.db.query(
+        "INSERT INTO bot_commands(bot_instance_id,command,payload) VALUES($1,'SAFE_STOP',$2::jsonb)",
+        [instance.id,JSON.stringify({source:"TRADING_MODE_DISABLED",mode:currentTradingMode})]
+      );
+      latestControl={desired_state:"SAFE_STOP"};
+    }
     const heartbeatPositions = Number(metrics.positions);
     const heartbeatExecutionStatus = String(metrics.executionStatus || "").toUpperCase();
     const heartbeatState = String(body.state || "").toUpperCase();
@@ -971,6 +993,7 @@ export class EaController {
       String(latestControl?.desired_state || "") === "SAFE_STOP" &&
       Number.isFinite(heartbeatPositions) &&
       heartbeatPositions <= 0 &&
+      Number(metrics.accountScenovaPendingOrders) === 0 &&
       heartbeatConfirmsSafeStop &&
       !dailyProfitLocked;
 
@@ -1119,6 +1142,7 @@ export class EaController {
       ok: true,
       access,
       desiredState: effectiveDesired,
+      modeDisabled,
       entrySuppressed:
         firstConnectPrimePending &&
         String(effectiveDesired || "").toUpperCase() === "RUNNING",

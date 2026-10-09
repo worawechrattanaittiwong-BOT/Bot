@@ -70,7 +70,7 @@ Need $symbolApi 'item.toUpperCase() === requestedSymbol.toUpperCase()' 'Cloud Tr
 Need $web 'const isBitcoinSymbol = tradingSymbol.includes("BTC") || tradingSymbol.includes("XBT");' 'Dashboard BTC classifier missing'
 Need $web 'zeroGridBlockedForSymbol' 'Dashboard BTC ZERO gate missing'
 Need $web 'ZERO GRID ถูกบล็อก' 'Dashboard must explain BTC-supported modes'
-Need $web 'disabled={zeroGridBlockedForSymbol}' 'ZERO GRID option must be disabled for BTC'
+Need $web 'disabled={zeroGridBlockedForSymbol||modeAvailability.ZERO_GRID===false}' 'ZERO GRID option must be disabled for BTC or OWNER disabled mode'
 Need $web 'แจ้งเตือนก่อนเทรด BTC' 'BTC Start must show the dedicated risk warning'
 Need $web 'size:"large"' 'BTC warning must use the large reading popup variant'
 Need $web 'ปรับจูนโดยอิงพฤติกรรมของ XAUUSD เป็นหลัก' 'BTC warning must disclose XAUUSD-first tuning'

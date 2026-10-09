@@ -47,6 +47,7 @@ import { TrialCouponController } from "./trial-coupon.controller";
 import { SmsService } from "./sms.service";
 import { DbService } from "./db.service";
 import { MaintenanceService } from "./maintenance.service";
+import { TradingModeControlService } from "./trading-mode-control.service";
 import { CloudService, CloudAdminController, CloudCustomerController, CloudPaymentController } from "./cloud.controller";
 import { LocalPackageService, LocalPackageCustomerController, LocalPackageAdminController } from "./local-package.controller";
 import { CloudTestController } from "./cloud-test.controller";
@@ -124,6 +125,7 @@ import { ExnessPartnershipApiService } from "./brokers/exness-partnership-api.se
     LocalPackageService,
     DbService,
     MaintenanceService,
+    TradingModeControlService,
     PartnerService,
     ReferralService,
     TrialAuthorizationService,
