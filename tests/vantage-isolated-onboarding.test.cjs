@@ -48,3 +48,89 @@ test("Vantage server reader preserves spaces and excludes Exness without modifyi
   assert.match(selftest,/Vantage Cloud must wait for broker-native symbol selection/);
   assert.match(selftest,/Exness MT5 Real server was not read/);
 });
+
+const officialVantageServers = [
+  "VantageMarkets-Live",
+  "VantageMarkets-Live 3",
+  "VantageMarkets-Live 4",
+  "VantageMarkets-Live 5",
+  "VantageMarkets-Live 6",
+  "VantageMarkets-Live 7",
+  "VantageMarkets-Live 8",
+  "VantageMarkets-Live 10",
+  "VantageMarkets-Live 11",
+  "VantageMarkets-Live 13",
+  "VantageMarkets-Live 14",
+  "VantageMarkets-Live 15",
+  "VantageMarkets-Live 19",
+  "VantageMarkets-Live 21",
+  "VantageMarketsMU-Live",
+  "VantageMarkets-Demo",
+  "VantageMarketsMU-Demo"
+];
+
+test("seed includes all and only 17 currently published Vantage MT5 WebTrader servers",()=>{
+  const sql=read("database/072_vantage_broker_catalog.sql");
+  const entries=[...sql.matchAll(/\('(VantageMarkets(?:MU)?-(?:Live|Demo)(?: \d{1,3})?)','(REAL|DEMO)',\d+\)/g)];
+  assert.equal(entries.length,17);
+  assert.deepEqual(entries.map(m=>m[1]),officialVantageServers);
+  assert.equal(new Set(entries.map(m=>m[1].toLowerCase())).size,17);
+  for(const [,name,environment] of entries) {
+    assert.equal(environment, name.includes("Demo")?"DEMO":"REAL");
+  }
+  assert.match(sql,/https:\/\/webtrader\.vantagemarkets\.com\/\?page_id=2/);
+});
+
+function catalogProbe(registered,discovered) {
+  const ts=require("typescript");
+  const source=read("apps/api/src/catalog.controller.ts");
+  const js=ts.transpileModule(source,{
+    compilerOptions:{
+      target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS,experimentalDecorators:true
+    }
+  }).outputText;
+  const module={exports:{}};
+  new Function("require","module","exports",js)(
+    name=>{
+      if(name==="@nestjs/common")return {
+        Controller:()=>ctor=>ctor,Get:()=>(_target,_key,_descriptor)=>{}
+      };
+      throw new Error("Unexpected runtime import: "+name);
+    },
+    module,module.exports
+  );
+  const db={query:async sql=>({
+    rows:sql.includes("FROM worker_nodes")?discovered:registered
+  })};
+  return new module.exports.CatalogController(db);
+}
+
+test("Vantage catalog keeps all verified servers even when Worker knows only a subset",async()=>{
+  const registered=[{
+    code:"VANTAGE",name:"Vantage",
+    servers:officialVantageServers.map(name=>({
+      serverName:name,environment:name.includes("Demo")?"DEMO":"REAL"
+    }))
+  }];
+  const discovered=[
+    {broker_code:"VANTAGE",server_name:"VantageMarkets-Live 15",environment:"REAL"},
+    {broker_code:"VANTAGE",server_name:"VantageMarkets-Live 22",environment:"REAL"}
+  ];
+  const result=await catalogProbe(registered,discovered).brokers();
+  assert.equal(result.length,1);
+  assert.equal(result[0].servers.length,18);
+  assert.deepEqual(officialVantageServers.every(name=>result[0].servers.some(s=>s.serverName===name)),true);
+  assert.equal(result[0].servers.filter(s=>s.serverName==="VantageMarkets-Live 15").length,1);
+  assert.equal(result[0].serverSource,"VERIFIED_CATALOG_AND_BROKER_MT5_DIRECTORY");
+  assert.equal(result[0].servers.at(-1).environment,"DEMO");
+});
+
+test("Exness catalog retains previous Worker-first behavior",async()=>{
+  const result=await catalogProbe([{
+    code:"EXNESS",name:"Exness",servers:[{serverName:"Exness-MT5Trial6",environment:"DEMO"}]
+  }],[
+    {broker_code:"EXNESS",server_name:"Exness-MT5Real25",environment:"REAL"}
+  ]).brokers();
+  assert.deepEqual(result[0].servers,[{serverName:"Exness-MT5Real25",environment:"REAL"}]);
+  assert.equal(result[0].serverSource,"BROKER_MT5_DIRECTORY");
+});

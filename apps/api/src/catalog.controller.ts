@@ -71,9 +71,36 @@ export class CatalogController {
     }
 
     return rows.rows.map((row:any) => {
-      const live = Array.from(
-        liveByBroker.get(String(row.code || "").toUpperCase())?.values() || []
-      );
+      const code = String(row.code || "").toUpperCase();
+      const live = Array.from(liveByBroker.get(code)?.values() || []);
+
+      if (code === "VANTAGE") {
+        // For Vantage only, keep the official verified catalog visible even
+        // when one connected Worker knows only a subset of MT5 servers.
+        // Other brokers retain their existing live-directory preference.
+        const all = new Map<string,{serverName:string;environment:string}>();
+        for (const item of Array.isArray(row.servers) ? row.servers : []) {
+          const serverName = String(item.serverName || "").trim();
+          if (serverName) all.set(serverName.toLowerCase(),{
+            serverName,
+            environment:String(item.environment || "UNKNOWN").toUpperCase()
+          });
+        }
+        for (const item of live) {
+          // A live MT5 directory may discover additional real Vantage servers.
+          all.set(item.serverName.toLowerCase(),item);
+        }
+        const servers = Array.from(all.values()).sort((a,b) =>
+          (rank[a.environment] ?? 2) - (rank[b.environment] ?? 2) ||
+          a.serverName.localeCompare(b.serverName,undefined,{ numeric:true,sensitivity:"base" })
+        );
+        return {
+          ...row,
+          servers,
+          serverSource:live.length ? "VERIFIED_CATALOG_AND_BROKER_MT5_DIRECTORY" : "VERIFIED_CATALOG"
+        };
+      }
+
       if (!live.length) return row;
 
       live.sort((a,b) =>
