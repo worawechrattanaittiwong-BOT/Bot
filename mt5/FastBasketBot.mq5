@@ -16658,7 +16658,7 @@ bool AutoManageOpenBasket(double momentum)
    // AUTO realizes profit via its genuine broker TP, never via reversal,
    // giveback, or a time-based early market close. Loss safeguards remain.
    long ageSeconds=(long)MathMax(0,TimeCurrent()-g_autoBasketStartedAt);
-   if(ageSeconds>=25*60 && cycleProfit<=0.0)
+   if(ageSeconds>=25*60 && cycleProfit<=0.0 && floatingProfit<=0.0)
    {
       bool closed=CloseAllBasket("AUTO_TIME_STOP");
       if(closed) AutoResetCycle();

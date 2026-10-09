@@ -29,6 +29,7 @@ Need $wrong 'g_autoExitCandidatePeakAdverse*0.70' 'AUTO must cancel on meaningfu
 Need $wrong 'AutoVectorEdgeLiveExitLost(direction)' 'Vector edge loss must only confirm balanced exit'
 Forbid $manage 'progress<=-atrPoints*0.18' 'obsolete fast 0.18 ATR close remains'
 Need $manage 'EffectiveBasketLossLimit()' 'hard basket loss must bypass soft grace'
+Need $manage 'cycleProfit<=0.0 && floatingProfit<=0.0' 'AUTO time stop must not close a floating winner before Broker TP'
 Need $manage 'AUTO_EXIT_CANDIDATE' 'candidate must pause new AUTO adds'
 Forbid $manage 'SmartProfitReversalDetected(' 'AUTO may not market-close profits on reversal'
 Forbid $manage 'AutoProfitGivebackDetected(' 'AUTO may not market-close profits on giveback'
