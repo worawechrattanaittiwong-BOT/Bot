@@ -1090,7 +1090,7 @@ internal sealed class Mt5Runtime
         var instancePath = GetInstancePath(job.InstanceId);
         // Never stop an existing instance for Vantage without an explicitly
         // enabled and SHA-256-pinned installer. Exness uses its old path.
-        if (!_brokerPlatforms.CanInstallWithoutDisrupting(job))
+        if (!_brokerPlatforms.CanInstallWithoutDisrupting(job, instancePath))
         {
             try
             {

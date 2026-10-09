@@ -36,28 +36,64 @@ internal sealed class BrokerPlatformManager
         return "";
     }
 
-    // Vantage is intentionally opt-in: a verified, SHA-256-pinned MT5 installer
-    // must be configured before any Cloud instance can be stopped or migrated.
-    // EXNESS and generic brokers retain their existing behavior.
-    public bool CanInstallWithoutDisrupting(CloudJob job)
+    // Vantage-only: an already installed per-instance Vantage terminal must
+    // continue to work without requiring the installer opt-in environment.
+    // A missing terminal/marker still fails closed *before* StopInstance.
+    // EXNESS and other brokers always take their original path.
+    public bool CanInstallWithoutDisrupting(CloudJob job, string? instancePath = null)
     {
         if (!string.Equals(RequiredPlatform(job), VantageCode, StringComparison.Ordinal))
+            return true;
+        if (!string.IsNullOrWhiteSpace(instancePath) &&
+            string.Equals(InstalledPlatform(instancePath), VantageCode, StringComparison.Ordinal) &&
+            File.Exists(Path.Combine(instancePath, "terminal64.exe")))
             return true;
         return VantageInstallerConfigured();
     }
 
-    private static bool VantageInstallerConfigured()
+    private string VantageCachedInstaller => Path.Combine(
+        _config.Root, "packages", "brokers", VantageCode, "mt5setup.exe");
+
+    private static Uri? VerifiedVantageDownloadUrl()
     {
-        if (Environment.GetEnvironmentVariable("SCENOVA_VANTAGE_CLOUD_ENABLED") != "1")
-            return false;
-        var hash = Environment.GetEnvironmentVariable("SCENOVA_VANTAGE_MT5_SHA256") ?? "";
-        if (hash.Length != 64 || !hash.All(Uri.IsHexDigit)) return false;
         var url = Environment.GetEnvironmentVariable("SCENOVA_VANTAGE_MT5_INSTALLER_URL") ?? "";
         return Uri.TryCreate(url, UriKind.Absolute, out var uri) &&
             uri.Scheme == Uri.UriSchemeHttps &&
             uri.Host.Equals("download.terminal.free", StringComparison.OrdinalIgnoreCase) &&
             uri.AbsolutePath.Contains("vantage", StringComparison.OrdinalIgnoreCase) &&
-            uri.AbsolutePath.EndsWith(".exe", StringComparison.OrdinalIgnoreCase);
+            uri.AbsolutePath.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
+            ? uri : null;
+    }
+
+    private bool VantageInstallerConfigured()
+    {
+        if (Environment.GetEnvironmentVariable("SCENOVA_VANTAGE_CLOUD_ENABLED") != "1")
+            return false;
+        var hash = Environment.GetEnvironmentVariable("SCENOVA_VANTAGE_MT5_SHA256") ?? "";
+        if (hash.Length != 64 || !hash.All(Uri.IsHexDigit)) return false;
+
+        // The owner may stage the genuine Vantage installer locally when
+        // its official client portal does not expose a public CDN URL.
+        try
+        {
+            if (LooksLikeExecutable(VantageCachedInstaller) &&
+                MatchesSha256(VantageCachedInstaller, hash))
+                return true;
+        }
+        catch { /* an unreadable file cannot authorize installation */ }
+        return VerifiedVantageDownloadUrl() is not null;
+    }
+
+    private async Task<string> GetVerifiedVantageInstallerAsync(CancellationToken cancellationToken)
+    {
+        var hash = Environment.GetEnvironmentVariable("SCENOVA_VANTAGE_MT5_SHA256")!;
+        if (LooksLikeExecutable(VantageCachedInstaller) &&
+            MatchesSha256(VantageCachedInstaller, hash))
+            return VantageCachedInstaller;
+        var uri = VerifiedVantageDownloadUrl();
+        if (uri is null)
+            throw new InvalidOperationException("VANTAGE_INSTALLER_NOT_VERIFIED");
+        return await GetInstallerAsync(VantageCode, uri, cancellationToken, hash);
     }
 
     public string InstalledPlatform(string instancePath)
@@ -102,11 +138,7 @@ internal sealed class BrokerPlatformManager
 
         var installer = required == ExnessCode
             ? await GetInstallerAsync(required, ExnessInstaller, cancellationToken)
-            : await GetInstallerAsync(
-                required,
-                new Uri(Environment.GetEnvironmentVariable("SCENOVA_VANTAGE_MT5_INSTALLER_URL")!),
-                cancellationToken,
-                Environment.GetEnvironmentVariable("SCENOVA_VANTAGE_MT5_SHA256"));
+            : await GetVerifiedVantageInstallerAsync(cancellationToken);
 
         var configPath = Path.Combine(instancePath, "Config");
         var configBackup = Path.Combine(

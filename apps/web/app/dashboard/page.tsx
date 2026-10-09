@@ -97,6 +97,9 @@ function mt5ProvisioningFailureMessage(value: unknown) {
   const code = String(value || "").trim().toUpperCase();
   if (!code) return "";
 
+  if (code.includes("VANTAGE_INSTALLER_NOT_VERIFIED")) {
+    return "Vantage Cloud ยังไม่มี MT5 ของ Vantage ที่ติดตั้งและยืนยันบน VPS · กรุณาให้ผู้ดูแลติดตั้งจาก Vantage และตรวจสอบไฟล์ก่อนเชื่อมใหม่";
+  }
   if (code.includes("MT5_AUTH_FAILED")) {
     return "MT5 Login หรือ Trading Password ไม่ถูกต้อง · ตรวจเลขบัญชี รหัส Trading และ Server แล้วลองใหม่";
   }

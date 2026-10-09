@@ -85,6 +85,56 @@ internal static class ProvisioningSelfTest
                     !string.IsNullOrWhiteSpace(vantageJob.Symbol))
                     throw new InvalidOperationException("Vantage Cloud must wait for broker-native symbol selection");
 
+                // A Vantage terminal installed and marked on its own instance
+                // must not be blocked by the auto-installer feature flag.
+                var vantageInstance = Path.Combine(root, "instances", Guid.NewGuid().ToString("N"));
+                Directory.CreateDirectory(vantageInstance);
+                File.WriteAllText(Path.Combine(vantageInstance, "broker-platform.txt"), "VANTAGE|verified");
+                File.WriteAllText(Path.Combine(vantageInstance, "terminal64.exe"), "test-only");
+                if (!brokerPlatforms.CanInstallWithoutDisrupting(vantageJob, vantageInstance) ||
+                    brokerPlatforms.NeedsInstall(vantageJob, vantageInstance))
+                    throw new InvalidOperationException("pre-installed Vantage terminal was incorrectly blocked");
+                if (!brokerPlatforms.CanInstallWithoutDisrupting(exnessJob, vantageInstance))
+                    throw new InvalidOperationException("Exness behavior was changed by Vantage gate");
+                File.Delete(Path.Combine(vantageInstance, "terminal64.exe"));
+                if (Environment.GetEnvironmentVariable("SCENOVA_VANTAGE_CLOUD_ENABLED") != "1" &&
+                    brokerPlatforms.CanInstallWithoutDisrupting(vantageJob, vantageInstance))
+                    throw new InvalidOperationException("Vantage marker without terminal bypassed the safety gate");
+                // Keep the existing 1/2/5/20 isolated instance count test unchanged.
+                Directory.Delete(vantageInstance, recursive: true);
+
+                // A locally staged Vantage installer is accepted only when
+                // the operator explicitly opts in and pins its exact SHA-256.
+                // No fake installer is ever executed in this self-test.
+                var installerDir = Path.Combine(root, "packages", "brokers", "VANTAGE");
+                Directory.CreateDirectory(installerDir);
+                var stagedInstaller = Path.Combine(installerDir, "mt5setup.exe");
+                var bytes = new byte[256 * 1024 + 1];
+                bytes[0] = (byte)'M';
+                bytes[1] = (byte)'Z';
+                File.WriteAllBytes(stagedInstaller, bytes);
+                var previousFlag = Environment.GetEnvironmentVariable("SCENOVA_VANTAGE_CLOUD_ENABLED");
+                var previousHash = Environment.GetEnvironmentVariable("SCENOVA_VANTAGE_MT5_SHA256");
+                var previousUrl = Environment.GetEnvironmentVariable("SCENOVA_VANTAGE_MT5_INSTALLER_URL");
+                try
+                {
+                    Environment.SetEnvironmentVariable("SCENOVA_VANTAGE_CLOUD_ENABLED", "1");
+                    Environment.SetEnvironmentVariable("SCENOVA_VANTAGE_MT5_INSTALLER_URL", null);
+                    Environment.SetEnvironmentVariable("SCENOVA_VANTAGE_MT5_SHA256", new string('0', 64));
+                    if (brokerPlatforms.CanInstallWithoutDisrupting(vantageJob))
+                        throw new InvalidOperationException("Vantage accepted an incorrect installer checksum");
+                    Environment.SetEnvironmentVariable("SCENOVA_VANTAGE_MT5_SHA256",
+                        Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)));
+                    if (!brokerPlatforms.CanInstallWithoutDisrupting(vantageJob))
+                        throw new InvalidOperationException("verified local Vantage installer was not accepted");
+                }
+                finally
+                {
+                    Environment.SetEnvironmentVariable("SCENOVA_VANTAGE_CLOUD_ENABLED", previousFlag);
+                    Environment.SetEnvironmentVariable("SCENOVA_VANTAGE_MT5_SHA256", previousHash);
+                    Environment.SetEnvironmentVariable("SCENOVA_VANTAGE_MT5_INSTALLER_URL", previousUrl);
+                }
+
                 if (!exnessJob.SymbolDiscoveryPending ||
                     !string.IsNullOrWhiteSpace(exnessJob.Symbol))
                     throw new InvalidOperationException("new Cloud account must enter symbol discovery without a guessed symbol");
