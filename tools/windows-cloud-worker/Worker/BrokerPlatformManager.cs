@@ -29,11 +29,27 @@ internal sealed class BrokerPlatformManager
 
         if (broker.Equals("VANTAGE", StringComparison.OrdinalIgnoreCase) ||
             broker.Equals("Vantage Markets", StringComparison.OrdinalIgnoreCase) ||
-            server.StartsWith("VantageMarkets-", StringComparison.OrdinalIgnoreCase) ||
-            server.StartsWith("VantageMarketsMU-", StringComparison.OrdinalIgnoreCase))
+            broker.Equals("Vantage Markets (Pty) Ltd", StringComparison.OrdinalIgnoreCase) ||
+            server.StartsWith("VantageMarkets-", StringComparison.OrdinalIgnoreCase))
             return VantageCode;
 
         return "";
+    }
+
+    // Catalog code VANTAGE refers to MT5 broker list item #6 only:
+    // Vantage Markets (Pty) Ltd, prefix VantageMarkets-, never VantageMarketsMU-.
+    public bool VantageEntityMismatch(CloudJob job)
+    {
+        var broker = (job.Broker ?? "").Trim();
+        if (!broker.Equals("VANTAGE", StringComparison.OrdinalIgnoreCase) &&
+            !broker.Equals("Vantage Markets", StringComparison.OrdinalIgnoreCase) &&
+            !broker.Equals("Vantage Markets (Pty) Ltd", StringComparison.OrdinalIgnoreCase))
+            return false;
+        var server = (job.BrokerServer ?? "").Trim();
+        return !System.Text.RegularExpressions.Regex.IsMatch(server,
+            @"^VantageMarkets-(?:Live|Demo)(?: [0-9]{1,3})?$",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase |
+            System.Text.RegularExpressions.RegexOptions.CultureInvariant);
     }
 
     // Vantage is intentionally opt-in: a verified, SHA-256-pinned MT5 installer

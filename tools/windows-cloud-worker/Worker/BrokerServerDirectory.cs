@@ -118,7 +118,7 @@ internal sealed class BrokerServerDirectory
             // Preserve the exact broker-native server name, including the
             // space in e.g. VantageMarkets-Live 15. Never invent server IDs.
             foreach (Match match in Regex.Matches(run,
-                @"(?<![A-Za-z0-9._-])VantageMarkets(?:MU)?-(?:Live|Demo)(?: [0-9]{1,3})?(?![A-Za-z0-9._-])",
+                @"(?<![A-Za-z0-9._-])VantageMarkets-(?:Live|Demo)(?: [0-9]{1,3})?(?![A-Za-z0-9._-])",
                 RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
                 yield return match.Value;
             yield break;

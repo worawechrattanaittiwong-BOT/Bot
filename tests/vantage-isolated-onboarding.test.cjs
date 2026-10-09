@@ -40,7 +40,8 @@ test("Vantage Cloud opt-in requires a checksum-pinned installer before stopping 
 
 test("Vantage server reader preserves spaces and excludes Exness without modifying its reader",()=>{
   const directory=read("tools/windows-cloud-worker/Worker/BrokerServerDirectory.cs");
-  assert.match(directory,/VantageMarkets\(\?:MU\)\?-/);
+  assert.match(directory,/VantageMarkets-\(\?:Live\|Demo\)/);
+  assert.doesNotMatch(directory,/VantageMarkets\(\?:MU\)\?-/);
   assert.match(directory,/\(\?: \[0-9\]\{1,3\}\)\?/);
   assert.match(directory,/brokerCode, "EXNESS"/);
   const selftest=read("tools/windows-cloud-worker/Worker/ProvisioningSelfTest.cs");
@@ -118,8 +119,10 @@ test("Vantage catalog keeps all verified servers even when Worker knows only a s
   ];
   const result=await catalogProbe(registered,discovered).brokers();
   assert.equal(result.length,1);
-  assert.equal(result[0].servers.length,18);
-  assert.deepEqual(officialVantageServers.every(name=>result[0].servers.some(s=>s.serverName===name)),true);
+  assert.equal(result[0].servers.length,16);
+  assert.equal(officialVantageServers.filter(name=>name.startsWith('VantageMarkets-'))
+    .every(name=>result[0].servers.some(s=>s.serverName===name)),true);
+  assert.equal(result[0].servers.some(s=>s.serverName.startsWith('VantageMarketsMU-')),false);
   assert.equal(result[0].servers.filter(s=>s.serverName==="VantageMarkets-Live 15").length,1);
   assert.equal(result[0].serverSource,"VERIFIED_CATALOG_AND_BROKER_MT5_DIRECTORY");
   assert.equal(result[0].servers.at(-1).environment,"DEMO");
@@ -133,4 +136,23 @@ test("Exness catalog retains previous Worker-first behavior",async()=>{
   ]).brokers();
   assert.deepEqual(result[0].servers,[{serverName:"Exness-MT5Real25",environment:"REAL"}]);
   assert.equal(result[0].serverSource,"BROKER_MT5_DIRECTORY");
+});
+
+test("Vantage catalog is restricted to MT5 broker item #6, not VantageMarketsMU",()=>{
+  const migration=read("database/073_vantage_pty_only.sql");
+  assert.match(migration,/Vantage Markets \(Pty\) Ltd/);
+  assert.match(migration,/s\.server_name ILIKE 'VantageMarketsMU-%'/);
+  assert.match(migration,/b\.code='VANTAGE'/);
+  assert.doesNotMatch(migration,/UPDATE\s+(mt5_accounts|users|bot_instances|bot_settings)/i);
+  assert.match(read("scripts/deploy-hostinger.sh"),/database\/073_vantage_pty_only\.sql/);
+  const control=read("apps/api/src/bot.controller.ts");
+  assert.equal((control.match(/Vantage ต้องใช้ MT5 Server ของ Vantage Markets/g)||[]).length,2);
+  const platform=read("tools/windows-cloud-worker/Worker/BrokerPlatformManager.cs");
+  assert.match(platform,/VantageEntityMismatch\(CloudJob job\)/);
+  assert.doesNotMatch(platform,/server\.StartsWith\("VantageMarketsMU-"/);
+  const runtime=read("tools/windows-cloud-worker/Worker/Mt5Runtime.cs");
+  const start=runtime.indexOf("private async Task<bool> EnsureBrokerPlatformAsync");
+  const body=runtime.slice(start,runtime.indexOf("private static string NormalizeRuntimeError",start));
+  assert.ok(body.indexOf("VantageEntityMismatch(job)")<body.indexOf("StopInstance(job.InstanceId)"));
+  assert.match(body,/VANTAGE_BROKER_ENTITY_MISMATCH/);
 });
