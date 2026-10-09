@@ -107,7 +107,7 @@ assert.ok(zeroOwnerGuard >= 0, "ZERO must own an existing ZERO runtime before sh
 assert.match(ea, /bool zeroGridCanStart\s*=\s*[\s\S]*ZeroGridModeEnabled\(\)[\s\S]*BasketPositionCount\(\)<=0[\s\S]*RescuePositionCount\(\)<=0/, "selected ZERO must wait until a foreign live owner is flat");
 assert.ok(zeroOwnerGuard < dailyProfitGuard && zeroOwnerGuard < dailyLossGuard, "hidden AUTO/RACE daily controls must not liquidate ZERO cycles");
 assert.doesNotMatch(ea, /ZERO GRID starts only when selected and the EA-owned basket is flat/, "ZERO must not have a second late dispatch path after shared risk controls");
-assert.match(ea, /g_safeStopDrainRequested\s*=\s*\(g_access && desired == "SAFE_STOP"\)/, "ZERO graceful drain must be armed only by explicit website SAFE_STOP");
+assert.match(ea, /g_safeStopDrainRequested\s*=\s*\(g_access && desired == "SAFE_STOP" && !ownerDisabledMode\)/, "ZERO graceful drain must preserve pending only for user SAFE_STOP, not OWNER disabled mode");
 assert.match(ea, /bool safeStopDrain\s*=\s*[\s\S]*g_state==STATE_SAFE_STOP[\s\S]*g_safeStopDrainRequested[\s\S]*if\(!safeStopDrain\)[\s\S]*ZeroGridCancelPending\(\)/, "ZERO Safe Stop must preserve the already-staged pending ladder only for explicit Safe Stop");
 assert.match(ea, /pending=ZeroGridPendingCount\(\);[\s\S]*if\(positions<=0 && pending<=0\)/, "ZERO Safe Stop must not mark the cycle flat while pending orders still belong to it");
 assert.match(ea, /for\(int level=1;level<=levels;level\+\+\)/, "flat ZERO must validate every configured level pair");
