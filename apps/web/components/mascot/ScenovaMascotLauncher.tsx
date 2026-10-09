@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { ScenovaAiPanel } from "../ai/ScenovaAiPanel";
+import { ScenovaAiPanel, ContactIcon } from "../ai/ScenovaAiPanel";
+import { api } from "../../lib/api";
 import { ScenovaRobotCanvas } from "./ScenovaRobotCanvas";
 import styles from "./ScenovaMascot.module.css";
 
@@ -13,6 +14,8 @@ type Props = {
 
 type PanelView = "MENU" | "AI";
 
+type Contact = { id: string; type: string; label: string; url: string };
+
 const ACTIVE_SLOT_STORAGE_KEY = "scenova_ai_active_slot_id";
 const ACTIVE_SLOT_EVENT = "scenova:active-slot";
 
@@ -22,6 +25,7 @@ export function ScenovaMascotLauncher({ className = "", onConnectMobile, error }
   const [hovered, setHovered] = useState(false);
   const [busy, setBusy] = useState(false);
   const [activeSlotId, setActiveSlotId] = useState("");
+  const [contacts, setContacts] = useState<Contact[]>([]);
   const busyRef = useRef(false);
   const mountedRef = useRef(true);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -82,6 +86,22 @@ export function ScenovaMascotLauncher({ className = "", onConnectMobile, error }
       document.removeEventListener("keydown", escape);
     };
   }, [open, view]);
+
+  // Load the existing admin-configured support links when the first menu opens.
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setContacts([]);
+    const query = activeSlotId ? "?slotId=" + encodeURIComponent(activeSlotId) : "";
+    void api("/ai-assistant/bootstrap" + query)
+      .then((data: { contacts?: Contact[] }) => {
+        if (!cancelled) setContacts(Array.isArray(data?.contacts) ? data.contacts : []);
+      })
+      .catch(() => {
+        if (!cancelled) setContacts([]);
+      });
+    return () => { cancelled = true; };
+  }, [open, activeSlotId]);
 
   async function connect() {
     if (busyRef.current) return;
@@ -179,6 +199,28 @@ export function ScenovaMascotLauncher({ className = "", onConnectMobile, error }
               </button>
 
               {error && <p className={styles.error} role="alert">{error}</p>}
+              {contacts.length > 0 && (
+                <section className={styles.contacts} aria-label="ติดต่อผู้พัฒนา">
+                  <small>ติดต่อผู้พัฒนา</small>
+                  <div className={styles.contactLinks}>
+                    {contacts.map(contact => (
+                      <a
+                        key={contact.id}
+                        href={contact.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        data-channel={String(contact.type || "").toUpperCase()}
+                      >
+                        <ContactIcon type={contact.type} />
+                        <span>{contact.type === "LINE" ? "LINE"
+                          : contact.type === "FACEBOOK" ? "Facebook"
+                          : contact.type === "TELEGRAM" ? "Telegram"
+                          : contact.label}</span>
+                      </a>
+                    ))}
+                  </div>
+                </section>
+              )}
               <footer className={styles.footer}><span aria-hidden="true" /> พร้อมช่วยคุณ</footer>
             </>
           )}

@@ -42,7 +42,7 @@ type Message = {
   actions?: NavigationAction[];
 };
 
-function ContactIcon({ type }: { type: string }) {
+export function ContactIcon({ type }: { type: string }) {
   const key = String(type || "").toUpperCase();
   if (key === "FACEBOOK") {
     return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.2 8.2h2.3V4.8c-.4-.1-1.8-.2-3.4-.2-3.4 0-5.7 2-5.7 5.8v3.2H3.6v3.8h3.8V24h4.6v-6.6h3.8l.6-3.8H12v-2.8c0-1.1.3-1.9 2.2-1.9z" fill="currentColor"/></svg>;
@@ -261,31 +261,6 @@ export function ScenovaAiPanel({
         <button type="submit" disabled={!bootstrap?.configured || busy || !input.trim()}>ส่ง</button>
       </form>
 
-      {bootstrap?.contacts?.length ? (
-        <div className={styles.contacts}>
-          <small>ติดต่อผู้พัฒนา</small>
-          <div>
-            {bootstrap.contacts.map(contact => (
-              <a
-                key={contact.id}
-                href={contact.url}
-                target="_blank"
-                rel="noreferrer"
-                data-channel={String(contact.type || "").toUpperCase()}
-              >
-                <ContactIcon type={contact.type} />
-                <span>{contact.type === "LINE"
-                  ? "LINE"
-                  : contact.type === "FACEBOOK"
-                    ? "Facebook"
-                    : contact.type === "TELEGRAM"
-                      ? "Telegram"
-                      : contact.label}</span>
-              </a>
-            ))}
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }

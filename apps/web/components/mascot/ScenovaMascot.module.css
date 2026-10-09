@@ -92,6 +92,17 @@
 .actionText strong { font-size: 12px; line-height: 1.4; font-weight: 700; }
 .actionText small { font-size: 11px; line-height: 1.45; color: #a4aec5; }
 .arrow { margin-left: auto; color: #8edfff; font-size: 19px; }
+.contacts { margin-top: 12px; padding: 10px; border: 1px solid #8c80ec3d; border-radius: 12px; background: #11192a80; }
+.contacts > small { display: block; margin-bottom: 8px; color: #aab6cc; font-size: 11px; }
+.contactLinks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.contactLinks a { display: flex; align-items: center; justify-content: center; gap: 4px; min-width: 0; padding: 9px 4px; border: 1px solid transparent; border-radius: 9px; color: #fff; font-size: 10px; font-weight: 700; text-decoration: none; box-shadow: inset 0 1px #ffffff20; transition: filter 150ms; }
+.contactLinks a svg { width: 13px; height: 13px; flex: 0 0 auto; }
+.contactLinks a[data-channel="LINE"] { background: #06c755; border-color: #06c755; }
+.contactLinks a[data-channel="FACEBOOK"] { background: #1877f2; border-color: #1877f2; }
+.contactLinks a[data-channel="TELEGRAM"] { background: #229ed9; border-color: #229ed9; }
+.contactLinks a:not([data-channel="LINE"]):not([data-channel="FACEBOOK"]):not([data-channel="TELEGRAM"]) { background: #283149; border-color: #ffffff1a; }
+.contactLinks a:hover { filter: brightness(1.1); }
+.contactLinks a:focus-visible { outline: 2px solid #77eaff; outline-offset: 2px; }
 .footer { display: flex; align-items: center; gap: 6px; margin-top: 13px; color: #8f9ab6; font-size: 11px; }
 .footer > span { width: 5px; height: 5px; border-radius: 50%; background: #80e3cb; box-shadow: 0 0 8px #80e3cb55; }
 .error { margin: 12px 0 0; padding: 9px; border-radius: 9px; color: #f5d298; background: #e7a84e0d; font-size: 11px; line-height: 1.6; overflow-wrap: anywhere; }
