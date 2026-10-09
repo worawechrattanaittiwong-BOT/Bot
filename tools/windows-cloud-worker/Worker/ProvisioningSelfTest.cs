@@ -78,6 +78,18 @@ internal static class ProvisioningSelfTest
                 };
                 if (brokerPlatforms.RequiredPlatform(vantageJob) != "VANTAGE")
                     throw new InvalidOperationException("Vantage platform was not selected from the broker identity");
+                if (brokerPlatforms.VantageEntityMismatch(vantageJob))
+                    throw new InvalidOperationException("VantageMarkets Live 15 must be accepted as company #6");
+                var wrongEntityJob = new CloudJob
+                {
+                    InstanceId = Guid.NewGuid().ToString(),
+                    AccountNumber = brokerAccount.RootElement.Clone(),
+                    Broker = "VANTAGE",
+                    BrokerServer = "VantageMarketsMU-Live",
+                    Settings = brokerSettings.RootElement.Clone()
+                };
+                if (!brokerPlatforms.VantageEntityMismatch(wrongEntityJob))
+                    throw new InvalidOperationException("VantageMarketsMU is a different company and must be rejected");
                 if (Environment.GetEnvironmentVariable("SCENOVA_VANTAGE_CLOUD_ENABLED") != "1" &&
                     brokerPlatforms.CanInstallWithoutDisrupting(vantageJob))
                     throw new InvalidOperationException("Vantage Cloud must be disabled unless explicitly configured");
@@ -229,11 +241,12 @@ internal static class ProvisioningSelfTest
             Directory.CreateDirectory(vantageConfig);
             var vantageServersPath = Path.Combine(vantageConfig, "servers.dat");
             File.WriteAllBytes(vantageServersPath, Encoding.Unicode.GetBytes(
-                "header\0VantageMarkets-Live 15\0VantageMarkets-Demo\0Exness-MT5Real25\0"));
+                "header\0VantageMarkets-Live 15\0VantageMarkets-Demo\0VantageMarketsMU-Live\0Exness-MT5Real25\0"));
             var vantageServers = BrokerServerDirectory.ExtractServerNames(vantageServersPath, "VANTAGE");
             if (!vantageServers.Contains("VantageMarkets-Live 15") ||
                 !vantageServers.Contains("VantageMarkets-Demo") ||
-                vantageServers.Any(s => s.StartsWith("Exness", StringComparison.OrdinalIgnoreCase)))
+                vantageServers.Any(s => s.StartsWith("Exness", StringComparison.OrdinalIgnoreCase)) ||
+                vantageServers.Any(s => s.StartsWith("VantageMarketsMU", StringComparison.OrdinalIgnoreCase)))
                 throw new InvalidOperationException("Vantage server discovery returned incorrect broker-native names");
 
             var sentinel = File.ReadAllText(Path.Combine(template, "template-sentinel.txt"));

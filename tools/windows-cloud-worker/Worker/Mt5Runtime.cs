@@ -1088,6 +1088,19 @@ internal sealed class Mt5Runtime
         CancellationToken cancellationToken)
     {
         var instancePath = GetInstancePath(job.InstanceId);
+        if (_brokerPlatforms.VantageEntityMismatch(job))
+        {
+            // Wrong legal entity: fail closed before StopInstance; no trades.
+            try
+            {
+                Directory.CreateDirectory(instancePath);
+                File.WriteAllText(
+                    Path.Combine(instancePath, "broker-platform-error.txt"),
+                    "VANTAGE_BROKER_ENTITY_MISMATCH");
+            }
+            catch { }
+            return false;
+        }
         // Never stop an existing instance for Vantage without an explicitly
         // enabled and SHA-256-pinned installer. Exness uses its old path.
         if (!_brokerPlatforms.CanInstallWithoutDisrupting(job))
