@@ -1697,8 +1697,7 @@ export default function AdminPage() {
                                     userId={selectedCustomer.id} userCode={selectedCustomer.user_code}
                                     slotId={slot.id} slotNumber={Number(slot.slot_number||0)}
                                     linkedAccount={String(slot.account_number||"")}
-                                    onMessage={setMessage} onLinked={()=>search(undefined,true)}
-                                    onSelectSymbol={()=>void selectCustomerSlotSymbol(selectedCustomer,slot)}/>
+                                    onMessage={setMessage} onLinked={()=>search(undefined,true)}/>
                                 )}
                                 </Fragment>
                               ))}

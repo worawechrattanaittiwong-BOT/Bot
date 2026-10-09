@@ -2809,6 +2809,7 @@ export class BotController {
     const slot = await this.db.one(
       "SELECT ls.id, ls.status, bi.id instance_id, a.account_number, a.broker, a.broker_server, " +
       "bi.provisioning_error, bi.actual_state, bi.desired_state, " +
+      "reload.status reload_status, reload.result_code reload_result_code, " +
       "(bi.last_seen_at IS NOT NULL AND bi.last_seen_at > now()-interval '20 seconds') mt5_online, " +
       "(wn.last_seen_at IS NOT NULL AND wn.last_seen_at > now()-interval '120 seconds') runner_online, " +
       "((bi.last_seen_at IS NOT NULL AND bi.last_seen_at > now()-interval '60 seconds') OR " +
@@ -2820,6 +2821,13 @@ export class BotController {
       "WHERE item->>'instanceId'=bi.id::text AND item->>'terminalRunning'='true' " +
       "AND item->>'chartHasFastBasketBot'='true' AND item->>'presetCloudRelayEnabled'='true')) cloud_control_ready, " +
       "bi.metrics->'marketWatchSymbols' market_watch_symbols, " +
+      // Discovery belongs to the Worker, not the EA: the EA may not yet have a chart.
+      // Require fresh Worker telemetry for this exact Cloud instance.
+      "CASE WHEN wn.last_seen_at > now()-interval '30 seconds' THEN " +
+      "(SELECT item->'discoveredXauSymbols' FROM jsonb_array_elements(" +
+      "COALESCE(wn.telemetry->'instances','[]'::jsonb)) item " +
+      "WHERE item->>'instanceId'=bi.id::text AND item->>'terminalRunning'='true' LIMIT 1) " +
+      "ELSE '[]'::jsonb END worker_symbols, " +
       "bi.metrics->>'symbol' active_symbol, bi.metrics->'terminalConnected' broker_connected, " +
       "bs.settings->>'startupSymbol' startup_symbol, " +
       "bs.settings->>'symbolResolutionMode' symbol_resolution_mode " +
@@ -2828,15 +2836,29 @@ export class BotController {
       "LEFT JOIN mt5_accounts a ON a.id=bi.mt5_account_id " +
       "LEFT JOIN worker_nodes wn ON wn.runner_id=bi.runner_id " +
       "LEFT JOIN bot_settings bs ON bs.bot_instance_id=bi.id " +
+      // Ignore retries made for a previous account or before the current Symbol was selected.
+      "LEFT JOIN LATERAL (SELECT wc.status,wc.result_code FROM worker_commands wc " +
+      "WHERE wc.bot_instance_id=bi.id AND wc.command='RELOAD_INSTANCE' " +
+      "AND wc.execution_generation=bi.execution_generation " +
+      "AND bs.settings->>'symbolResolutionMode'='EXACT' " +
+      "AND wc.created_at >= bs.updated_at " +
+      "ORDER BY wc.created_at DESC LIMIT 1) reload ON true " +
       "WHERE ls.id=$1 AND ls.assigned_user_id=$2 AND ls.mode='CLOUD' AND ls.status<>'DELETED'",
       [slotId, userId]
     );
     if (!slot) throw new ConflictException("ไม่พบ Cloud VPS Slot ของลูกค้า");
-    const symbols = Array.isArray(slot.market_watch_symbols)
-      ? slot.market_watch_symbols.filter((s:any) =>
-          typeof s === "string" && /XAU/i.test(s) && s.length <= 64
-        ).slice(0, 60)
-      : [];
+    // Only live Worker discovery authorizes a Cloud Symbol choice.
+    // Cached EA market-watch metrics may describe a previous account.
+    const observedSymbols = Array.isArray(slot.worker_symbols) ? slot.worker_symbols : [];
+    const symbols = Array.from(new Set(
+      observedSymbols.filter((s:any): s is string =>
+        typeof s === "string" && /^XAU[A-Za-z0-9._#-]{3,29}$/i.test(s)
+      )
+    )).slice(0, 60);
+    const reloadFailed = String(slot.reload_status || "").toUpperCase() === "FAILED";
+    const reloadError = reloadFailed
+      ? (String(slot.reload_result_code || "").match(/^[A-Z][A-Z0-9_]{1,60}/)?.[0] || "EA_ATTACH_FAILED")
+      : "";
     return {
       ok: true,
       slotId,
@@ -2855,7 +2877,7 @@ export class BotController {
         Boolean(String(slot.startup_symbol || "").trim()),
       provisioningError: slot.provisioning_error
         ? (String(slot.provisioning_error).match(/^[A-Z][A-Z0-9_]{1,60}/)?.[0] || "MT5_PROVISION_FAILED")
-        : "",
+        : reloadError,
       actualState: slot.actual_state || "OFFLINE",
       desiredState: slot.desired_state || "STOPPED"
     };

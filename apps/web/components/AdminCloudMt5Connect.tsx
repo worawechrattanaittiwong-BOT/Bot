@@ -15,11 +15,11 @@ type Status = {
 type Props = {
   userId:string; userCode:string; slotId:string; slotNumber:number;
   linkedAccount?:string; onLinked:()=>Promise<void>;
-  onMessage:(message:string)=>void; onSelectSymbol?:()=>void;
+  onMessage:(message:string)=>void;
 };
 
 export function AdminCloudMt5Connect({
-  userId,userCode,slotId,slotNumber,linkedAccount,onLinked,onMessage,onSelectSymbol
+  userId,userCode,slotId,slotNumber,linkedAccount,onLinked,onMessage
 }:Props) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [open,setOpen] = useState(false);
@@ -36,6 +36,7 @@ export function AdminCloudMt5Connect({
   const [status,setStatus] = useState<Status|null>(null);
   const [error,setError] = useState("");
   const [statusError,setStatusError] = useState("");
+  const [selectedSymbol,setSelectedSymbol] = useState("");
   const [acknowledged,setAcknowledged] = useState(false);
 
   const currentBroker = catalog.find(b=>b.code===brokerCode);
@@ -72,6 +73,7 @@ export function AdminCloudMt5Connect({
     setError("");
     setStatusError("");
     setStatus(null);
+    setSelectedSymbol("");
     setAcknowledged(Boolean(linkedAccount));
     setTradingPassword("");
     setPhase(linkedAccount?"STATUS":"FORM");
@@ -113,6 +115,28 @@ export function AdminCloudMt5Connect({
         setError("ไม่ทราบผลการส่งข้อมูล กำลังตรวจสอบกับเซิร์ฟเวอร์ กรุณาอย่ากดซ้ำ");
         setPhase("STATUS");
       } else setError(message);
+    } finally { setBusy(false); }
+  }
+
+  async function confirmDiscoveredSymbol() {
+    const symbol = selectedSymbol.trim();
+    // Only permit an explicit admin choice from the current Worker discovery list.
+    // The server independently rechecks Worker freshness, slot rights and open trades.
+    if (busy || !status?.symbols?.includes(symbol) || status.symbolConfirmed) return;
+    if (!window.confirm("ยืนยัน Symbol "+symbol+" สำหรับ Cloud VPS Slot #"+slotNumber+
+      "? ระบบจะสั่งเตรียม Chart/EA ใหม่เฉพาะ Slot นี้ โดยไม่ Start การซื้อขาย")) return;
+    setBusy(true);
+    setError("");
+    try {
+      const result = await adminApi("/admin/slots/select-symbol",{
+        method:"POST",body:JSON.stringify({userId,slotId,symbol})
+      });
+      onMessage(result?.message||"ยืนยัน Symbol แล้ว · กำลังรอ Cloud Worker เตรียม Chart และ EA");
+      setSelectedSymbol("");
+      await loadStatus();
+      await onLinked();
+    } catch (e:any) {
+      setError(String(e?.message||"ยืนยัน Symbol ไม่สำเร็จ"));
     } finally { setBusy(false); }
   }
 
@@ -230,14 +254,36 @@ export function AdminCloudMt5Connect({
                 <small>บัญชี {boundNumber||"รอข้อมูล"} · {status?.brokerServer||"รอ Server"}</small>
               </div>
               {status ?
-                <Mt5ConnectChecklist input={checkInput} onPickSymbol={onSelectSymbol?()=>{
-                  close();onSelectSymbol();
-                }:undefined}/> :
+                <Mt5ConnectChecklist input={checkInput}/> :
                 <p className={styles.hint}>กำลังรับข้อมูลสถานะจากเซิร์ฟเวอร์...</p>}
+              {status && Boolean(status.accountNumber) && status.runnerOnline && status.terminalOnline &&
+                !status.symbolConfirmed && status.symbols.length > 0 &&
+                <div className={styles.symbolPanel}>
+                  <b>พบ Symbol ทองคำจาก Cloud Worker</b>
+                  <p>เลือกชื่อ Symbol ตามที่ MT5 บัญชีนี้ตรวจพบ แล้วกดยืนยันเพื่อเตรียม Chart และ EA (ไม่ Start เทรด)</p>
+                  <div className={styles.symbolOptions}>
+                    {status.symbols.map(symbol=>(
+                      <button type="button" key={symbol}
+                        className={selectedSymbol===symbol?styles.symbolSelected:styles.symbolOption}
+                        aria-pressed={selectedSymbol===symbol}
+                        disabled={busy} onClick={()=>setSelectedSymbol(symbol)}>
+                        {symbol}
+                      </button>
+                    ))}
+                  </div>
+                  <button type="button" className={styles.primary}
+                    disabled={busy || !status.symbols.includes(selectedSymbol)}
+                    onClick={()=>void confirmDiscoveredSymbol()}>
+                    {busy?"กำลังยืนยัน...":"ยืนยัน Symbol และเตรียม Chart/EA"}
+                  </button>
+                </div>
+              }
               {status?.symbolConfirmed===false && Boolean(status?.symbols?.length) &&
-                <p className={styles.hint}>เมื่อพบ Symbol จากโบรกเกอร์แล้ว ให้เลือก Symbol ใน Slot ก่อนใช้งาน EA</p>}
+                <p className={styles.hint}>การตรวจพบ Symbol ยืนยันเพียงว่ารับข้อมูลตลาดได้ ยังไม่ยืนยันว่า Broker อนุญาตการเทรด หาก Journal แจ้ง Trading disabled ต้องแก้สิทธิ์กับ Broker ก่อนใช้งาน EA</p>}
               {failed && <p role="alert" className={styles.error}>
-                VPS รายงานว่าเชื่อมต่อไม่สำเร็จ กรุณาตรวจ Login, Trading Password, Broker และ MT5 Server
+                {status?.provisioningError==="EA_ATTACH_TIMEOUT" ?
+                  "Worker เปิด MT5 ได้ แต่ไม่สามารถสร้าง Chart/แนบ EA ให้เสร็จทันเวลา · ให้ตรวจ MT5 Experts/Journal และ Windows Worker ก่อนสั่ง Reload ซ้ำ" :
+                  "VPS รายงานข้อผิดพลาด กรุณาตรวจ MT5 Journal, Trading Password, Broker และ Server"}
                 <small>รหัสข้อผิดพลาด: {status?.provisioningError}</small>
               </p>}
               {error && <p role="alert" className={styles.error}>{error}</p>}

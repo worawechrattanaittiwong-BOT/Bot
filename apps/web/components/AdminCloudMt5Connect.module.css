@@ -29,3 +29,12 @@
 .error {background:#361722;border:1px solid #894158;color:#ffcbd4;padding:10px 12px;border-radius:10px;margin-top:15px;font-size:13px;overflow-wrap:anywhere;}
 .error small {display:block;margin-top:5px;}
 @media(max-width:620px){.shell{padding:15px}.header h2{font-size:18px}.grid{grid-template-columns:1fr}.actions{display:grid;grid-template-columns:1fr 1fr}.actions button{min-width:0;padding:10px 6px}.dialog{max-height:92dvh;width:94vw}}
+
+.symbolPanel {margin:16px 0;padding:14px;border:1px solid #427eb5;border-radius:13px;background:rgba(35,62,91,.28);display:grid;gap:10px;}
+.symbolPanel b {color:#e3f1ff;font-size:15px;}
+.symbolPanel p {margin:0;color:#b8cce4;font-size:13px;line-height:1.55;}
+.symbolOptions {display:flex;gap:8px;flex-wrap:wrap;}
+.symbolOption,.symbolSelected {padding:9px 14px;min-height:40px;border-radius:9px;border:1px solid #426c98;background:#12263b;color:#dceaff;cursor:pointer;font-weight:650;}
+.symbolSelected {border-color:#80b6fa;background:#194474;color:white;outline:2px solid #5e9be7;}
+.symbolPanel button:disabled {opacity:.6;cursor:default;}
+.symbolPanel > button {justify-self:start;padding:10px 14px;min-height:42px;border:1px solid #4483c5;border-radius:10px;background:linear-gradient(120deg,#15416c,#282f65);color:#fff;font-weight:650;cursor:pointer;}
