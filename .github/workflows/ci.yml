@@ -33,8 +33,6 @@ jobs:
         run: node --test ./tests/trading-mode-compact-ui.test.cjs
       - name: Deleted account and email re-registration regression
         run: node --test ./tests/deleted-account-reregister-contract.test.cjs
-      - name: Vantage isolated broker onboarding contract
-        run: node --test ./tests/vantage-isolated-onboarding.test.cjs
       - name: Generated EA release artifact allowlist
         run: node --test ./tests/generated-ea-release-shape.test.cjs
       - run: npm run build

@@ -2484,11 +2484,6 @@ export class BotController {
     if (!brokerName || brokerName.length > 160 || /[\r\n\x00]/.test(brokerName)) {
       throw new BadRequestException("ชื่อ Broker ไม่ถูกต้อง");
     }
-    // Catalog VANTAGE means company #6: Vantage Markets (Pty) Ltd only.
-    if (["VANTAGE", "VANTAGE MARKETS", "VANTAGE MARKETS (PTY) LTD"].includes(brokerName.toUpperCase()) &&
-        !/^VantageMarkets-(?:Live|Demo)(?: [0-9]{1,3})?$/i.test(brokerServer)) {
-      throw new BadRequestException("Vantage ต้องใช้ MT5 Server ของ Vantage Markets (Pty) Ltd (VantageMarkets) เท่านั้น");
-    }
     const slot = body.slotId
       ? await this.resolveSlot(req.user.sub, body.slotId)
       : await this.ensureModeSlot(req.user.sub, mode);
@@ -2750,11 +2745,6 @@ export class BotController {
     }
     if (!tradingPassword || tradingPassword.length > 512 || /[\r\n\x00]/.test(tradingPassword)) {
       throw new BadRequestException("กรุณาระบุ Trading Password ที่ถูกต้อง");
-    }
-    // Admin Cloud binding must obey the same Vantage company #6 boundary.
-    if (["VANTAGE", "VANTAGE MARKETS", "VANTAGE MARKETS (PTY) LTD"].includes(broker.toUpperCase()) &&
-        !/^VantageMarkets-(?:Live|Demo)(?: [0-9]{1,3})?$/i.test(brokerServer)) {
-      throw new BadRequestException("Vantage ต้องใช้ MT5 Server ของ Vantage Markets (Pty) Ltd (VantageMarkets) เท่านั้น");
     }
     const customer = await this.user(userId);
     if (!customer || customer.status !== "ACTIVE" || ["OWNER","ADMIN"].includes(customer.role)) {
