@@ -1088,6 +1088,20 @@ internal sealed class Mt5Runtime
         CancellationToken cancellationToken)
     {
         var instancePath = GetInstancePath(job.InstanceId);
+        // Never stop an existing instance for Vantage without an explicitly
+        // enabled and SHA-256-pinned installer. Exness uses its old path.
+        if (!_brokerPlatforms.CanInstallWithoutDisrupting(job))
+        {
+            try
+            {
+                Directory.CreateDirectory(instancePath);
+                File.WriteAllText(
+                    Path.Combine(instancePath, "broker-platform-error.txt"),
+                    "VANTAGE_INSTALLER_NOT_VERIFIED");
+            }
+            catch { }
+            return false;
+        }
         if (!_brokerPlatforms.NeedsInstall(job, instancePath))
             return true;
 

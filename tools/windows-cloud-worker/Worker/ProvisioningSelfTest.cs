@@ -68,6 +68,23 @@ internal static class ProvisioningSelfTest
                         StringComparison.Ordinal))
                     throw new InvalidOperationException("Exness broker platform mapping failed");
 
+                var vantageJob = new CloudJob
+                {
+                    InstanceId = Guid.NewGuid().ToString(),
+                    AccountNumber = brokerAccount.RootElement.Clone(),
+                    Broker = "Vantage",
+                    BrokerServer = "VantageMarkets-Live 15",
+                    Settings = brokerSettings.RootElement.Clone()
+                };
+                if (brokerPlatforms.RequiredPlatform(vantageJob) != "VANTAGE")
+                    throw new InvalidOperationException("Vantage platform was not selected from the broker identity");
+                if (Environment.GetEnvironmentVariable("SCENOVA_VANTAGE_CLOUD_ENABLED") != "1" &&
+                    brokerPlatforms.CanInstallWithoutDisrupting(vantageJob))
+                    throw new InvalidOperationException("Vantage Cloud must be disabled unless explicitly configured");
+                if (!vantageJob.SymbolDiscoveryPending ||
+                    !string.IsNullOrWhiteSpace(vantageJob.Symbol))
+                    throw new InvalidOperationException("Vantage Cloud must wait for broker-native symbol selection");
+
                 if (!exnessJob.SymbolDiscoveryPending ||
                     !string.IsNullOrWhiteSpace(exnessJob.Symbol))
                     throw new InvalidOperationException("new Cloud account must enter symbol discovery without a guessed symbol");
@@ -205,6 +222,19 @@ internal static class ProvisioningSelfTest
                 throw new InvalidOperationException("Exness MT5 Real server was not read from servers.dat");
             if (brokerDirectory.Any(item => item.ServerName.Contains("MT4", StringComparison.OrdinalIgnoreCase)))
                 throw new InvalidOperationException("MT4 server leaked into the MT5 server directory");
+
+            // Vantage server numbers can contain spaces. A broker-specific
+            // reader must not return Exness names, or strip the space before 15.
+            var vantageConfig = Path.Combine(created[1].Prepared.InstancePath, "Config");
+            Directory.CreateDirectory(vantageConfig);
+            var vantageServersPath = Path.Combine(vantageConfig, "servers.dat");
+            File.WriteAllBytes(vantageServersPath, Encoding.Unicode.GetBytes(
+                "header\0VantageMarkets-Live 15\0VantageMarkets-Demo\0Exness-MT5Real25\0"));
+            var vantageServers = BrokerServerDirectory.ExtractServerNames(vantageServersPath, "VANTAGE");
+            if (!vantageServers.Contains("VantageMarkets-Live 15") ||
+                !vantageServers.Contains("VantageMarkets-Demo") ||
+                vantageServers.Any(s => s.StartsWith("Exness", StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException("Vantage server discovery returned incorrect broker-native names");
 
             var sentinel = File.ReadAllText(Path.Combine(template, "template-sentinel.txt"));
             if (!string.Equals(sentinel, "UNCHANGED", StringComparison.Ordinal))
