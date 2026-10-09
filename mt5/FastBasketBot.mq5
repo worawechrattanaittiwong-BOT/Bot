@@ -6004,8 +6004,17 @@ void OnTick()
    // AUTO and MANUAL Basket targets are absolute user instructions. Once the
    // full owned cycle reaches the configured money target, close immediately
    // before reversal, giveback, Rescue management or any other profit logic.
+   // AUTO Broker TP owns profitable AUTO exits. Tactical and MANUAL targets
+   // retain their existing separate behavior.
+   bool exclusivelyAutoOwned =
+      autoOwnedBasket && !manualOwnedBasket &&
+      !BasketHasTacticalPosition() &&
+      !BasketHasRacePosition() &&
+      !BasketHasCounterPosition() &&
+      !BasketHasFlipLockPosition() &&
+      ZeroGridPositionCount()==0;
    bool hardBasketProfitOwner =
-      (autoFamilyOwnedBasket && g_profitTargetMode == "AUTO") ||
+      (autoFamilyOwnedBasket && !exclusivelyAutoOwned && g_profitTargetMode == "AUTO") ||
       (!autoFamilyOwnedBasket && g_profitTargetMode == "MANUAL");
    if(count > 0 &&
       hardBasketProfitOwner &&
@@ -6038,9 +6047,7 @@ void OnTick()
       // AUTO ownership follows the broker tag, not the currently selected web
       // mode. A mode switch can stop new AUTO entries but cannot hand its live
       // position to MANUAL/RACE/FLIP management.
-      if(!tacticalBasket && autoOwnedBasket && AutoFastPriceExit())
-         return;
-
+      // AUTO exit prices are broker-hosted; no EA market close at TP/SL.
       // Dynamic protection never decides whether an entry is allowed. It only
       // manages exits after a Position exists.
       RefreshMarketContext(false);
@@ -6236,7 +6243,7 @@ void OnTick()
          }
       }
 
-      if(g_state == STATE_SAFE_STOP && !g_trailArmed && profit >= 0.0)
+      if(!exclusivelyAutoOwned && g_state == STATE_SAFE_STOP && !g_trailArmed && profit >= 0.0)
       {
          CloseAllBasket("SAFE_STOP_BREAKEVEN");
          ResetTrail();
@@ -16583,7 +16590,7 @@ void AutoOnOrderSent(int direction)
    {
       g_autoBasketStartedAt=now;
       g_autoBasketStopPrice=selected.slPrice;
-      g_autoBasketTargetPrice=g_basketProfitTarget>0.0 ? 0.0 : selected.tpPrice;
+      g_autoBasketTargetPrice=selected.tpPrice;
       g_autoLotCeiling=selected.plannedLot;
       g_autoPeakProfit=0.0;
       // AUTO freezes the first protected risk distance as 1R for the
@@ -16602,56 +16609,11 @@ void AutoOnOrderSent(int direction)
    AutoResetExitCandidate();
 }
 
-bool AutoFastPriceExit()
-{
-   if(!AutoOwnsOpenBasket() || BasketHasRacePosition() || BasketHasFlipLockPosition())
-      return false;
-   int direction=BasketDirection();
-   if(direction==0)
-      return false;
-
-   MqlTick tick;
-   if(!SymbolInfoTick(_Symbol,tick))
-      return false;
-   double exitPrice=direction>0 ? tick.bid : tick.ask;
-
-   if(g_autoBasketStopPrice>0.0)
-   {
-      bool stopHit=direction>0
-         ? exitPrice<=g_autoBasketStopPrice
-         : exitPrice>=g_autoBasketStopPrice;
-      if(stopHit)
-      {
-         bool closed=CloseAllBasket("AUTO_STRUCTURE_STOP");
-         if(closed) AutoResetCycle();
-         g_executionStatus="AUTO_STRUCTURE_STOP";
-         return true;
-      }
-   }
-
-   if(g_basketProfitTarget<=0.0 && g_autoBasketTargetPrice>0.0)
-   {
-      bool targetHit=direction>0
-         ? exitPrice>=g_autoBasketTargetPrice
-         : exitPrice<=g_autoBasketTargetPrice;
-      if(targetHit)
-      {
-         bool closed=CloseAllBasket("AUTO_MODERATE_TARGET");
-         if(closed) AutoResetCycle();
-         g_executionStatus="AUTO_MODERATE_TARGET";
-         return true;
-      }
-   }
-   return false;
-}
-
 bool AutoManageOpenBasket(double momentum)
 {
    if(!AutoOwnsOpenBasket() || BasketHasRacePosition() || BasketHasFlipLockPosition()) return false;
    int direction=BasketDirection();
    if(direction==0) return false;
-
-   if(AutoFastPriceExit()) return true;
 
    if(g_autoBasketStartedAt<=0)
    {
@@ -16693,39 +16655,9 @@ bool AutoManageOpenBasket(double momentum)
 
    if(cycleProfit>g_autoPeakProfit) g_autoPeakProfit=cycleProfit;
 
-   // When the user configured a hard money target, no smart profit rule may
-   // close a winner early or wait for giveback. Profit exits are owned solely
-   // by the hard target check in OnTick; risk/loss exits remain active.
-   bool hardMoneyProfitTarget=g_basketProfitTarget>0.0;
-   if(cycleProfit>0.0 && !hardMoneyProfitTarget)
-   {
-      string profitReason="NONE";
-      if(SmartProfitReversalDetected(direction,cycleProfit,profitReason))
-      {
-         bool closed=CloseAllBasket("AUTO_EARLY_PROFIT_REVERSAL");
-         if(closed) AutoResetCycle();
-         g_executionStatus="AUTO_EARLY_PROFIT_REVERSAL";
-         g_adaptiveBlockReason=profitReason;
-         return true;
-      }
-      if(AutoProfitGivebackDetected(direction,cycleProfit))
-      {
-         bool closed=CloseAllBasket("AUTO_EARLY_PROFIT_GIVEBACK");
-         if(closed) AutoResetCycle();
-         g_executionStatus="AUTO_EARLY_PROFIT_GIVEBACK";
-         return true;
-      }
-   }
-
+   // AUTO realizes profit via its genuine broker TP, never via reversal,
+   // giveback, or a time-based early market close. Loss safeguards remain.
    long ageSeconds=(long)MathMax(0,TimeCurrent()-g_autoBasketStartedAt);
-   bool flowStillValid=g_trendM5==direction || MomentumSupportsDirection(direction,momentum,0.20);
-   if(ageSeconds>=12*60 && cycleProfit>0.0 && !hardMoneyProfitTarget && !flowStillValid)
-   {
-      bool closed=CloseAllBasket("AUTO_TIME_BANK_PROFIT");
-      if(closed) AutoResetCycle();
-      g_executionStatus="AUTO_TIME_BANK_PROFIT";
-      return true;
-   }
    if(ageSeconds>=25*60 && cycleProfit<=0.0)
    {
       bool closed=CloseAllBasket("AUTO_TIME_STOP");
@@ -19145,9 +19077,24 @@ bool HandleDailyProfitControl(int count)
 
    double dailyProfit = DailyBotProfit();
    double dailyProfitTarget = EffectiveDailyProfitTarget();
+   bool autoBrokerTpOwned=count>0 &&
+      BasketHasAutoPosition() &&
+      !BasketHasTacticalPosition() &&
+      !BasketHasManualPosition() &&
+      !BasketHasRacePosition() &&
+      !BasketHasCounterPosition() &&
+      !BasketHasFlipLockPosition() &&
+      ZeroGridPositionCount()==0;
 
    if(g_dailyProfitLocked)
    {
+      if(autoBrokerTpOwned)
+      {
+         g_state=STATE_SAFE_STOP;
+         g_runAuthorized=false;
+         g_executionStatus="AUTO_DAILY_PROFIT_WAIT_BROKER_TP";
+         return false;
+      }
       if(FlipLockModeEnabled()) FlipLockRemoveAllPending();
       if(count > 0)
          CloseAllBasket("DAILY_PROFIT_LOCK");
@@ -19182,6 +19129,13 @@ bool HandleDailyProfitControl(int count)
          if(dailyProfit <= floor)
          {
             LockDailyProfitGiveback();
+            if(autoBrokerTpOwned)
+            {
+               g_state=STATE_SAFE_STOP;
+               g_runAuthorized=false;
+               g_executionStatus="AUTO_DAILY_PROFIT_WAIT_BROKER_TP";
+               return false;
+            }
             if(FlipLockModeEnabled()) FlipLockRemoveAllPending();
             if(count > 0)
                CloseAllBasket("DAILY_PROFIT_GIVEBACK");
@@ -19203,6 +19157,13 @@ bool HandleDailyProfitControl(int count)
    if(dailyProfit >= dailyProfitTarget)
    {
       LockDailyProfitTarget();
+      if(autoBrokerTpOwned)
+      {
+         g_state=STATE_SAFE_STOP;
+         g_runAuthorized=false;
+         g_executionStatus="AUTO_DAILY_PROFIT_WAIT_BROKER_TP";
+         return false;
+      }
       if(FlipLockModeEnabled()) FlipLockRemoveAllPending();
       if(count > 0)
          CloseAllBasket("DAILY_PROFIT_TARGET");
@@ -20495,41 +20456,31 @@ void ManageDynamicProtection()
          g_basketProfitTarget>0.0;
 
       double desiredSL = currentSL;
-      if(autoPosition && g_autoBasketStopPrice>0.0)
-         desiredSL=direction>0
-            ? (currentSL<=0.0 ? g_autoBasketStopPrice : MathMax(currentSL,g_autoBasketStopPrice))
-            : (currentSL<=0.0 ? g_autoBasketStopPrice : MathMin(currentSL,g_autoBasketStopPrice));
-
       if(autoPosition)
       {
-         // AUTO profit protection is based on the original 1R, not on a
-         // moving ATR threshold. +1R => BE+cost buffer; each additional 0.5R
-         // locks another 0.5R. From +2R onward EMA structure may tighten the
-         // stop further, but can never widen the step lock.
-         AutoRecoverInitialRisk(direction);
-         desiredSL=AutoStepProtectedStop(
-            direction,openPrice,marketPrice,desiredSL
-         );
+         // Recover missing initial Broker SL, but never trail before 80%.
+         if(currentSL<=0.0 && g_autoBasketStopPrice>0.0)
+            desiredSL=g_autoBasketStopPrice;
 
-         double initialRisk=AutoInitialRisk();
-         double autoR=initialRisk>0.0
-            ? profitPoints/initialRisk
-            : 0.0;
-         if(autoR>=2.0)
+         // At 80% of the ENTRY->BROKER TP journey, move the Broker SL
+         // to 50% of that same original journey. BUY uses Bid, SELL Ask.
+         double targetPrice=currentTP>0.0 ? currentTP : g_autoBasketTargetPrice;
+         double distanceToTp=direction*(targetPrice-openPrice);
+         double progressToTp=direction*(marketPrice-openPrice);
+         if(targetPrice>0.0 && distanceToTp>_Point &&
+            progressToTp>=distanceToTp*0.80)
          {
-            double emaRef=EmaTrailReference(direction);
-            if(emaRef>0.0)
-            {
-               double emaBufferPoints=MathMax(atr*0.10,initialRisk*0.08);
-               double emaTrail=direction>0
-                  ? emaRef-emaBufferPoints*_Point
-                  : emaRef+emaBufferPoints*_Point;
-
-               if(direction>0 && emaTrail>openPrice && emaTrail<marketPrice)
-                  desiredSL=desiredSL<=0.0 ? emaTrail : MathMax(desiredSL,emaTrail);
-               else if(direction<0 && emaTrail<openPrice && emaTrail>marketPrice)
-                  desiredSL=desiredSL<=0.0 ? emaTrail : MathMin(desiredSL,emaTrail);
-            }
+            double halfwayStop=openPrice+direction*distanceToTp*0.50;
+            double brokerGap=minStopPoints*_Point;
+            bool brokerAllowsHalfway=direction>0
+               ? halfwayStop<tick.bid-brokerGap
+               : halfwayStop>tick.ask+brokerGap;
+            if(brokerAllowsHalfway)
+               desiredSL=desiredSL<=0.0
+                  ? halfwayStop
+                  : (direction>0
+                     ? MathMax(desiredSL,halfwayStop)
+                     : MathMin(desiredSL,halfwayStop));
          }
       }
       else
@@ -20581,6 +20532,12 @@ void ManageDynamicProtection()
          desiredSL = MathMin(desiredSL, tick.bid - minStopPoints * _Point);
       else if(direction < 0 && desiredSL > 0.0)
          desiredSL = MathMax(desiredSL, tick.ask + minStopPoints * _Point);
+      // Broker freeze-distance clamping must never move an existing AUTO SL
+      // backward. If 50% lock is not allowed yet, retry on a later tick.
+      if(autoPosition && currentSL>0.0)
+         desiredSL=direction>0
+            ? MathMax(desiredSL,currentSL)
+            : MathMin(desiredSL,currentSL);
       desiredSL = desiredSL > 0.0 ? NormalizeStopPriceToTick(desiredSL,direction) : 0.0;
 
       // Only Auto owns a system-generated Broker TP. Manual follows the money
@@ -20604,13 +20561,12 @@ void ManageDynamicProtection()
 
       bool slChanged = desiredSL > 0.0 &&
          (currentSL <= 0.0 || MathAbs(desiredSL - currentSL) >= _Point * 2.0);
-      bool clearAutoMoneyTargetTP =
-         autoPosition && g_basketProfitTarget > 0.0 && currentTP > 0.0;
+      // AUTO must never erase its Broker TP because of a money profile.
       bool clearSystemTP =
          !autoFamilyPosition && g_profitTargetMode != "AUTO" && currentTP > 0.0;
-      if(clearAutoMoneyTargetTP || clearSystemTP)
+      if(clearSystemTP)
          desiredTP = 0.0;
-      bool tpChanged = clearAutoMoneyTargetTP || clearSystemTP ||
+      bool tpChanged = clearSystemTP ||
          (desiredTP > 0.0 &&
           (currentTP <= 0.0 || MathAbs(desiredTP - currentTP) >= _Point * 4.0));
 
@@ -20702,7 +20658,6 @@ bool SendMarketOrder(int direction) /* V9_RETRY */
          _Point*2.0,
          MathMax((tick.ask-tick.bid)*1.50,atrPrice*0.18)
       );
-      bool hardMoneyProfitTarget=g_basketProfitTarget>0.0;
       if(MathAbs(entryPrice-autoPlan.entryPrice)>executionMoveTolerance)
       {
          // Do one bounded AUTO-only re-plan at the live quote. This keeps the
@@ -20736,12 +20691,12 @@ bool SendMarketOrder(int direction) /* V9_RETRY */
       }
 
       request.sl=autoPlan.slPrice;
-      request.tp=hardMoneyProfitTarget ? 0.0 : autoPlan.tpPrice;
+      request.tp=autoPlan.tpPrice;
       if(positionsBefore>0)
       {
          if(g_autoBasketStopPrice>0.0)
             request.sl=direction>0 ? MathMax(g_autoBasketStopPrice,request.sl) : MathMin(g_autoBasketStopPrice,request.sl);
-         if(!hardMoneyProfitTarget && g_autoBasketTargetPrice>0.0)
+         if(g_autoBasketTargetPrice>0.0)
             request.tp=g_autoBasketTargetPrice;
       }
       double minimumStopDistance=(double)SymbolInfoInteger(
@@ -20749,9 +20704,9 @@ bool SendMarketOrder(int direction) /* V9_RETRY */
       )*_Point+2.0*_Point;
       bool protectedOrder=direction>0
          ? request.sl<tick.bid-minimumStopDistance &&
-           (hardMoneyProfitTarget || request.tp>tick.bid+minimumStopDistance)
+           request.tp>tick.bid+minimumStopDistance
          : request.sl>tick.ask+minimumStopDistance &&
-           (hardMoneyProfitTarget || request.tp<tick.ask-minimumStopDistance);
+           request.tp<tick.ask-minimumStopDistance;
       if(!protectedOrder)
       {
          g_executionStatus="AUTO_BROKER_PROTECTION_INVALID";

@@ -59,8 +59,8 @@ Forbid $plan 'stopDistance=MathMin(stopDistance,configuredStop);' 'Legacy tight-
 Need $plan 'targetDistanceCap=MathMax(atrPrice*1.35,stopDistance*1.80);' 'AUTO TP cap no longer scales with widened standard SL'
 
 # Post-entry protection remains delayed until +1R and can only tighten.
-Need $dynamic 'AutoStepProtectedStop(' 'AUTO step protection missing'
+Need $dynamic 'progressToTp>=distanceToTp*0.80' 'AUTO 80 percent trigger missing'
 $step = Read-Text 'mt5/include/AutoSwingFilter.mqh'
-Need $step 'if(progressPoints<riskPoints)' 'AUTO BE/trailing must not tighten before +1R'
+Need $dynamic 'openPrice+direction*distanceToTp*0.50' 'AUTO 50 percent entry to TP lock missing'
 
 Write-Host 'AUTO standard initial SL contract PASS'

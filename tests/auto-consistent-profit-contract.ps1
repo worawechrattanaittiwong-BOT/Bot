@@ -37,7 +37,7 @@ Need $vec 'VectorEdgeLiveBuildInput(edgeInput,direction)' 'Vector selected direc
 
 # Existing AUTO-generated broker SL/TP protection remains mandatory.
 Need $send 'request.sl=autoPlan.slPrice;' 'AUTO-generated SL missing'
-Need $send 'request.tp=hardMoneyProfitTarget ? 0.0 : autoPlan.tpPrice;' 'AUTO-generated TP missing'
+Need $send 'request.tp=autoPlan.tpPrice;' 'AUTO Broker TP must be on every new AUTO position'
 Need $send 'AUTO_BROKER_PROTECTION_INVALID' 'AUTO broker-protection validation missing'
 
 # Isolation: AUTO remains its own execution owner and precision code must not call other engines.

@@ -29,13 +29,13 @@ $dynamic=Block $ea 'void ManageDynamicProtection()' 'string ProfitControlModeNam
 $onTick=Block $ea 'void OnTick()' 'void OnTimer()'
 
 Need $onTick 'HARD PROFIT TARGET CONTRACT' 'unified hard target gate'
-Need $onTick 'AUTO_PROFIT_TARGET' 'AUTO hard money close reason'
+Need $onTick '!exclusivelyAutoOwned && g_profitTargetMode == "AUTO"' 'AUTO Broker TP must override legacy EA money-profit closure'
 Need $onTick 'BASKET_PROFIT_TARGET' 'MANUAL hard money close reason'
 Need $onTick 'hardCycleProfit >= g_basketProfitTarget' 'target comparison must close immediately'
-Need $autoManage 'bool hardMoneyProfitTarget=g_basketProfitTarget>0.0;' 'AUTO target must bypass smart-profit exits'
-Need $autoManage 'cycleProfit>0.0 && !hardMoneyProfitTarget' 'AUTO giveback/reversal profit exits must be bypassed when hard target is set'
-Need $send 'request.tp=hardMoneyProfitTarget ? 0.0 : autoPlan.tpPrice;' 'AUTO Broker TP must be disabled when money target is active'
-Need $dynamic 'clearAutoMoneyTargetTP' 'existing AUTO Broker TP must be cleared when hard money target is active'
+Forbid $autoManage 'hardMoneyProfitTarget' 'AUTO must use broker TP, not a money profit exit'
+Forbid $autoManage 'AUTO_EARLY_PROFIT_' 'AUTO must never early-close profit'
+Need $send 'request.tp=autoPlan.tpPrice;' 'AUTO must set real broker TP regardless of old money target'
+Forbid $dynamic 'clearAutoMoneyTargetTP' 'AUTO broker TP may not be erased by legacy money target'
 
 Need $zero 'return MathMax(0.01,g_zeroGridMinNetProfitMoney);' 'ZERO exact configured target'
 Forbid $zero 'g_zeroGridCloseReserveMoney' 'ZERO hidden reserve'
