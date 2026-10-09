@@ -26,10 +26,13 @@ Need $page 'cc-rated-mode-option' 'Rated mode option marker missing'
 Need $page 'cc-race-recommended-badge' 'RACE recommended badge missing'
 Need $css '.cc-bot-v12-mode-select.is-rated-mode' 'Rated selected-state styling missing'
 Need $css '.cc-race-recommended-badge' 'RACE recommendation badge styling missing'
-foreach($mode in @('<option value="AUTO">AUTO</option>','<option value="RACE" className="cc-rated-mode-option">★★★ RACE</option>','<option value="COUNTER" className="cc-rated-mode-option">★★ COUNTER</option>','<option value="FLIP_LOCK" className="cc-rated-mode-option">★★ FLIP LOCK</option>','<option value="MANUAL">MANUAL</option>')) {
-  Need $page $mode "Concise mode dropdown option missing: $mode"
+foreach($mode in @('AUTO','RACE','COUNTER','FLIP_LOCK','MANUAL')) {
+  $expected = 'value="' + $mode + '"'
+  Need $page $expected "Trading mode dropdown option missing: $mode"
+  Need $page ('disabled={modeAvailability.' + $mode + '===false}') "Owner mode control must disable $mode in customer UI"
 }
-Need $page '<option value="ZERO_GRID" className="cc-rated-mode-option" disabled={zeroGridBlockedForSymbol}>★ ZERO GRID' 'ZERO GRID rated dropdown option must remain available for supported symbols and disable on BTC/XBT'
+Need $page 'disabled={zeroGridBlockedForSymbol||modeAvailability.ZERO_GRID===false}' 'ZERO GRID must be blocked for BTC/XBT or disabled by OWNER'
+Need $page 'cc-rated-mode-option' 'Rated mode marker must remain visible'
 Need $page 'Win Rate วันนี้' 'Daily Win Rate KPI missing'
 Need $page 'Drawdown วันนี้' 'Daily Drawdown KPI missing'
 Need $page 'PERFORMANCE BY MODE' 'Per-mode performance card missing'

@@ -21,11 +21,12 @@ new Function("module","exports","require",compiled)(mod,mod.exports,(name)=>{
   throw Error("unexpected import "+name);
 });
 const {TradingModeControlService,canonicalTradingMode,TRADE_MODES}=mod.exports;
-function harness({enabled=true,live=[{id:"i1",ea_version:"1.1.31"}]}={}){
+function harness({enabled=true,live=[{id:"i1",ea_version:"1.1.31"}],savedMode=null}={}){
   const calls=[];let flag=enabled;const affected=[{id:"i1"},{id:"i2"}];
   const query=async(sql,args=[])=>{
     calls.push({sql,args});
     if(sql.includes("FROM trading_mode_controls WHERE mode=$1 FOR UPDATE"))return {rows:[{mode:args[0],enabled:flag}]};
+    if(sql.includes("SELECT canonical_mode_key(settings)"))return {rows:savedMode?[{mode:savedMode}]:[]};
     if(sql.includes("SELECT enabled FROM trading_mode_controls"))return {rows:[{enabled:flag}]};
     if(sql.includes("SELECT bi.id, bi.metrics->>'eaVersion'"))return {rows:live};
     if(sql.includes("UPDATE trading_mode_controls SET")){flag=args[1];return {rows:[]};}
@@ -60,6 +61,12 @@ test("enabled mode sends START within the lock transaction",async()=>{
   assert.match(h.calls.map(x=>x.sql).join("\n"),/pg_advisory_xact_lock\(740096\)/);
   assert.match(h.calls.map(x=>x.sql).join("\n"),/INSERT INTO bot_commands\(bot_instance_id,command\) VALUES\(\$1,'START'\)/);
 });
+test("atomic START re-reads the latest persisted mode",async()=>{
+  const h=harness({enabled:false,savedMode:"RACE"});
+  await assert.rejects(h.service.requestStart("i1","AUTO"),ConflictException);
+  const request=h.calls.find(x=>x.sql.includes("SELECT enabled FROM trading_mode_controls"));
+  assert.deepEqual(request.args,["RACE"]);
+});
 test("re-enabling a mode never auto-starts customers",async()=>{
   const h=harness({enabled:false});
   await h.service.setEnabled("RACE",true,"OWNER","เปิดใช้");
@@ -68,6 +75,12 @@ test("re-enabling a mode never auto-starts customers",async()=>{
 });
 test("ZERO GRID refuses administrative drain with older running EA",async()=>{
   const h=harness({live:[{id:"i1",ea_version:"1.1.30"}]});
+  await assert.rejects(h.service.setEnabled("ZERO_GRID",false,"OWNER","พัก"),ConflictException);
+  assert.equal(h.flag(),true);
+});
+test("ZERO GRID rejects pending cancellations when EA is offline",async()=>{
+  const h=harness({live:[{id:"i1",ea_version:"1.1.31",pending_orders:2,
+    last_seen_at:new Date(Date.now()-120000)}]});
   await assert.rejects(h.service.setEnabled("ZERO_GRID",false,"OWNER","พัก"),ConflictException);
   assert.equal(h.flag(),true);
 });

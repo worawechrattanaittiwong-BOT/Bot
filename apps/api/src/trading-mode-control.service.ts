@@ -31,11 +31,18 @@ export class TradingModeControlService {
     // never overwrite the SAFE_STOP decided by an administrator.
     await this.db.transaction(async tx => {
       await tx.query("SELECT pg_advisory_xact_lock(740096)");
+      // The mode may have changed after the caller first loaded settings.
+      // Authorize the persisted mode under the same transaction/lock.
+      const saved=(await tx.query(
+        "SELECT canonical_mode_key(settings) AS mode FROM bot_settings WHERE bot_instance_id=$1 FOR SHARE",
+        [instanceId]
+      )).rows[0];
+      const effectiveMode = String(saved?.mode || mode);
       const row=(await tx.query(
-        "SELECT enabled FROM trading_mode_controls WHERE mode=$1 FOR SHARE", [mode]
+        "SELECT enabled FROM trading_mode_controls WHERE mode=$1 FOR SHARE", [effectiveMode]
       )).rows[0];
       if (!row?.enabled) throw new ConflictException(
-        "โหมด " + mode + " ถูกผู้ดูแลปิดชั่วคราว · ไม่สามารถเริ่มรอบใหม่ได้"
+        "โหมด " + effectiveMode + " ถูกผู้ดูแลปิดชั่วคราว · ไม่สามารถเริ่มรอบใหม่ได้"
       );
       await tx.query(
         `UPDATE bot_instances SET desired_state='RUNNING',lock_owner=id::text,
@@ -93,7 +100,9 @@ export class TradingModeControlService {
       // SAFE_STOP, so never promise "cancel pending" with a legacy binary.
       if (!enabled && mode === "ZERO_GRID") {
         const live = (await tx.query(`
-          SELECT bi.id, bi.metrics->>'eaVersion' ea_version
+          SELECT bi.id, bi.metrics->>'eaVersion' ea_version,
+                 bi.last_seen_at,
+                 COALESCE(NULLIF(bi.metrics->>'accountScenovaPendingOrders','')::int,0) pending_orders
           FROM bot_instances bi JOIN bot_settings bs ON bs.bot_instance_id=bi.id
           WHERE canonical_mode_key(bs.settings)='ZERO_GRID'
             AND (bi.desired_state='RUNNING' OR bi.actual_state='RUNNING'
@@ -101,6 +110,12 @@ export class TradingModeControlService {
         `)).rows;
         if (live.some((item:any) => !isVersionAtLeast(item.ea_version, "1.1.31"))) {
           throw new ConflictException("พบ ZERO GRID ที่ยังใช้ EA รุ่นเก่า · ต้องอัปเดตเป็น 1.1.31 ก่อน เพื่อให้ยกเลิก Pending Orders อย่างปลอดภัย");
+        }
+        if (live.some((item:any) =>
+          Number(item.pending_orders||0)>0 &&
+          (!item.last_seen_at || Date.now()-new Date(item.last_seen_at).getTime()>25_000)
+        )) {
+          throw new ConflictException("ZERO GRID มี Pending Orders แต่ EA ออฟไลน์ · ต้องตรวจและคืนการเชื่อมต่อก่อน จึงปิดโหมดแบบยกเลิก Pending ได้อย่างปลอดภัย");
         }
       }
       await tx.query(
