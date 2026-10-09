@@ -37,4 +37,6 @@
 .symbolOption,.symbolSelected {padding:9px 14px;min-height:40px;border-radius:9px;border:1px solid #426c98;background:#12263b;color:#dceaff;cursor:pointer;font-weight:650;}
 .symbolSelected {border-color:#80b6fa;background:#194474;color:white;outline:2px solid #5e9be7;}
 .symbolPanel button:disabled {opacity:.6;cursor:default;}
+.confirmSymbol {display:flex;align-items:flex-start;gap:9px;color:#d4e5f9;font-size:13px;line-height:1.5;}
+.confirmSymbol input {width:18px;height:18px;flex-shrink:0;accent-color:#73a8f2;}
 .symbolPanel > button {justify-self:start;padding:10px 14px;min-height:42px;border:1px solid #4483c5;border-radius:10px;background:linear-gradient(120deg,#15416c,#282f65);color:#fff;font-weight:650;cursor:pointer;}

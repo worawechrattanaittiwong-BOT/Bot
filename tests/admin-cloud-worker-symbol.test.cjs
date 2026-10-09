@@ -64,8 +64,10 @@ test("EA attach failure appears only for current failed reload",async()=>{
 });
 test("Cloud Symbol selection requires deliberate admin click and no auto Start",()=>{
   const ui=fs.readFileSync("apps/web/components/AdminCloudMt5Connect.tsx","utf8");
-  assert.match(ui,/onClick=\{\(\)=>setSelectedSymbol\(symbol\)\}/);
-  assert.match(ui,/window\.confirm\(/);
+  assert.match(ui,/setSelectedSymbol\(symbol\)/);
+  assert.match(ui,/checked=\{symbolApproved\}/);
+  assert.match(ui,/!symbolApproved/);
+  assert.doesNotMatch(ui,/window\.confirm\(/);
   assert.match(ui,/adminApi\("\/admin\/slots\/select-symbol"/);
   assert.doesNotMatch(ui,/adminApi\("\/bot\/start"/);
 });

@@ -37,6 +37,7 @@ export function AdminCloudMt5Connect({
   const [error,setError] = useState("");
   const [statusError,setStatusError] = useState("");
   const [selectedSymbol,setSelectedSymbol] = useState("");
+  const [symbolApproved,setSymbolApproved] = useState(false);
   const [acknowledged,setAcknowledged] = useState(false);
 
   const currentBroker = catalog.find(b=>b.code===brokerCode);
@@ -74,6 +75,7 @@ export function AdminCloudMt5Connect({
     setStatusError("");
     setStatus(null);
     setSelectedSymbol("");
+    setSymbolApproved(false);
     setAcknowledged(Boolean(linkedAccount));
     setTradingPassword("");
     setPhase(linkedAccount?"STATUS":"FORM");
@@ -122,9 +124,7 @@ export function AdminCloudMt5Connect({
     const symbol = selectedSymbol.trim();
     // Only permit an explicit admin choice from the current Worker discovery list.
     // The server independently rechecks Worker freshness, slot rights and open trades.
-    if (busy || !status?.symbols?.includes(symbol) || status.symbolConfirmed) return;
-    if (!window.confirm("ยืนยัน Symbol "+symbol+" สำหรับ Cloud VPS Slot #"+slotNumber+
-      "? ระบบจะสั่งเตรียม Chart/EA ใหม่เฉพาะ Slot นี้ โดยไม่ Start การซื้อขาย")) return;
+    if (busy || !symbolApproved || !status?.symbols?.includes(symbol) || status.symbolConfirmed) return;
     setBusy(true);
     setError("");
     try {
@@ -133,6 +133,7 @@ export function AdminCloudMt5Connect({
       });
       onMessage(result?.message||"ยืนยัน Symbol แล้ว · กำลังรอ Cloud Worker เตรียม Chart และ EA");
       setSelectedSymbol("");
+      setSymbolApproved(false);
       await loadStatus();
       await onLinked();
     } catch (e:any) {
@@ -266,13 +267,18 @@ export function AdminCloudMt5Connect({
                       <button type="button" key={symbol}
                         className={selectedSymbol===symbol?styles.symbolSelected:styles.symbolOption}
                         aria-pressed={selectedSymbol===symbol}
-                        disabled={busy} onClick={()=>setSelectedSymbol(symbol)}>
+                        disabled={busy} onClick={()=>{setSelectedSymbol(symbol);setSymbolApproved(false);}}>
                         {symbol}
                       </button>
                     ))}
                   </div>
+                  <label className={styles.confirmSymbol}>
+                    <input type="checkbox" checked={symbolApproved} disabled={busy || !selectedSymbol}
+                      onChange={e=>setSymbolApproved(e.target.checked)}/>
+                    ยืนยันว่าเลือก Symbol ให้ Cloud VPS Slot #{slotNumber} และอนุญาตให้เตรียม Chart/EA โดยไม่ Start การซื้อขาย
+                  </label>
                   <button type="button" className={styles.primary}
-                    disabled={busy || !status.symbols.includes(selectedSymbol)}
+                    disabled={busy || !symbolApproved || !status.symbols.includes(selectedSymbol)}
                     onClick={()=>void confirmDiscoveredSymbol()}>
                     {busy?"กำลังยืนยัน...":"ยืนยัน Symbol และเตรียม Chart/EA"}
                   </button>
