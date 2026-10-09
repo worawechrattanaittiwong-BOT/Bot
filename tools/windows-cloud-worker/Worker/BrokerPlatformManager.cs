@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Security.Cryptography;
 using System.Text;
 
 namespace Scenova.CloudWorker;
@@ -7,7 +6,6 @@ namespace Scenova.CloudWorker;
 internal sealed class BrokerPlatformManager
 {
     private const string ExnessCode = "EXNESS";
-    private const string VantageCode = "VANTAGE";
     private static readonly Uri ExnessInstaller = new(
         "https://download.terminal.free/cdn/web/exness.technologies.ltd/mt5/exness5setup.exe");
 
@@ -27,53 +25,7 @@ internal sealed class BrokerPlatformManager
             server.StartsWith("Exness-", StringComparison.OrdinalIgnoreCase))
             return ExnessCode;
 
-        if (broker.Equals("VANTAGE", StringComparison.OrdinalIgnoreCase) ||
-            broker.Equals("Vantage Markets", StringComparison.OrdinalIgnoreCase) ||
-            broker.Equals("Vantage Markets (Pty) Ltd", StringComparison.OrdinalIgnoreCase) ||
-            server.StartsWith("VantageMarkets-", StringComparison.OrdinalIgnoreCase))
-            return VantageCode;
-
         return "";
-    }
-
-    // Catalog code VANTAGE refers to MT5 broker list item #6 only:
-    // Vantage Markets (Pty) Ltd, prefix VantageMarkets-, never VantageMarketsMU-.
-    public bool VantageEntityMismatch(CloudJob job)
-    {
-        var broker = (job.Broker ?? "").Trim();
-        if (!broker.Equals("VANTAGE", StringComparison.OrdinalIgnoreCase) &&
-            !broker.Equals("Vantage Markets", StringComparison.OrdinalIgnoreCase) &&
-            !broker.Equals("Vantage Markets (Pty) Ltd", StringComparison.OrdinalIgnoreCase))
-            return false;
-        var server = (job.BrokerServer ?? "").Trim();
-        return !System.Text.RegularExpressions.Regex.IsMatch(server,
-            @"^VantageMarkets-(?:Live|Demo)(?: [0-9]{1,3})?$",
-            System.Text.RegularExpressions.RegexOptions.IgnoreCase |
-            System.Text.RegularExpressions.RegexOptions.CultureInvariant);
-    }
-
-    // Vantage is intentionally opt-in: a verified, SHA-256-pinned MT5 installer
-    // must be configured before any Cloud instance can be stopped or migrated.
-    // EXNESS and generic brokers retain their existing behavior.
-    public bool CanInstallWithoutDisrupting(CloudJob job)
-    {
-        if (!string.Equals(RequiredPlatform(job), VantageCode, StringComparison.Ordinal))
-            return true;
-        return VantageInstallerConfigured();
-    }
-
-    private static bool VantageInstallerConfigured()
-    {
-        if (Environment.GetEnvironmentVariable("SCENOVA_VANTAGE_CLOUD_ENABLED") != "1")
-            return false;
-        var hash = Environment.GetEnvironmentVariable("SCENOVA_VANTAGE_MT5_SHA256") ?? "";
-        if (hash.Length != 64 || !hash.All(Uri.IsHexDigit)) return false;
-        var url = Environment.GetEnvironmentVariable("SCENOVA_VANTAGE_MT5_INSTALLER_URL") ?? "";
-        return Uri.TryCreate(url, UriKind.Absolute, out var uri) &&
-            uri.Scheme == Uri.UriSchemeHttps &&
-            uri.Host.Equals("download.terminal.free", StringComparison.OrdinalIgnoreCase) &&
-            uri.AbsolutePath.Contains("vantage", StringComparison.OrdinalIgnoreCase) &&
-            uri.AbsolutePath.EndsWith(".exe", StringComparison.OrdinalIgnoreCase);
     }
 
     public string InstalledPlatform(string instancePath)
@@ -109,20 +61,15 @@ internal sealed class BrokerPlatformManager
         CancellationToken cancellationToken)
     {
         var required = RequiredPlatform(job);
-        if (required != ExnessCode && required != VantageCode)
+        if (!string.Equals(required, ExnessCode, StringComparison.Ordinal))
             throw new InvalidOperationException("BROKER_PLATFORM_UNSUPPORTED");
-        if (required == VantageCode && !VantageInstallerConfigured())
-            throw new InvalidOperationException("VANTAGE_INSTALLER_NOT_VERIFIED");
 
         Directory.CreateDirectory(instancePath);
 
-        var installer = required == ExnessCode
-            ? await GetInstallerAsync(required, ExnessInstaller, cancellationToken)
-            : await GetInstallerAsync(
-                required,
-                new Uri(Environment.GetEnvironmentVariable("SCENOVA_VANTAGE_MT5_INSTALLER_URL")!),
-                cancellationToken,
-                Environment.GetEnvironmentVariable("SCENOVA_VANTAGE_MT5_SHA256"));
+        var installer = await GetInstallerAsync(
+            required,
+            ExnessInstaller,
+            cancellationToken);
 
         var configPath = Path.Combine(instancePath, "Config");
         var configBackup = Path.Combine(
@@ -243,8 +190,7 @@ internal sealed class BrokerPlatformManager
     private async Task<string> GetInstallerAsync(
         string brokerCode,
         Uri uri,
-        CancellationToken cancellationToken,
-        string? expectedSha256 = null)
+        CancellationToken cancellationToken)
     {
         if (!string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) ||
             !string.Equals(uri.Host, "download.terminal.free", StringComparison.OrdinalIgnoreCase))
@@ -254,8 +200,7 @@ internal sealed class BrokerPlatformManager
         Directory.CreateDirectory(dir);
 
         var target = Path.Combine(dir, "mt5setup.exe");
-        if (LooksLikeExecutable(target) &&
-            (expectedSha256 is null || MatchesSha256(target, expectedSha256)))
+        if (LooksLikeExecutable(target))
             return target;
 
         var temp = target + ".tmp";
@@ -282,21 +227,9 @@ internal sealed class BrokerPlatformManager
 
         if (!LooksLikeExecutable(temp))
             throw new InvalidOperationException("BROKER_INSTALLER_PAYLOAD_INVALID");
-        if (expectedSha256 is not null && !MatchesSha256(temp, expectedSha256))
-        {
-            try { File.Delete(temp); } catch { }
-            throw new InvalidOperationException("VANTAGE_INSTALLER_SHA256_MISMATCH");
-        }
 
         File.Move(temp, target, true);
         return target;
-    }
-
-    private static bool MatchesSha256(string path, string expected)
-    {
-        using var file = File.OpenRead(path);
-        return Convert.ToHexString(SHA256.HashData(file))
-            .Equals(expected, StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool LooksLikeExecutable(string path)

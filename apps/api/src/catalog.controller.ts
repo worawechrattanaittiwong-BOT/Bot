@@ -71,40 +71,9 @@ export class CatalogController {
     }
 
     return rows.rows.map((row:any) => {
-      const code = String(row.code || "").toUpperCase();
-      const live = Array.from(liveByBroker.get(code)?.values() || []);
-
-      if (code === "VANTAGE") {
-        // This catalog represents MT5 broker item #6 only:
-        // Vantage Markets (Pty) Ltd / VantageMarkets, not VantageMarketsMU.
-        const isPtyServer = (name:string) =>
-          /^VantageMarkets-(?:Live|Demo)(?: [0-9]{1,3})?$/i.test(name);
-        // For Vantage only, keep the official verified catalog visible even
-        // when one connected Worker knows only a subset of MT5 servers.
-        // Other brokers retain their existing live-directory preference.
-        const all = new Map<string,{serverName:string;environment:string}>();
-        for (const item of Array.isArray(row.servers) ? row.servers : []) {
-          const serverName = String(item.serverName || "").trim();
-          if (isPtyServer(serverName)) all.set(serverName.toLowerCase(),{
-            serverName,
-            environment:String(item.environment || "UNKNOWN").toUpperCase()
-          });
-        }
-        for (const item of live) {
-          // Only include server names from the VantageMarkets company family.
-          if (isPtyServer(item.serverName)) all.set(item.serverName.toLowerCase(),item);
-        }
-        const servers = Array.from(all.values()).sort((a,b) =>
-          (rank[a.environment] ?? 2) - (rank[b.environment] ?? 2) ||
-          a.serverName.localeCompare(b.serverName,undefined,{ numeric:true,sensitivity:"base" })
-        );
-        return {
-          ...row,
-          servers,
-          serverSource:live.some(item => isPtyServer(item.serverName)) ? "VERIFIED_CATALOG_AND_BROKER_MT5_DIRECTORY" : "VERIFIED_CATALOG"
-        };
-      }
-
+      const live = Array.from(
+        liveByBroker.get(String(row.code || "").toUpperCase())?.values() || []
+      );
       if (!live.length) return row;
 
       live.sort((a,b) =>
