@@ -33,9 +33,24 @@ test("Vantage Cloud opt-in requires a checksum-pinned installer before stopping 
   assert.match(platform,/expectedSha256 is null \|\| MatchesSha256\(target, expectedSha256\)/);
   const start=runtime.indexOf("private async Task<bool> EnsureBrokerPlatformAsync");
   const body=runtime.slice(start,runtime.indexOf("private static string NormalizeRuntimeError",start));
-  assert.ok(body.indexOf("CanInstallWithoutDisrupting(job)")<body.indexOf("StopInstance(job.InstanceId)"));
+  assert.ok(body.indexOf("CanInstallWithoutDisrupting(job, instancePath)")<body.indexOf("StopInstance(job.InstanceId)"));
   assert.match(body,/VANTAGE_INSTALLER_NOT_VERIFIED/);
   assert.match(body,/if \(!_brokerPlatforms.NeedsInstall\(job, instancePath\)\)/);
+});
+
+test("Vantage-only fix accepts confirmed per-instance terminal or SHA-pinned local installer",()=>{
+  const platform=read("tools/windows-cloud-worker/Worker/BrokerPlatformManager.cs");
+  const selftest=read("tools/windows-cloud-worker/Worker/ProvisioningSelfTest.cs");
+  const dashboard=read("apps/web/app/dashboard/page.tsx");
+  assert.match(platform,/InstalledPlatform\(instancePath\), VantageCode/);
+  assert.match(platform,/File\.Exists\(Path\.Combine\(instancePath, "terminal64\.exe"\)\)/);
+  assert.match(platform,/VantageCachedInstaller/);
+  assert.match(platform,/MatchesSha256\(VantageCachedInstaller, hash\)/);
+  assert.match(platform,/GetVerifiedVantageInstallerAsync/);
+  assert.match(platform,/required == ExnessCode\s*\? await GetInstallerAsync\(required, ExnessInstaller, cancellationToken\)/);
+  assert.match(selftest,/pre-installed Vantage terminal was incorrectly blocked/);
+  assert.match(selftest,/Vantage marker without terminal bypassed the safety gate/);
+  assert.match(dashboard,/code\.includes\("VANTAGE_INSTALLER_NOT_VERIFIED"\)/);
 });
 
 test("Vantage server reader preserves spaces and excludes Exness without modifying its reader",()=>{
