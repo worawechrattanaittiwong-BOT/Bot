@@ -3262,9 +3262,10 @@ export default function DashboardPage() {
     } else {
       setAccountNumber("");
       setBrokerServer("");
-      if (!brokerCatalog.some(item=>item.code===brokerCode)) {
-        setBrokerCode(brokerCatalog[0]?.code || "EXNESS");
-      }
+      // New VPS connections currently support Exness only.
+      // Preserve saved broker identity during RECONNECT above.
+      setBrokerCode("EXNESS");
+      setCustomBrokerName("");
     }
 
     window.setTimeout(()=>cloudMt5DialogRef.current?.showModal(),0);
@@ -3331,6 +3332,9 @@ export default function DashboardPage() {
         });
       } else {
         if (!accountNumber.trim()) throw new Error("กรุณากรอก MT5 Login");
+        if (brokerCode !== "EXNESS") {
+          throw new Error("ขณะนี้รองรับการเชื่อมต่อบัญชี VPS MT5 ใหม่ผ่าน Exness เท่านั้น · โบรกเกอร์อื่นเตรียมเปิดให้บริการเร็ว ๆ นี้");
+        }
         if (!selectedBrokerName) throw new Error("กรุณาเลือก Broker");
         if (!selectedServer.trim()) throw new Error("กรุณาเลือกหรือพิมพ์ MT5 Server");
 
@@ -5502,20 +5506,31 @@ export default function DashboardPage() {
                 <span>Broker</span>
                 <select
                   className="input"
-                  value={brokerCode}
+                  value={cloudMt5DialogMode === "RECONNECT" ? brokerCode : "EXNESS"}
                   disabled={cloudMt5DialogMode === "RECONNECT"}
                   onChange={e=>{
-                    const nextBroker = e.target.value;
-                    setBrokerCode(nextBroker);
+                    if (e.target.value !== "EXNESS") return;
+                    setBrokerCode("EXNESS");
                     setBrokerServer("");
                     setCloudMt5DialogError("");
                   }}
                   required
                 >
-                  {brokerCatalog.filter(b=>b.code!=="OTHER").map(b=><option key={b.code} value={b.code}>{b.name}</option>)}
-                  {!brokerCatalog.length && <option value="EXNESS">Exness</option>}
-                  <option value="OTHER">อื่น ๆ / กรอกชื่อ Broker เอง</option>
+                  <option value="EXNESS">Exness</option>
+                  {brokerCatalog
+                    .filter(b=>!["EXNESS","OTHER"].includes(String(b.code || "").toUpperCase()))
+                    .map(b=><option key={b.code} value={b.code} disabled>{b.name}{cloudMt5DialogMode === "NEW" ? " · เร็ว ๆ นี้" : ""}</option>)}
+                  <option value="OTHER" disabled>
+                    {cloudMt5DialogMode === "RECONNECT" && brokerCode === "OTHER"
+                      ? customBrokerName || "โบรกเกอร์อื่น ๆ"
+                      : "โบรกเกอร์อื่น ๆ · เตรียมรองรับเร็ว ๆ นี้"}
+                  </option>
                 </select>
+                {cloudMt5DialogMode === "NEW" && (
+                  <small className="cloud-mt5-password-note">
+                    ขณะนี้ SCENOVA เปิดให้เชื่อมต่อผ่าน Exness เท่านั้น · โบรกเกอร์อื่นอยู่ระหว่างเตรียมความพร้อม และจะทยอยเปิดให้บริการเร็ว ๆ นี้
+                  </small>
+                )}
               </label>
 
               {brokerCode === "OTHER" && (
