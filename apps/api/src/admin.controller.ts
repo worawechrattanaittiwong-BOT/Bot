@@ -208,6 +208,14 @@ export class AdminController {
              'symbol_selected_by',bs3.settings->>'symbolSelectedBy',
              'symbol_resolution_mode',bs3.settings->>'symbolResolutionMode',
              'market_watch_symbols',COALESCE(bi3.metrics->'marketWatchSymbols','[]'::jsonb),
+             'symbol_change_status',bi3.metrics->>'symbolChangeStatus',
+             'symbol_change_requested_at',bi3.metrics->>'symbolChangeRequestedAt',
+             'symbol_change_error',bi3.metrics->>'manualMt5ActionMessage',
+             'last_seen_at',bi3.last_seen_at,
+             'mt5_online',(bi3.last_seen_at IS NOT NULL AND bi3.last_seen_at>now()-interval '20 seconds'),
+             'runner_online',EXISTS(SELECT 1 FROM worker_nodes sw
+               WHERE sw.runner_id=bi3.runner_id AND sw.last_seen_at>now()-interval '90 seconds'),
+             'terminal_connected',bi3.metrics->'terminalConnected',
              'provisioning_error',bi3.provisioning_error
            )
            ORDER BY ls3.mode,ls3.slot_number
@@ -1607,6 +1615,7 @@ export class AdminController {
       symbol: resolvedSymbol,
       resolutionMode: "EXACT",
       actionId,
+      symbolChangeRequestedAt: requestedAt,
       message: mode === "CLOUD"
         ? "กำหนด " + resolvedSymbol + " ให้ Slot แล้ว · Cloud Worker กำลัง Reload MT5 ด้วย Symbol นี้ตรง ๆ"
         : "กำหนด " + resolvedSymbol + " ให้ Slot แล้ว · Windows Agent กำลังเชื่อม MT5 ใหม่ด้วย Symbol นี้"

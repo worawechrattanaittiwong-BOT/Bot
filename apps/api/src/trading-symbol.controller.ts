@@ -378,6 +378,7 @@ export class TradingSymbolController {
       requestedSymbol,
       symbol,
       resolvedSymbol: symbol,
+      symbolChangeRequestedAt: requestedAt,
       changed,
       symbolChangeRequiresReconnect: requiresReconnect,
       queued: requiresReconnect,

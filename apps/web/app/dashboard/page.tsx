@@ -7,6 +7,7 @@ import { ScenovaIcon } from "../../components/ScenovaIcon";
 import { ScenovaBrand } from "../../components/ScenovaBrand";
 import { Mt5ConnectionExperience, VpsMigrationProgressCard } from "../../components/Mt5ConnectionExperience";
 import { Mt5ConnectChecklist, isCloudMt5ConnectionComplete } from "../../components/Mt5ConnectChecklist";
+import { SymbolSwitchChecklist, getSymbolSwitchProgress } from "../../components/SymbolSwitchProgress";
 import { EaDecisionCenter } from "../../components/EaDecisionCenter";
 import { BotPerformanceSummary } from "../../components/BotPerformanceSummary";
 import { useSystemPopup } from "../../components/SystemPopupProvider";
@@ -711,7 +712,7 @@ export default function DashboardPage() {
       const ageMs = Date.now() - Number(op?.startedAt || 0);
       if (
         op &&
-        ["MT5_CONNECT","MT5_RECONNECT","MT5_SWITCH","LOCAL_MT5_BIND"].includes(String(op.kind || "")) &&
+        ["MT5_CONNECT","MT5_RECONNECT","MT5_SWITCH","LOCAL_MT5_BIND","SYMBOL_CHANGE"].includes(String(op.kind || "")) &&
         String(op.status || "") !== "SUCCESS" &&
         ageMs >= 0 &&
         ageMs < 12 * 60 * 60 * 1000
@@ -742,7 +743,7 @@ export default function DashboardPage() {
     const userId = String(data?.user?.id || "");
     if (!userId) return;
     const key = "scenova-mt5-operation-v1:" + userId;
-    const persistentKinds = ["MT5_CONNECT","MT5_RECONNECT","MT5_SWITCH","LOCAL_MT5_BIND"];
+    const persistentKinds = ["MT5_CONNECT","MT5_RECONNECT","MT5_SWITCH","LOCAL_MT5_BIND","SYMBOL_CHANGE"];
     try {
       if (
         serverOperation &&
@@ -769,7 +770,7 @@ export default function DashboardPage() {
       localStorage.removeItem("scenova-mt5-operation-v1:" + userId);
     } catch {}
     setServerOperation((current:any) =>
-      current && ["MT5_CONNECT","MT5_RECONNECT","MT5_SWITCH","LOCAL_MT5_BIND"].includes(String(current.kind || ""))
+      current && ["MT5_CONNECT","MT5_RECONNECT","MT5_SWITCH","LOCAL_MT5_BIND","SYMBOL_CHANGE"].includes(String(current.kind || ""))
         ? null
         : current
     );
@@ -1481,6 +1482,7 @@ export default function DashboardPage() {
     ["MT5_CONNECT","MT5_RECONNECT","LOCAL_MT5_BIND"].includes(String(operationTerminal.kind)) ||
     (operationTerminal.kind === "MT5_SWITCH" && operationTerminal.target)
   ));
+  const isSymbolSwitchOperation = operationTerminal?.kind === "SYMBOL_CHANGE";
   const operationTerminalRunning = operationTerminal?.status === "RUNNING";
   const minimizedOperationInStatus =
     serverOperationMinimized && operationTerminalRunning ? operationTerminal : null;
@@ -1540,6 +1542,38 @@ export default function DashboardPage() {
     if (!serverOperation || serverOperation.status !== "RUNNING" || !data?.instance) return;
 
     const op = serverOperation;
+    if (op.kind === "SYMBOL_CHANGE") {
+      // A Symbol change is NOT another account connection. Always require a
+      // Worker/Agent acknowledgement and a NEW matching EA heartbeat.
+      if (String(op.slotId || "") !== String(data.selectedSlot?.id || "")) return;
+      if (!op.acknowledged || !op.requestedAt) return;
+      const metrics = data.instance.metrics || {};
+      const progress = getSymbolSwitchProgress({
+        target:String(op.target || ""),
+        requestedAt:String(op.requestedAt || ""),
+        serverRequestedAt:String(metrics.symbolChangeRequestedAt || ""),
+        acknowledged:true,
+        isCloud:String(data.selectedSlot?.mode || "").toUpperCase() === "CLOUD",
+        runnerOnline:Boolean(data.instance.runner_online),
+        commandStatus:String(metrics.symbolChangeStatus || ""),
+        mt5Online:Boolean(data.instance.mt5_online),
+        brokerConnected:typeof metrics.terminalConnected === "boolean" ? metrics.terminalConnected : null,
+        activeSymbol:String(metrics.symbol || ""),
+        heartbeatAt:String(data.instance.last_seen_at || ""),
+        error:String(metrics.manualMt5ActionMessage || data.instance.provisioning_error || "")
+      });
+      if (progress.failed || progress.complete || progress.message !== op.message) {
+        setServerOperation((current:any)=>current?.id === op.id
+          ? {
+              ...current,
+              status:progress.failed ? "FAILED" : progress.complete ? "SUCCESS" : "RUNNING",
+              message:progress.message,
+              updatedAt:Date.now()
+            }
+          : current);
+      }
+      return;
+    }
     const liveMetrics = data.instance.metrics || {};
     const actual = String(data.instance.actual_state || "").toUpperCase();
     const wanted = String(data.instance.desired_state || "").toUpperCase();
@@ -1714,6 +1748,8 @@ export default function DashboardPage() {
     data?.instance?.desired_state,
     data?.instance?.metrics?.symbol,
     data?.instance?.metrics?.symbolChangeStatus,
+    data?.instance?.metrics?.symbolChangeRequestedAt,
+    data?.instance?.metrics?.manualMt5ActionMessage,
     data?.instance?.metrics?.manualMt5ActionStatus,
     data?.instance?.metrics?.positions,
     data?.instance?.metrics?.accountScenovaPendingOrders,
@@ -1722,6 +1758,9 @@ export default function DashboardPage() {
     discoveredXauSymbols.length,
     serverOperation?.id,
     serverOperation?.status,
+    serverOperation?.acknowledged,
+    serverOperation?.requestedAt,
+    data?.selectedSlot?.id,
     startPhase,
     startTransition.message
   ]);
@@ -1845,8 +1884,8 @@ export default function DashboardPage() {
     if (serverOperation?.status !== "SUCCESS") return;
     // Keep START/other-operation UX unchanged; MT5 connect gets a longer
     // verified-success display so customers can read the six completed stages.
-    const delayMs = ["MT5_CONNECT","MT5_RECONNECT","LOCAL_MT5_BIND","MT5_SWITCH"].includes(String(serverOperation?.kind))
-      ? 4200 : serverOperation?.kind === "START" ? 550 : 1200;
+    const delayMs = ["MT5_CONNECT","MT5_RECONNECT","LOCAL_MT5_BIND","MT5_SWITCH","SYMBOL_CHANGE"].includes(String(serverOperation?.kind))
+      ? 5200 : serverOperation?.kind === "START" ? 550 : 1200;
     const id = window.setTimeout(() => setServerOperation(null), delayMs);
     return () => clearTimeout(id);
   }, [serverOperation?.id, serverOperation?.kind, serverOperation?.status]);
@@ -3852,6 +3891,10 @@ export default function DashboardPage() {
   }
 
   function openTradingSymbolPicker() {
+    if (serverOperation?.status === "RUNNING" && serverOperation?.kind === "SYMBOL_CHANGE") {
+      setServerOperationMinimized(false);
+      return;
+    }
     if (cloudSymbolFlow && !cloudSymbolPickerReady) {
       setError(confirmedCloudSymbol
         ? "กำลังรอ EA ส่ง Market Watch ล่าสุดของ MT5 บัญชีนี้ · กรุณารอสักครู่"
@@ -3872,6 +3915,7 @@ export default function DashboardPage() {
 
   async function applyTradingSymbol() {
     const next = String(tradingSymbol || "").trim();
+    if (serverOperation?.status === "RUNNING" && serverOperation?.kind === "SYMBOL_CHANGE") return;
     if (!selectedSlotIdRef.current) {
       setError("ไม่พบบัญชี MT5 ที่เลือก");
       return;
@@ -3888,9 +3932,27 @@ export default function DashboardPage() {
       return;
     }
 
+    const isPostConnectSwitch = Boolean(confirmedCloudSymbol && desiredTradingSymbol &&
+      desiredTradingSymbol.toUpperCase() !== next.toUpperCase());
+    const operationId = "symbol-" + Date.now();
+    const slotId = selectedSlotIdRef.current;
     setSymbolBusy(true);
     setError("");
     setNotice("");
+    if (isPostConnectSwitch) {
+      setServerOperationMinimized(false);
+      setServerOperation({
+        id:operationId,
+        kind:"SYMBOL_CHANGE",
+        title:"กำลังเปลี่ยน Symbol",
+        target:next,
+        slotId,
+        status:"RUNNING",
+        acknowledged:false,
+        message:"กำลังส่งคำสั่งเปลี่ยน Symbol ให้ Server...",
+        startedAt:Date.now()
+      });
+    }
     try {
       const result = await api(
         "/bot/trading-symbol?slotId=" + encodeURIComponent(selectedSlotIdRef.current),
@@ -3901,10 +3963,31 @@ export default function DashboardPage() {
       );
       const resolved = String(result?.resolvedSymbol || result?.symbol || next);
       symbolDialogRef.current?.close();
-      setNotice("ยืนยัน " + resolved + " แล้ว · กำลังโหลด EA");
-      await load(selectedSlotIdRef.current, true);
+      if (isPostConnectSwitch && result?.symbolChangeRequiresReconnect) {
+        setServerOperation((current:any)=>current?.id === operationId
+          ? {
+              ...current,
+              acknowledged:true,
+              requestedAt:String(result.symbolChangeRequestedAt || ""),
+              target:resolved,
+              message:"Server รับคำสั่งแล้ว · กำลังรอ VPS เปิดกราฟ " + resolved,
+              updatedAt:Date.now()
+            }
+          : current);
+      } else {
+        if (isPostConnectSwitch) setServerOperation((current:any)=>
+          current?.id === operationId ? null : current);
+        setNotice("ยืนยัน " + resolved + " แล้ว · กำลังโหลด EA");
+      }
+      await load(slotId, true);
     } catch (e:any) {
-      setError(String(e?.message || "เปลี่ยน Symbol ไม่สำเร็จ"));
+      const message = String(e?.message || "เปลี่ยน Symbol ไม่สำเร็จ");
+      setError(message);
+      if (isPostConnectSwitch) {
+        setServerOperation((current:any)=>current?.id === operationId
+          ? { ...current, status:"FAILED", message, updatedAt:Date.now() }
+          : current);
+      }
     } finally {
       setSymbolBusy(false);
     }
@@ -4524,7 +4607,7 @@ export default function DashboardPage() {
           >
             <section
               id="cc-server-operation-dialog"
-              className={"cc-server-operation-terminal status-" + String(operationTerminal.status || "RUNNING").toLowerCase() + (isMt5ConnectOperation ? " mt5-connect-view" : "")}
+              className={"cc-server-operation-terminal status-" + String(operationTerminal.status || "RUNNING").toLowerCase() + (isMt5ConnectOperation || isSymbolSwitchOperation ? " mt5-connect-view" : "")}
               role="dialog"
               aria-modal="true"
               aria-labelledby="cc-server-operation-title"
@@ -4533,8 +4616,8 @@ export default function DashboardPage() {
                 <div>
                   <span className="cc-server-operation-icon">&gt;_</span>
                   <div>
-                    <small>{isMt5ConnectOperation ? "สถานะการเชื่อมต่อ" : "SCENOVA OPERATIONS CONSOLE"}</small>
-                    <h3 id="cc-server-operation-title">{isMt5ConnectOperation ? "การเชื่อมต่อ MT5" : operationTerminal.title}</h3>
+                    <small>{isSymbolSwitchOperation ? "สถานะการเปลี่ยน Symbol" : isMt5ConnectOperation ? "สถานะการเชื่อมต่อ" : "SCENOVA OPERATIONS CONSOLE"}</small>
+                    <h3 id="cc-server-operation-title">{isSymbolSwitchOperation ? "กำลังเปลี่ยนเป็น " + String(operationTerminal.target || "Symbol ใหม่") : isMt5ConnectOperation ? "การเชื่อมต่อ MT5" : operationTerminal.title}</h3>
                   </div>
                 </div>
                 {(operationTerminalRunning || operationTerminal.status === "FAILED" || operationTerminal.canClose) && (
@@ -4558,9 +4641,11 @@ export default function DashboardPage() {
               <div className="cc-server-operation-body">
                 <div className="cc-server-operation-line">
                   <span className="prompt">STATUS</span>
-                  <b>{isMt5ConnectOperation
-                    ? (operationTerminal.status === "RUNNING" ? "กำลังเชื่อมต่อ" : operationTerminal.status === "SUCCESS" ? "เชื่อมต่อสำเร็จ" : "พบข้อผิดพลาด")
-                    : (operationTerminal.status === "RUNNING" ? "IN PROGRESS" : operationTerminal.status === "SUCCESS" ? "COMPLETED" : "FAILED")}</b>
+                  <b>{isSymbolSwitchOperation
+                    ? (operationTerminal.status === "RUNNING" ? "กำลังเปลี่ยน Symbol" : operationTerminal.status === "SUCCESS" ? "ยืนยัน Symbol สำเร็จ" : "เปลี่ยนไม่สำเร็จ")
+                    : isMt5ConnectOperation
+                      ? (operationTerminal.status === "RUNNING" ? "กำลังเชื่อมต่อ" : operationTerminal.status === "SUCCESS" ? "เชื่อมต่อสำเร็จ" : "พบข้อผิดพลาด")
+                      : (operationTerminal.status === "RUNNING" ? "IN PROGRESS" : operationTerminal.status === "SUCCESS" ? "COMPLETED" : "FAILED")}</b>
                 </div>
                 {isMt5ConnectOperation && (
                   <Mt5ConnectChecklist
@@ -4590,8 +4675,26 @@ export default function DashboardPage() {
                     onPickSymbol={openTradingSymbolPicker}
                   />
                 )}
+                {isSymbolSwitchOperation && (
+                  <SymbolSwitchChecklist input={{
+                    target:String(operationTerminal.target || ""),
+                    requestedAt:String(operationTerminal.requestedAt || ""),
+                    serverRequestedAt:String(data?.instance?.metrics?.symbolChangeRequestedAt || ""),
+                    acknowledged:Boolean(operationTerminal.acknowledged),
+                    isCloud:cloudSymbolFlow,
+                    runnerOnline:Boolean(data?.instance?.runner_online),
+                    commandStatus:String(data?.instance?.metrics?.symbolChangeStatus || ""),
+                    mt5Online:Boolean(data?.instance?.mt5_online),
+                    brokerConnected:typeof data?.instance?.metrics?.terminalConnected === "boolean"
+                      ? data.instance.metrics.terminalConnected : null,
+                    activeSymbol:String(data?.instance?.metrics?.symbol || ""),
+                    heartbeatAt:String(data?.instance?.last_seen_at || ""),
+                    error:String(data?.instance?.metrics?.manualMt5ActionMessage || operationTerminal.message || ""),
+                    status:String(operationTerminal.status || "RUNNING")
+                  }}/>
+                )}
                 <p aria-live="polite">{operationTerminal.message}</p>
-                {operationTerminal.kind === "SYMBOL" && operationTerminal.target && (
+                {(operationTerminal.kind === "SYMBOL" || isSymbolSwitchOperation) && operationTerminal.target && (
                   <div className="cc-server-operation-meta"><span>SYMBOL</span><b>{operationTerminal.target}</b></div>
                 )}
                 {operationTerminal.kind === "CLOUD_UPDATE" && operationTerminal.target && (

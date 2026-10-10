@@ -7,6 +7,7 @@ import { ScenovaBrand } from "../../components/ScenovaBrand";
 import { CloudConsole } from "../../components/CloudConsole";
 import { AdminCloudMt5Connect } from "../../components/AdminCloudMt5Connect";
 import { useSystemPopup } from "../../components/SystemPopupProvider";
+import { SymbolSwitchChecklist, getSymbolSwitchProgress } from "../../components/SymbolSwitchProgress";
 
 type Menu = "overview"|"customers"|"workers";
 
@@ -47,6 +48,9 @@ export default function AdminPage() {
   const [newAccessGroupName, setNewAccessGroupName] = useState("");
   const [groupAction, setGroupAction] = useState("");
   const [customerAction, setCustomerAction] = useState("");
+  // Admin post-connection Symbol change; never reuses the first-connect wizard.
+  const [symbolSwitchOperation, setSymbolSwitchOperation] = useState<any>(null);
+  const [symbolSwitchMinimized, setSymbolSwitchMinimized] = useState(false);
   const [announcementTitle,setAnnouncementTitle] = useState("ประกาศจาก SCENOVA");
   const [announcementMessage,setAnnouncementMessage] = useState("");
   const [announcementBusy,setAnnouncementBusy] = useState(false);
@@ -90,6 +94,61 @@ export default function AdminPage() {
     else setActiveMenu("overview");
     search();
   }, []);
+
+  useEffect(() => {
+    if (!symbolSwitchOperation || symbolSwitchOperation.status !== "RUNNING" ||
+        !symbolSwitchOperation.acknowledged || !symbolSwitchOperation.requestedAt) return;
+    let cancelled = false;
+    const operation = symbolSwitchOperation;
+    const check = async () => {
+      try {
+        // Admin users already exposes a per-Slot live MT5 snapshot. Poll only
+        // that read endpoint; never call account connection or reload actions.
+        const rows = await adminApi("/admin/users?q=" + encodeURIComponent(operation.userCode));
+        if (cancelled) return;
+        const user = Array.isArray(rows)
+          ? rows.find((item:any)=>String(item.id) === String(operation.userId))
+          : null;
+        const slot = (Array.isArray(user?.customer_slots) ? user.customer_slots : [])
+          .find((item:any)=>String(item.id) === String(operation.slotId));
+        if (!slot) return;
+        const snapshot = {
+          target:String(operation.target),
+          requestedAt:String(operation.requestedAt),
+          serverRequestedAt:String(slot.symbol_change_requested_at || ""),
+          acknowledged:true,
+          isCloud:String(slot.mode || "").toUpperCase() === "CLOUD",
+          runnerOnline:Boolean(slot.runner_online),
+          commandStatus:String(slot.symbol_change_status || ""),
+          mt5Online:Boolean(slot.mt5_online),
+          brokerConnected:typeof slot.terminal_connected === "boolean"
+            ? slot.terminal_connected : null,
+          activeSymbol:String(slot.active_symbol || ""),
+          heartbeatAt:String(slot.last_seen_at || ""),
+          error:String(slot.symbol_change_error || slot.provisioning_error || "")
+        };
+        const progress = getSymbolSwitchProgress(snapshot);
+        setSymbolSwitchOperation((current:any)=>current?.id === operation.id
+          ? {
+              ...current,
+              snapshot,
+              message:progress.message,
+              status:progress.failed ? "FAILED" : progress.complete ? "SUCCESS" : "RUNNING"
+            }
+          : current);
+        if (progress.complete) {
+          setMessage("เปลี่ยนเป็น " + operation.target + " สำเร็จ · EA ยืนยัน Symbol และ MT5 เชื่อมต่อแล้ว");
+          void search(undefined,true);
+        }
+      } catch {
+        // Temporary dashboard/network failure is not proof of MT5 failure.
+      }
+    };
+    void check();
+    const timer = window.setInterval(check,2500);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [symbolSwitchOperation?.id, symbolSwitchOperation?.status,
+      symbolSwitchOperation?.acknowledged, symbolSwitchOperation?.requestedAt]);
 
   function switchMenu(menu: Menu) {
     setActiveMenu(menu);
@@ -307,6 +366,10 @@ export default function AdminPage() {
 
   async function selectCustomerSlotSymbol(user:any, slot:any) {
     if (!slot?.id || !slot?.account_number) return;
+    if (symbolSwitchOperation?.status === "RUNNING") {
+      setSymbolSwitchMinimized(false);
+      return;
+    }
     const label=(slot.mode==="CLOUD"?"Cloud VPS":"Local MT5")+" Slot #"+Number(slot.slot_number||0);
     const marketWatch=Array.isArray(slot.market_watch_symbols)
       ? slot.market_watch_symbols
@@ -335,16 +398,52 @@ export default function AdminPage() {
       return;
     }
 
+    const confirmedAccount = String(slot.symbol_resolution_mode || "").toUpperCase() === "EXACT";
+    const changing = confirmedAccount && symbol.toUpperCase() !== current.toUpperCase();
+    const operationId = "admin-symbol-" + Date.now();
+    if (changing) {
+      setSymbolSwitchMinimized(false);
+      setSymbolSwitchOperation({
+        id:operationId,
+        userId:user.id,
+        userCode:String(user.user_code || ""),
+        slotId:slot.id,
+        target:symbol,
+        isCloud:String(slot.mode || "").toUpperCase() === "CLOUD",
+        acknowledged:false,
+        status:"RUNNING",
+        message:"กำลังส่งคำสั่งเปลี่ยน Symbol ให้ Server...",
+        startedAt:Date.now()
+      });
+    }
     setCustomerAction("slot-select-symbol:"+slot.id);
     try {
       const result=await adminApi("/admin/slots/select-symbol", {
         method:"POST",
         body:JSON.stringify({ userId:user.id, slotId:slot.id, symbol })
       });
-      setMessage(result?.message || "กำหนด Symbol ให้ Slot แล้ว");
+      if (changing) {
+        const acceptedSymbol = String(result?.symbol || symbol);
+        setSymbolSwitchOperation((current:any)=>current?.id === operationId
+          ? {
+              ...current,
+              target:acceptedSymbol,
+              acknowledged:true,
+              requestedAt:String(result?.symbolChangeRequestedAt || ""),
+              message:"Server รับคำสั่งแล้ว · กำลังรอ VPS เปิดกราฟ " + acceptedSymbol
+            }
+          : current);
+      } else {
+        setMessage(result?.message || "กำหนด Symbol ให้ Slot แล้ว");
+      }
       await search(undefined,true);
     } catch(e:any) {
       setMessage(e.message);
+      if (changing) {
+        setSymbolSwitchOperation((current:any)=>current?.id === operationId
+          ? {...current,status:"FAILED",message:String(e?.message || "เปลี่ยน Symbol ไม่สำเร็จ")}
+          : current);
+      }
     } finally {
       setCustomerAction("");
     }
@@ -1746,6 +1845,70 @@ export default function AdminPage() {
 
         {activeMenu === "workers" && <CloudConsole/>}
       </main>
+
+      {symbolSwitchOperation && symbolSwitchMinimized && (
+        <button type="button" className="btn" onClick={()=>setSymbolSwitchMinimized(false)}
+          style={{position:"fixed",right:16,bottom:18,zIndex:1199,borderColor:"#7e6be1",background:"#181532",color:"#e3ddff"}}>
+          {symbolSwitchOperation.status === "RUNNING" ? "กำลังเปลี่ยน " : "สถานะ "}
+          {symbolSwitchOperation.target} · ดูความคืบหน้า
+        </button>
+      )}
+      {symbolSwitchOperation && !symbolSwitchMinimized && (
+        <div className="cc-server-operation-backdrop">
+          <section className={"cc-server-operation-terminal mt5-connect-view status-"+
+            String(symbolSwitchOperation.status).toLowerCase()}
+            role="dialog" aria-modal="true" aria-labelledby="admin-symbol-switch-heading">
+            <header>
+              <div>
+                <span className="cc-server-operation-icon">&gt;_</span>
+                <div>
+                  <small>สถานะการเปลี่ยน Symbol · Cloud/Local MT5</small>
+                  <h3 id="admin-symbol-switch-heading">กำลังเปลี่ยนเป็น {symbolSwitchOperation.target}</h3>
+                </div>
+              </div>
+              <button type="button" aria-label="ย่อสถานะหรือปิด"
+                onClick={()=>{
+                  if(symbolSwitchOperation.status==="RUNNING") setSymbolSwitchMinimized(true);
+                  else setSymbolSwitchOperation(null);
+                }}>×</button>
+            </header>
+            <div className="cc-server-operation-body">
+              <div className="cc-server-operation-line">
+                <span className="prompt">STATUS</span>
+                <b>{symbolSwitchOperation.status==="SUCCESS" ? "ยืนยัน Symbol สำเร็จ" :
+                  symbolSwitchOperation.status==="FAILED" ? "เปลี่ยนไม่สำเร็จ" : "กำลังเปลี่ยน Symbol"}</b>
+              </div>
+              <SymbolSwitchChecklist input={symbolSwitchOperation.snapshot
+                ? {...symbolSwitchOperation.snapshot,status:String(symbolSwitchOperation.status)}
+                : {
+                target:String(symbolSwitchOperation.target || ""),
+                requestedAt:String(symbolSwitchOperation.requestedAt || ""),
+                acknowledged:Boolean(symbolSwitchOperation.acknowledged),
+                isCloud:Boolean(symbolSwitchOperation.isCloud),
+                runnerOnline:false,
+                mt5Online:false,
+                status:String(symbolSwitchOperation.status)
+              }}/>
+              <p aria-live="polite">{symbolSwitchOperation.message}</p>
+              <div className="cc-server-operation-meta">
+                <span>SYMBOL</span><b>{symbolSwitchOperation.target}</b>
+              </div>
+              <div className="cc-server-operation-progress" aria-hidden="true"><i/></div>
+            </div>
+            <footer>
+              <span>{symbolSwitchOperation.status==="RUNNING"
+                ? "ระบบติดตามสถานะจาก VPS/MT5 จริง · ย่อหน้าต่างแล้วทำงานต่อได้"
+                : symbolSwitchOperation.status==="SUCCESS"
+                  ? "EA ยืนยัน Symbol ใหม่แล้ว · พร้อมเริ่มบอทด้วยตนเอง"
+                  : "ระบบยังไม่ยืนยัน Symbol ใหม่ · กรุณาตรวจสอบรายละเอียด"}</span>
+              <button type="button" className="btn" onClick={()=>{
+                if(symbolSwitchOperation.status==="RUNNING") setSymbolSwitchMinimized(true);
+                else setSymbolSwitchOperation(null);
+              }}>{symbolSwitchOperation.status==="RUNNING" ? "ย่อไว้ · ทำงานต่อ" : "ปิด"}</button>
+            </footer>
+          </section>
+        </div>
+      )}
     </div>
   );
 }
