@@ -23,17 +23,23 @@ export type SymbolSwitchObservation = {
 export function getSymbolSwitchProgress(input: SymbolSwitchObservation) {
   const stage = String(input.commandStatus || "").toUpperCase();
   const requested = Date.parse(input.requestedAt || "");
-  const received = input.acknowledged && Boolean(input.requestedAt) &&
-    input.serverRequestedAt === input.requestedAt;
-  const workerDone = received && (stage === "RELOADED" || stage === "READY");
-  const freshHeartbeat = received && Number.isFinite(requested) &&
+  const heartbeatAfterRequest = Number.isFinite(requested) &&
     Boolean(input.heartbeatAt) && Date.parse(String(input.heartbeatAt)) > requested &&
-    input.mt5Online;
-  const mt5Connected = Boolean(freshHeartbeat && input.brokerConnected !== false);
-  const activeMatches = Boolean(mt5Connected && workerDone &&
+    input.mt5Online && input.brokerConnected !== false;
+  const eaOnTarget = Boolean(heartbeatAfterRequest &&
     String(input.activeSymbol || "").toUpperCase() === input.target.toUpperCase());
+  // START may clear symbolChangeStatus/symbolChangeRequestedAt after the reload.
+  // A NEW authenticated EA heartbeat on the exact requested Symbol is stronger
+  // confirmation than those transient queue fields; never treat old telemetry
+  // or an API acknowledgement alone as success.
+  const received = input.acknowledged && Boolean(input.requestedAt) &&
+    (input.serverRequestedAt === input.requestedAt || eaOnTarget);
   const failed = String(input.status || "").toUpperCase() === "FAILED" ||
     (received && stage === "FAILED");
+  const workerDone = received && !failed &&
+    (stage === "RELOADED" || stage === "READY" || eaOnTarget);
+  const mt5Connected = Boolean(received && heartbeatAfterRequest);
+  const activeMatches = Boolean(mt5Connected && workerDone && eaOnTarget && !failed);
   const steps = [
     {
       title:"รับคำสั่งเปลี่ยน Symbol",

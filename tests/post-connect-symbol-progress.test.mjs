@@ -39,7 +39,7 @@ test("Does not report success merely because API accepted a Symbol switch",()=>{
 });
 
 test("Old reload acknowledgement cannot confirm new Symbol operation",()=>{
-  const r=getSymbolSwitchProgress({...caseBase,serverRequestedAt:"2026-10-10T11:59:00Z",commandStatus:"RELOADED",activeSymbol:"BTCUSDm"});
+  const r=getSymbolSwitchProgress({...caseBase,serverRequestedAt:"2026-10-10T11:59:00Z",commandStatus:"RELOADED",activeSymbol:"BTCUSDm",heartbeatAt:"2026-10-10T11:59:59.000Z"});
   assert.equal(r.complete,false);
   assert.equal(r.steps[0].state,"active");
 });
@@ -58,6 +58,29 @@ test("Only a fresh matching EA heartbeat completes XAU to BTC change",()=>{
   assert.equal(r.failed,false);
   assert(r.steps.every(x=>x.state==="done"));
   assert.match(r.message,/BTCUSDm/);
+});
+
+test("New EA heartbeat confirms BTC after bot Start clears transient Symbol queue fields",()=>{
+  const r=getSymbolSwitchProgress({
+    ...caseBase,
+    serverRequestedAt:"",
+    commandStatus:"",
+    activeSymbol:"BTCUSDm",
+    heartbeatAt:"2026-10-10T12:00:05.000Z"
+  });
+  assert.equal(r.complete,true);
+  assert(r.steps.every(x=>x.state==="done"));
+});
+
+test("Cleared queue fields with a stale heartbeat must not claim success",()=>{
+  const r=getSymbolSwitchProgress({
+    ...caseBase,
+    serverRequestedAt:"",
+    commandStatus:"",
+    activeSymbol:"BTCUSDm",
+    heartbeatAt:"2026-10-10T11:59:59.000Z"
+  });
+  assert.equal(r.complete,false);
 });
 
 test("Worker failure never means connection failure or success",()=>{
