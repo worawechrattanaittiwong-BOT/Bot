@@ -1039,10 +1039,16 @@ export default function DashboardPage() {
       try {
         const result = await api("/bot/trading-symbol?slotId=" + encodeURIComponent(slotId));
         if (cancelled) return;
-        const symbols = Array.isArray(result?.discoveredXauSymbols)
-          ? result.discoveredXauSymbols
+        // Initial Cloud connection stays XAU-only. Once the customer has
+        // confirmed the first symbol, switching uses the EA's exact Market Watch.
+        const connected = String(result?.symbolResolutionMode || "").toUpperCase() === "EXACT";
+        const choices = connected ? result?.marketWatchSymbols : result?.discoveredXauSymbols;
+        const symbols = Array.isArray(choices)
+          ? choices
               .map((item:any)=>String(item || "").trim())
-              .filter((item:string)=>item.toUpperCase().startsWith("XAU") && TRADING_SYMBOL_PATTERN.test(item))
+              .filter((item:string)=>
+                TRADING_SYMBOL_PATTERN.test(item) &&
+                (connected || item.toUpperCase().startsWith("XAU")))
           : [];
         setDiscoveredXauSymbols(symbols);
         const discoveredReady = result?.symbolDiscoveryReady === true && symbols.length > 0;
@@ -3847,7 +3853,9 @@ export default function DashboardPage() {
 
   function openTradingSymbolPicker() {
     if (cloudSymbolFlow && !cloudSymbolPickerReady) {
-      setError("กำลังรอ VPS ตรวจสอบ Symbol XAU จาก Market Watch ของ MT5 บัญชีนี้ · กรุณารอสักครู่");
+      setError(confirmedCloudSymbol
+        ? "กำลังรอ EA ส่ง Market Watch ล่าสุดของ MT5 บัญชีนี้ · กรุณารอสักครู่"
+        : "กำลังรอ VPS ตรวจสอบ Symbol XAU จาก Market Watch ของ MT5 บัญชีนี้ · กรุณารอสักครู่");
       return;
     }
     const desired = desiredTradingSymbol;
@@ -3868,8 +3876,15 @@ export default function DashboardPage() {
       setError("ไม่พบบัญชี MT5 ที่เลือก");
       return;
     }
-    if (!next || next.length > 64 || !TRADING_SYMBOL_PATTERN.test(next) || !next.toUpperCase().startsWith("XAU")) {
-      setError("กรุณาเลือก Symbol XAU จากรายการที่ VPS ตรวจพบใน MT5 บัญชีนี้");
+    if (!next || next.length > 64 || !TRADING_SYMBOL_PATTERN.test(next) ||
+        (!confirmedCloudSymbol && !next.toUpperCase().startsWith("XAU"))) {
+      setError(confirmedCloudSymbol
+        ? "กรุณาเลือก Symbol จากรายการ Market Watch ล่าสุดของบัญชี MT5 นี้"
+        : "กรุณาเลือก Symbol XAU จากรายการที่ VPS ตรวจพบใน MT5 บัญชีนี้");
+      return;
+    }
+    if (!tradingSymbolOptions.some(item=>item.toUpperCase()===next.toUpperCase())) {
+      setError("กรุณาเลือก Symbol ที่ระบบตรวจพบจาก MT5 บัญชีนี้จริง");
       return;
     }
 
@@ -4665,7 +4680,7 @@ export default function DashboardPage() {
         >
           <div className="cc-symbol-picker-card">
             <div className="cc-symbol-picker-head">
-              <b>เลือก Symbol ทองคำ</b>
+              <b>{confirmedCloudSymbol ? "เลือก Symbol จาก Market Watch" : "เลือก Symbol ทองคำ"}</b>
               <button type="button" aria-label="ปิด" disabled={symbolBusy} onClick={()=>symbolDialogRef.current?.close()}>×</button>
             </div>
             <select
@@ -4676,7 +4691,7 @@ export default function DashboardPage() {
             >
               {tradingSymbolOptions.length
                 ? tradingSymbolOptions.map(item=><option key={item} value={item}>{tradingSymbolLabel(item)}</option>)
-                : <option value="">กำลังตรวจหา XAU จาก MT5...</option>}
+                : <option value="">{confirmedCloudSymbol ? "กำลังตรวจ Market Watch ล่าสุด..." : "กำลังตรวจหา XAU จาก MT5..."}</option>}
             </select>
             <button
               type="button"

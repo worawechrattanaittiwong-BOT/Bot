@@ -14,6 +14,7 @@ import { randomUUID } from "node:crypto";
 import { DbService } from "./db.service";
 import { isVersionAtLeast } from "./release-version";
 import { CryptoService, JwtGuard } from "./security";
+import { connectedAccountSymbolChoices, exactConnectedAccountSymbol } from "./connected-symbol-choices";
 
 const SYMBOL_AGENT_VERSION = "1.0.11";
 
@@ -130,9 +131,14 @@ export class TradingSymbolController {
       : "";
     const activeSymbol = normalizeSymbol(metrics.symbol);
     const mode = String(instance.mode || "").toUpperCase();
-    const availableSymbols = mode === "CLOUD"
-      ? xauSymbols(instance.discovered_xau_symbols)
-      : marketWatchSymbols(metrics).filter(item => item.toUpperCase().startsWith("XAU"));
+    // First connection remains Worker XAU-only. Only an already confirmed
+    // account may change to another exact symbol from its live EA Market Watch.
+    const connected = Boolean(instance.mt5_account_id && confirmedSymbol);
+    const availableSymbols = connected
+      ? connectedAccountSymbolChoices(metrics)
+      : mode === "CLOUD"
+        ? xauSymbols(instance.discovered_xau_symbols)
+        : marketWatchSymbols(metrics).filter(item => item.toUpperCase().startsWith("XAU"));
     const tradeMode = parseTradeMode(metrics.symbolTradeMode);
     const tradingAllowed = symbolTradeAllowed(tradeMode);
     const matches = Boolean(
@@ -147,15 +153,17 @@ export class TradingSymbolController {
       symbolResolutionMode: resolutionMode || "DISCOVERY",
       explicitSymbol: confirmedSymbol || null,
       activeSymbol: activeSymbol || null,
-      instrumentProfile: "GOLD",
-      supportedControlModes: ["AUTO", "RACE", "COUNTER", "FLIP_LOCK", "ZERO_GRID", "MANUAL"],
-      blockedControlModes: [],
+      instrumentProfile: isBitcoinSymbol(confirmedSymbol) ? "CRYPTO" : "GOLD",
+      supportedControlModes: isBitcoinSymbol(confirmedSymbol)
+        ? ["AUTO", "RACE", "COUNTER", "FLIP_LOCK", "MANUAL"]
+        : ["AUTO", "RACE", "COUNTER", "FLIP_LOCK", "ZERO_GRID", "MANUAL"],
+      blockedControlModes: isBitcoinSymbol(confirmedSymbol) ? ["ZERO_GRID"] : [],
       brokerSymbolTradeMode: tradeMode,
       brokerTradingAllowed: tradingAllowed,
       marketWatchSymbols: availableSymbols,
-      discoveredXauSymbols: availableSymbols,
+      discoveredXauSymbols: availableSymbols.filter(item => item.toUpperCase().startsWith("XAU")),
       symbolDiscoveryPending: !confirmedSymbol,
-      symbolDiscoveryReady: Boolean(instance.terminal_online && availableSymbols.length > 0),
+      symbolDiscoveryReady: Boolean((connected ? instance.mt5_online : mode === "CLOUD" ? instance.terminal_online : instance.mt5_online) && availableSymbols.length > 0),
       terminalOnline: Boolean(instance.terminal_online),
       workerOnline: Boolean(instance.worker_online),
       symbolReady: matches && tradingAllowed !== false,
@@ -182,40 +190,56 @@ export class TradingSymbolController {
     @Body() body: { symbol?: string }
   ) {
     const requestedSymbol = normalizeSymbol(body.symbol);
-    if (!requestedSymbol || !requestedSymbol.toUpperCase().startsWith("XAU")) {
-      throw new BadRequestException(
-        "กรุณาเลือก Symbol XAU จากรายการที่ตรวจพบใน MT5 บัญชีนี้"
-      );
+    if (!requestedSymbol) {
+      throw new BadRequestException("Symbol ไม่ถูกต้อง");
     }
 
     const instance = await this.selectedInstance(req.user.sub, slotId);
     const mode = String(instance.mode || "").toUpperCase();
     const isCloud = mode === "CLOUD";
-    const liveSymbols = isCloud
-      ? xauSymbols(instance.discovered_xau_symbols)
-      : xauSymbols(marketWatchSymbols(instance.metrics));
-    const sourceReady = isCloud ? Boolean(instance.terminal_online) : Boolean(instance.mt5_online);
+    const alreadyConnected = Boolean(instance.mt5_account_id)
+      && String(instance.settings?.symbolResolutionMode || "").toUpperCase() === "EXACT"
+      && Boolean(normalizeSymbol(instance.settings?.startupSymbol || instance.settings?.symbol));
+    // Do not modify the first-connect onboarding contract.
+    if (!alreadyConnected && !requestedSymbol.toUpperCase().startsWith("XAU")) {
+      throw new BadRequestException("กรุณาเลือก Symbol XAU จากรายการที่ตรวจพบใน MT5 บัญชีนี้");
+    }
+    const liveSymbols = alreadyConnected
+      ? connectedAccountSymbolChoices(instance.metrics)
+      : isCloud
+        ? xauSymbols(instance.discovered_xau_symbols)
+        : xauSymbols(marketWatchSymbols(instance.metrics));
+    const sourceReady = alreadyConnected
+      ? Boolean(instance.mt5_online)
+      : isCloud ? Boolean(instance.terminal_online) : Boolean(instance.mt5_online);
     if (!sourceReady || liveSymbols.length === 0) {
       throw new ConflictException(
-        isCloud
-          ? "ยังเลือก Symbol ไม่ได้ · VPS กำลังเชื่อม MT5 และตรวจรายการ XAU จากบัญชีจริง"
-          : "ยังเลือก Symbol ไม่ได้ · รอ MT5 ส่งรายการ Symbol ล่าสุดก่อน"
+        alreadyConnected
+          ? "ยังเลือก Symbol ไม่ได้ · รอ EA ส่ง Market Watch ล่าสุดจากบัญชี MT5 ที่เชื่อมอยู่"
+          : isCloud
+            ? "ยังเลือก Symbol ไม่ได้ · VPS กำลังเชื่อม MT5 และตรวจรายการ XAU จากบัญชีจริง"
+            : "ยังเลือก Symbol ไม่ได้ · รอ MT5 ส่งรายการ Symbol ล่าสุดก่อน"
       );
     }
 
-    const symbol = liveSymbols.find(
-      item => item.toUpperCase() === requestedSymbol.toUpperCase()
-    );
+    const symbol = alreadyConnected
+      ? exactConnectedAccountSymbol(requestedSymbol, instance.metrics)
+      : liveSymbols.find(item => item.toUpperCase() === requestedSymbol.toUpperCase());
     if (!symbol) {
       throw new BadRequestException(
-        "Symbol นี้ไม่ได้อยู่ในรายการ XAU ที่ตรวจพบจาก MT5 บัญชีจริง กรุณาเลือกจากรายการที่ระบบแสดง"
+        alreadyConnected
+          ? "Symbol นี้ไม่มีอยู่ใน Market Watch ล่าสุดของ MT5 บัญชีที่เชื่อมอยู่ กรุณาเลือกชื่อที่ระบบแสดงตรง ๆ"
+          : "Symbol นี้ไม่ได้อยู่ในรายการ XAU ที่ตรวจพบจาก MT5 บัญชีจริง กรุณาเลือกจากรายการที่ระบบแสดง"
       );
     }
 
     const positions = Math.max(0, Number(instance.positions || 0));
-    if (positions > 0) {
+    const pendingOrders = Math.max(0, Number(instance.metrics?.accountScenovaPendingOrders || 0));
+    if (positions > 0 || (alreadyConnected && (pendingOrders > 0 ||
+      String(instance.actual_state || "").toUpperCase() === "RUNNING" ||
+      String(instance.desired_state || "").toUpperCase() === "RUNNING"))) {
       throw new ConflictException(
-        "กรุณาหยุดบอทและปิด Position ให้หมดก่อนเปลี่ยน Symbol"
+        "กรุณาหยุดบอทและให้ Position / Pending Order เป็น 0 ก่อนเปลี่ยน Symbol"
       );
     }
     const waitingForFlat = false;

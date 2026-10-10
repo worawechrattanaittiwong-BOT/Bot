@@ -20,6 +20,7 @@ import { ReferralService } from "./referral.service";
 import { TrialAuthorizationService } from "./trial-authorization.service";
 import { createHash, randomBytes, randomUUID } from "crypto";
 import { versionAtLeast } from "./cloud-server-release";
+import { exactConnectedAccountSymbol } from "./connected-symbol-choices";
 
 @Controller("admin")
 @UseGuards(AdminGuard)
@@ -205,6 +206,7 @@ export class AdminController {
              'active_symbol',bi3.metrics->>'symbol',
              'requested_symbol',COALESCE(NULLIF(bs3.settings->>'startupSymbol',''),NULLIF(bs3.settings->>'symbol','')),
              'symbol_selected_by',bs3.settings->>'symbolSelectedBy',
+             'symbol_resolution_mode',bs3.settings->>'symbolResolutionMode',
              'market_watch_symbols',COALESCE(bi3.metrics->'marketWatchSymbols','[]'::jsonb),
              'provisioning_error',bi3.provisioning_error
            )
@@ -1370,7 +1372,7 @@ export class AdminController {
       return "";
     }
     const raw = String(settings?.startupSymbol || settings?.symbol || "").trim();
-    return /^XAU[A-Za-z0-9._#-]{3,29}$/i.test(raw) ? raw : "";
+    return /^[A-Za-z0-9._#-]{1,64}$/.test(raw) ? raw : "";
   }
 
   private async adminCustomerSlot(userId: string, slotId: string) {
@@ -1386,6 +1388,7 @@ export class AdminController {
          bi.execution_generation,
          bi.runtime_stop_state,
          bi.metrics,
+         bi.last_seen_at,
          bi.agent_last_seen_at,
          bs.settings,
          a.account_number,
@@ -1417,8 +1420,11 @@ export class AdminController {
     }
 
     const requestedSymbol = String(body.symbol || "").trim();
-    if (!/^XAU[A-Za-z0-9._#-]{3,29}$/i.test(requestedSymbol)) {
-      throw new ConflictException("กรุณาเลือก Symbol XAU ที่ตรวจพบจาก MT5 บัญชีจริง");
+    const postConnect = String(slot.settings?.symbolResolutionMode || "").toUpperCase() === "EXACT"
+      && Boolean(String(slot.settings?.startupSymbol || slot.settings?.symbol || "").trim());
+    if (!/^[A-Za-z0-9._#-]{1,64}$/.test(requestedSymbol) ||
+        (!postConnect && !/^XAU[A-Za-z0-9._#-]{3,29}$/i.test(requestedSymbol))) {
+      throw new ConflictException("กรุณาเลือก Symbol ที่ MT5 บัญชีนี้ตรวจพบจริง");
     }
 
     const positions = Math.max(0, Number(slot.positions || 0));
@@ -1428,13 +1434,29 @@ export class AdminController {
       positions > 0 || pendingOrders > 0 ||
       (
         String(slot.actual_state || "").toUpperCase() === "RUNNING" &&
-        !firstConnectPrimePending
+        (postConnect || !firstConnectPrimePending)
       )
     ) {
       throw new ConflictException("กรุณาหยุดบอทและให้ Position / Pending Order เป็น 0 ก่อนเปลี่ยน Symbol");
     }
 
     const mode = String(slot.mode || "").toUpperCase();
+    // Post-connect switching requires a recent EA heartbeat from this
+    // already-bound MT5 account. First-time Worker XAU discovery is unchanged.
+    const recentEa = Boolean(slot.last_seen_at &&
+      Date.now() - new Date(slot.last_seen_at).getTime() <= 90_000);
+    if (postConnect && !recentEa) {
+      throw new ConflictException("ต้องรอ EA ส่ง Market Watch ล่าสุดจากบัญชี MT5 นี้ก่อนเปลี่ยน Symbol");
+    }
+    const exactMarketWatchSymbol = postConnect
+      ? exactConnectedAccountSymbol(requestedSymbol, slot.metrics)
+      : "";
+    if (postConnect && !exactMarketWatchSymbol) {
+      throw new ConflictException("Symbol นี้ไม่อยู่ใน Market Watch ล่าสุดของบัญชี MT5 นี้");
+    }
+    if (postConnect && String(slot.desired_state || "").toUpperCase() === "RUNNING") {
+      throw new ConflictException("กรุณาหยุดบอทก่อนเปลี่ยน Symbol");
+    }
     if (mode === "CLOUD") {
       if (!slot.runner_id) throw new ConflictException("Cloud VPS Slot นี้ยังไม่ได้เชื่อม Worker");
       if (String(slot.runtime_stop_state || "NONE").toUpperCase() !== "NONE") {
@@ -1452,15 +1474,18 @@ export class AdminController {
       if (!versionAtLeast(workerVersion, "2.2.36")) {
         throw new ConflictException("Cloud Worker ยังไม่รองรับ Symbol Discovery รุ่นใหม่ · กรุณาอัปเดต Server เป็น Worker 2.2.36+ ก่อน");
       }
-      const workerInstance = Array.isArray(worker?.telemetry?.instances)
-        ? worker.telemetry.instances.find((item:any)=>String(item?.instanceId || "")===String(slot.instance_id))
-        : null;
-      const discovered = Array.isArray(workerInstance?.discoveredXauSymbols)
-        ? workerInstance.discoveredXauSymbols.map((item:any)=>String(item || "").trim()).filter(Boolean)
-        : [];
-      const exact = discovered.find((item:string)=>item.toUpperCase()===requestedSymbol.toUpperCase());
-      if (!exact) {
-        throw new ConflictException("Symbol นี้ไม่ได้อยู่ในรายการ XAU ที่ VPS ตรวจพบจาก MT5 บัญชีจริง");
+      if (!postConnect) {
+        // First connect: preserve the original Worker XAU discovery guard.
+        const workerInstance = Array.isArray(worker?.telemetry?.instances)
+          ? worker.telemetry.instances.find((item:any)=>String(item?.instanceId || "")===String(slot.instance_id))
+          : null;
+        const discovered = Array.isArray(workerInstance?.discoveredXauSymbols)
+          ? workerInstance.discoveredXauSymbols.map((item:any)=>String(item || "").trim()).filter(Boolean)
+          : [];
+        const exact = discovered.find((item:string)=>item.toUpperCase()===requestedSymbol.toUpperCase());
+        if (!exact) {
+          throw new ConflictException("Symbol นี้ไม่ได้อยู่ในรายการ XAU ที่ VPS ตรวจพบจาก MT5 บัญชีจริง");
+        }
       }
     } else if (mode === "LOCAL") {
       const agentOnline = Boolean(
@@ -1471,6 +1496,7 @@ export class AdminController {
       throw new ConflictException("โหมด Slot ไม่ถูกต้อง");
     }
 
+    const resolvedSymbol = postConnect ? exactMarketWatchSymbol : requestedSymbol;
     const requestedAt = new Date().toISOString();
     await this.db.query(
       `INSERT INTO bot_settings(bot_instance_id,settings,updated_at)
@@ -1489,7 +1515,7 @@ export class AdminController {
          ),
          '{symbolSelectedBy}',to_jsonb('ADMIN'::text),true
        ),updated_at=now()`,
-      [slot.instance_id, requestedSymbol]
+      [slot.instance_id, resolvedSymbol]
     );
 
     await this.db.query(
@@ -1502,7 +1528,7 @@ export class AdminController {
              'symbolChangeSource','ADMIN_EXACT'
            )
        WHERE id=$1`,
-      [slot.instance_id, mode === "CLOUD" ? "STOPPED" : "SAFE_STOP", requestedSymbol, requestedAt]
+      [slot.instance_id, mode === "CLOUD" ? "STOPPED" : "SAFE_STOP", resolvedSymbol, requestedAt]
     );
 
     let actionId: string | null = null;
@@ -1547,7 +1573,7 @@ export class AdminController {
            'manualMt5ActionMessage',$4::text
          )
          WHERE id=$1`,
-        [slot.instance_id, actionId, requestedAt, "Admin เลือก Symbol " + requestedSymbol + " ให้ Slot นี้"]
+        [slot.instance_id, actionId, requestedAt, "Admin เลือก Symbol " + resolvedSymbol + " ให้ Slot นี้"]
       );
       await this.db.query(
         "UPDATE bot_commands SET status='ACKED',acked_at=now() WHERE bot_instance_id=$1 AND status IN ('PENDING','DELIVERED') AND command IN ('START','SAFE_STOP')",
@@ -1569,6 +1595,7 @@ export class AdminController {
       accountNumber: slot.account_number || null,
       brokerServer: slot.broker_server || null,
       requestedSymbol,
+      resolvedSymbol,
       resolutionMode: "EXACT",
       actionId
     });
@@ -1577,12 +1604,12 @@ export class AdminController {
       ok: true,
       slotId: slot.id,
       mode,
-      symbol: requestedSymbol,
+      symbol: resolvedSymbol,
       resolutionMode: "EXACT",
       actionId,
       message: mode === "CLOUD"
-        ? "กำหนด " + requestedSymbol + " ให้ Slot แล้ว · Cloud Worker กำลัง Reload MT5 ด้วย Symbol นี้ตรง ๆ"
-        : "กำหนด " + requestedSymbol + " ให้ Slot แล้ว · Windows Agent กำลังเชื่อม MT5 ใหม่ด้วย Symbol นี้"
+        ? "กำหนด " + resolvedSymbol + " ให้ Slot แล้ว · Cloud Worker กำลัง Reload MT5 ด้วย Symbol นี้ตรง ๆ"
+        : "กำหนด " + resolvedSymbol + " ให้ Slot แล้ว · Windows Agent กำลังเชื่อม MT5 ใหม่ด้วย Symbol นี้"
     };
   }
 

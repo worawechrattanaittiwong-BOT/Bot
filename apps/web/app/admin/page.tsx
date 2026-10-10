@@ -319,11 +319,13 @@ export default function AdminPage() {
       title:"เลือก Symbol · "+label,
       tone:"warning",
       message:
-        "กำหนด Symbol ให้ Slot นี้โดยตรง เช่น XAUUSD, XAUUSDm, XAUUSDc\n"+
+        (String(slot.symbol_resolution_mode || "").toUpperCase() === "EXACT"
+          ? "เปลี่ยน Symbol ของบัญชีที่เชื่อมแล้ว · เลือกชื่อจาก Market Watch ให้ตรงทุกตัว เช่น XAUUSDm, BTCUSDm\n"
+          : "ยืนยัน Symbol ครั้งแรก · เลือก XAU ที่ระบบตรวจพบจาก MT5 เท่านั้น เช่น XAUUSDm\n")+
         (current ? "\nค่าที่เลือกอยู่: "+current : "")+
         (marketWatch.length ? "\nMarket Watch ล่าสุด: "+marketWatch.join(", ") : "\nยังไม่มี Market Watch ล่าสุด · สามารถพิมพ์ Symbol ที่เห็นใน MT5 ของลูกค้าได้")+
         "\n\nต้องหยุดบอทและไม่มี Position / Pending Order ก่อนดำเนินการ",
-      placeholder:current || "เช่น XAUUSD",
+      placeholder:current || "เช่น XAUUSDm",
       confirmLabel:"ใช้ Symbol นี้"
     });
     if(typed===null) return;

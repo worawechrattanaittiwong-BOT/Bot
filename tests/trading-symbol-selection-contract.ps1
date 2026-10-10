@@ -43,10 +43,18 @@ Assert-Contains $dashboard 'symbolAutoPromptedSlotRef' 'Web opens customer confi
 Assert-Contains $dashboard 'tradingSymbolOptions.map(item=><option key={item} value={item}' 'Web renders exact discovered choices without guessed suffixes'
 Assert-Contains $dashboard 'Market Watch' 'Web shows Market Watch discovery progress'
 
-# The API may accept only an exact XAU string reported by the actual runtime.
+# Initial Cloud MT5 selection is XAU-only. Confirmed-account switching allows exact EA Market Watch choices including BTC.
 Assert-Contains $controller 'discovered_xau_symbols' 'Cloud symbol endpoint reads Worker discovery telemetry'
 Assert-Contains $controller 'discoveredXauSymbols' 'Cloud symbol endpoint exposes discovered XAU symbols'
-Assert-Contains $controller '!requestedSymbol.toUpperCase().startsWith("XAU")' 'non-XAU selection is rejected'
+Assert-Contains $controller '!alreadyConnected && !requestedSymbol.toUpperCase().startsWith("XAU")' 'first Cloud MT5 connection rejects non-XAU selection'
+Assert-Contains $controller 'connectedAccountSymbolChoices(instance.metrics)' 'post-connect Symbol picker reads exact EA Market Watch'
+Assert-Contains $controller 'exactConnectedAccountSymbol(requestedSymbol, instance.metrics)' 'post-connect selection requires an exact MT5 symbol'
+Assert-Contains $controller 'pendingOrders > 0' 'confirmed account Symbol changes block pending orders'
+Assert-Contains $dashboard 'const choices = connected ? result?.marketWatchSymbols : result?.discoveredXauSymbols' 'initial and post-connect Symbol choices remain isolated'
+Assert-Contains $adminApi 'const postConnect = String(slot.settings?.symbolResolutionMode' 'admin Symbol flow distinguishes initial vs confirmed account'
+Assert-Contains $ownerApi 'const postConnect = String(slot.settings?.symbolResolutionMode' 'owner Symbol flow distinguishes initial vs confirmed account'
+Assert-Contains $adminApi 'exactConnectedAccountSymbol(requestedSymbol, slot.metrics)' 'admin exact Symbol provenance required'
+Assert-Contains $ownerApi 'exactConnectedAccountSymbol(requestedSymbol, slot.metrics)' 'owner exact Symbol provenance required'
 Assert-Contains $controller 'item.toUpperCase() === requestedSymbol.toUpperCase()' 'selection must exactly match a discovered broker symbol'
 Assert-Contains $controller "'symbolResolutionMode','EXACT'" 'customer confirmation persists exact mode'
 Assert-Contains $controller "'symbolDiscoveryState','CONFIRMED'" 'customer confirmation closes discovery'

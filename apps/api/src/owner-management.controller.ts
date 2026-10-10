@@ -16,6 +16,7 @@ import { PromotionInput, PromotionService } from "./promotion.service";
 import { getUsdThbQuote, usdCentsToThbSatang } from "./commerce-currency";
 import { randomUUID } from "crypto";
 import { versionAtLeast } from "./cloud-server-release";
+import { exactConnectedAccountSymbol } from "./connected-symbol-choices";
 import { ProductionHardeningService } from "./production-hardening.service";
 import { MaintenanceService } from "./maintenance.service";
 
@@ -214,7 +215,7 @@ export class OwnerManagementService {
       SELECT
         ls.*,u.user_code,
         bi.id instance_id,bi.mt5_account_id,bi.actual_state,bi.desired_state,bi.runner_id,
-        bi.execution_generation,bi.runtime_stop_state,bi.metrics,bi.agent_last_seen_at,
+        bi.execution_generation,bi.runtime_stop_state,bi.metrics,bi.agent_last_seen_at,bi.last_seen_at,
         bs.settings,a.account_number,a.broker_server,
         COALESCE(NULLIF(bi.metrics->>'positions','')::int,0) positions,
         COALESCE(NULLIF(bi.metrics->>'accountScenovaPendingOrders','')::int,0) pending_orders
@@ -264,8 +265,11 @@ export class OwnerManagementService {
     if (!slot) throw new ConflictException("ไม่พบ Slot ของลูกค้ารายนี้");
     if (!slot.instance_id || !slot.mt5_account_id) throw new ConflictException("Slot นี้ยังไม่ได้เชื่อมบัญชี MT5");
     const requestedSymbol = String(input.symbol || "").trim();
-    if (!/^XAU[A-Za-z0-9._#-]{3,29}$/i.test(requestedSymbol)) {
-      throw new ConflictException("กรุณาเลือก Symbol XAU ที่ตรวจพบจาก MT5 บัญชีจริง");
+    const postConnect = String(slot.settings?.symbolResolutionMode || "").toUpperCase() === "EXACT"
+      && Boolean(String(slot.settings?.startupSymbol || slot.settings?.symbol || "").trim());
+    if (!/^[A-Za-z0-9._#-]{1,64}$/.test(requestedSymbol) ||
+        (!postConnect && !/^XAU[A-Za-z0-9._#-]{3,29}$/i.test(requestedSymbol))) {
+      throw new ConflictException("กรุณาเลือก Symbol ที่ MT5 บัญชีนี้ตรวจพบจริง");
     }
     if (
       Number(slot.positions || 0) > 0 ||
@@ -276,6 +280,17 @@ export class OwnerManagementService {
       throw new ConflictException("กรุณาหยุดบอทและให้ Position / Pending Order เป็น 0 ก่อนเปลี่ยน Symbol");
     }
     const mode = String(slot.mode || "").toUpperCase();
+    const recentEa = Boolean(slot.last_seen_at &&
+      Date.now() - new Date(slot.last_seen_at).getTime() <= 90_000);
+    if (postConnect && !recentEa) {
+      throw new ConflictException("ต้องรอ EA ส่ง Market Watch ล่าสุดจาก MT5 บัญชีนี้ก่อนเปลี่ยน Symbol");
+    }
+    const exactMarketWatchSymbol = postConnect
+      ? exactConnectedAccountSymbol(requestedSymbol, slot.metrics)
+      : "";
+    if (postConnect && !exactMarketWatchSymbol) {
+      throw new ConflictException("Symbol นี้ไม่อยู่ใน Market Watch ล่าสุดของบัญชี MT5 นี้");
+    }
     if (mode === "CLOUD") {
       if (!slot.runner_id) throw new ConflictException("Cloud VPS Slot นี้ยังไม่ได้เชื่อม Worker");
       if (String(slot.runtime_stop_state || "NONE").toUpperCase() !== "NONE") {
@@ -287,28 +302,29 @@ export class OwnerManagementService {
       if (!versionAtLeast(worker?.telemetry?.version, "2.2.36")) {
         throw new ConflictException("Cloud Worker ยังไม่รองรับ Symbol Discovery รุ่นใหม่");
       }
-      const workerInstance = Array.isArray(worker?.telemetry?.instances)
-        ? worker.telemetry.instances.find((item:any)=>String(item?.instanceId || "")===String(slot.instance_id))
-        : null;
-      const discovered = Array.isArray(workerInstance?.discoveredXauSymbols)
-        ? workerInstance.discoveredXauSymbols.map((item:any)=>String(item || "").trim()).filter(Boolean)
-        : [];
-      if (!discovered.some((item:string)=>item.toUpperCase()===requestedSymbol.toUpperCase())) {
-        throw new ConflictException("Symbol นี้ไม่ได้อยู่ในรายการ XAU ที่ VPS ตรวจพบจาก MT5 บัญชีจริง");
+      if (!postConnect) {
+        // Keep the first-connection Worker XAU validation unchanged.
+        const workerInstance = Array.isArray(worker?.telemetry?.instances)
+          ? worker.telemetry.instances.find((item:any)=>String(item?.instanceId || "")===String(slot.instance_id))
+          : null;
+        const discovered = Array.isArray(workerInstance?.discoveredXauSymbols)
+          ? workerInstance.discoveredXauSymbols.map((item:any)=>String(item || "").trim()).filter(Boolean)
+          : [];
+        if (!discovered.some((item:string)=>item.toUpperCase()===requestedSymbol.toUpperCase())) {
+          throw new ConflictException("Symbol นี้ไม่ได้อยู่ในรายการ XAU ที่ VPS ตรวจพบจาก MT5 บัญชีจริง");
+        }
       }
     } else if (mode === "LOCAL") {
       const online = Boolean(slot.agent_last_seen_at && Date.now()-new Date(slot.agent_last_seen_at).getTime()<=90_000);
       if (!online) throw new ConflictException("Windows Agent ของ Slot นี้ Offline");
-      const liveSymbols = Array.isArray(slot.metrics?.marketWatchSymbols)
-        ? slot.metrics.marketWatchSymbols.map((item:any)=>String(item||"").trim()).filter(Boolean)
-        : [];
-      if (!liveSymbols.some((item:string)=>item.toUpperCase()===requestedSymbol.toUpperCase())) {
+      if (!postConnect && !exactConnectedAccountSymbol(requestedSymbol, slot.metrics)) {
         throw new ConflictException("Symbol นี้ไม่มีอยู่ใน Market Watch จริงของบัญชี MT5");
       }
     } else {
       throw new ConflictException("โหมด Slot ไม่ถูกต้อง");
     }
 
+    const resolvedSymbol = postConnect ? exactMarketWatchSymbol : requestedSymbol;
     const requestedAt = new Date().toISOString();
     await this.db.query(`
       INSERT INTO bot_settings(bot_instance_id,settings,updated_at)
@@ -325,7 +341,7 @@ export class OwnerManagementService {
           '{symbolSelectedBy}',to_jsonb('OWNER_MOBILE'::text),true
         ),
         updated_at=now()
-    `, [slot.instance_id, requestedSymbol]);
+    `, [slot.instance_id, resolvedSymbol]);
     await this.db.query(`
       UPDATE bot_instances SET desired_state=$2,
         metrics=COALESCE(metrics,'{}'::jsonb)||jsonb_build_object(
@@ -333,7 +349,7 @@ export class OwnerManagementService {
           'symbolChangeRequestedAt',$4::text,'symbolChangeSource','OWNER_MOBILE_EXACT'
         )
       WHERE id=$1
-    `, [slot.instance_id, mode==="CLOUD" ? "STOPPED" : "SAFE_STOP", requestedSymbol, requestedAt]);
+    `, [slot.instance_id, mode==="CLOUD" ? "STOPPED" : "SAFE_STOP", resolvedSymbol, requestedAt]);
 
     let actionId: string | null = null;
     if (mode === "CLOUD") {
@@ -354,7 +370,7 @@ export class OwnerManagementService {
           'manualMt5ActionSource','OWNER_MOBILE_EXACT_SYMBOL',
           'manualMt5ActionMessage',$4::text
         ) WHERE id=$1
-      `, [slot.instance_id, actionId, requestedAt, "Owner Mobile เลือก Symbol " + requestedSymbol]);
+      `, [slot.instance_id, actionId, requestedAt, "Owner Mobile เลือก Symbol " + resolvedSymbol]);
       await this.db.query(
         "UPDATE bot_commands SET status='ACKED',acked_at=now() WHERE bot_instance_id=$1 AND status IN ('PENDING','DELIVERED') AND command IN ('START','SAFE_STOP')",
         [slot.instance_id]

@@ -60,11 +60,12 @@ Need $api 'function isBitcoinTradingSymbol' 'Bot API BTC classifier missing'
 Need $api 'ZERO GRID ไม่รองรับ BTC/XBT' 'Bot API must reject BTC ZERO GRID'
 Need $api 'BTC/XBT รองรับ AUTO, RACE, COUNTER, FLIP LOCK และ MANUAL เท่านั้น' 'Start guard must reject stale BTC ZERO GRID'
 
-# Cloud Symbol provisioning is intentionally XAU-only. BTC/XBT runtime support remains
-# in the EA and settings safety gates, but the Cloud discovery/selection endpoint
-# must never offer or infer BTC symbols.
-Need $symbolApi '!requestedSymbol.toUpperCase().startsWith("XAU")' 'Cloud Trading Symbol API must reject non-XAU selection'
-Need $symbolApi 'discoveredXauSymbols' 'Cloud Trading Symbol API must use MT5-discovered XAU names only'
+# Initial Cloud MT5 provisioning remains XAU-only. Existing accounts may
+# switch to BTC/XBT only when their EA confirms the exact Market Watch name.
+# Neither path may infer or manufacture a broker suffix.
+Need $symbolApi '!alreadyConnected && !requestedSymbol.toUpperCase().startsWith("XAU")' 'Initial Cloud MT5 connection must reject non-XAU selection'
+Need $symbolApi 'connectedAccountSymbolChoices(instance.metrics)' 'Connected-account Symbol changes must use the real EA Market Watch'
+Need $symbolApi 'discoveredXauSymbols' 'Initial Cloud discovery retains Worker XAU-only options'
 Need $symbolApi 'item.toUpperCase() === requestedSymbol.toUpperCase()' 'Cloud Trading Symbol API must require an exact discovered symbol'
 
 Need $web 'const isBitcoinSymbol = tradingSymbol.includes("BTC") || tradingSymbol.includes("XBT");' 'Dashboard BTC classifier missing'
