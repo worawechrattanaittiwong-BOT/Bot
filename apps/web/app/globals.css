@@ -9665,6 +9665,68 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
   color-scheme:dark;
 }
 
+/* Compact Exness Partner signup beside Broker in the VPS MT5 dialog only. */
+.cloud-mt5-broker-signup-row{
+  display:flex;
+  align-items:stretch;
+  gap:9px;
+  min-width:0;
+}
+.cloud-mt5-broker-signup-row .input{
+  flex:1 1 auto;
+  min-width:0;
+  width:0;
+}
+.cloud-mt5-exness-signup{
+  flex:0 0 auto;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+  min-height:48px;
+  padding:0 11px;
+  border:1px solid #f2c945;
+  border-radius:12px;
+  background:linear-gradient(135deg,#ffe377,#f8cf36 60%,#ecb92e);
+  color:#211901;
+  box-shadow:0 5px 16px rgba(244,191,42,.12),inset 0 1px rgba(255,255,255,.35);
+  font-size:12px;
+  font-weight:850;
+  white-space:nowrap;
+  cursor:pointer;
+  transition:filter .16s ease,transform .16s ease;
+}
+.cloud-mt5-exness-signup:hover:not(:disabled){
+  filter:brightness(1.07);
+  transform:translateY(-1px);
+}
+.cloud-mt5-exness-signup:focus-visible{
+  outline:2px solid #ffe58c;
+  outline-offset:3px;
+}
+.cloud-mt5-exness-signup:disabled{
+  opacity:.52;
+  cursor:not-allowed;
+  filter:saturate(.55);
+}
+.cloud-mt5-exness-signup-mark{
+  display:grid;
+  place-items:center;
+  width:21px;
+  height:21px;
+  border:1px solid rgba(48,34,1,.24);
+  border-radius:7px;
+  background:rgba(255,255,255,.25);
+  font-size:13px;
+  font-weight:950;
+}
+@media(max-width:380px){
+  .cloud-mt5-broker-signup-row{gap:6px}
+  .cloud-mt5-exness-signup{padding:0 8px;gap:4px;font-size:11px}
+  .cloud-mt5-exness-signup-mark{width:18px;height:18px;font-size:11px}
+}
+
+
 .cloud-mt5-dialog select.input option,
 .cloud-mt5-dialog select.input optgroup{
   background:#080d16;

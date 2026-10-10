@@ -386,6 +386,7 @@ export default function DashboardPage() {
   const [accountNumber, setAccountNumber] = useState("");
   const [brokerCatalog, setBrokerCatalog] = useState<BrokerCatalog[]>([]);
   const [brokerCode, setBrokerCode] = useState("EXNESS");
+  const [exnessSignupUrl, setExnessSignupUrl] = useState("");
   const [customBrokerName, setCustomBrokerName] = useState("");
   const [brokerServer, setBrokerServer] = useState("");
   const [cloudMt5DialogError, setCloudMt5DialogError] = useState("");
@@ -656,6 +657,31 @@ export default function DashboardPage() {
       void load(undefined, true);
     }, 5000);
     return () => clearInterval(id);
+  }, []);
+
+  // Use the same public Partner signup link and platform selection as Login.
+  // The button never creates an MT5 connection or changes broker settings.
+  useEffect(() => {
+    let mounted = true;
+    const ua = navigator.userAgent || "";
+    const platform = /Android|iPhone|iPad|iPod|Mobile/i.test(ua) ||
+      (/Macintosh/i.test(ua) && navigator.maxTouchPoints > 1)
+      ? "MOBILE"
+      : "WEB";
+    fetch(
+      API_URL + "/api/public/brokers/exness/signup?platform=" + encodeURIComponent(platform),
+      { cache: "no-store" }
+    )
+      .then(async response => {
+        const payload = await response.json().catch(() => null);
+        if (!response.ok || !payload?.active || !/^https:\/\//i.test(String(payload.url || ""))) {
+          throw new Error("Exness signup unavailable");
+        }
+        return String(payload.url);
+      })
+      .then(url => { if (mounted) setExnessSignupUrl(url); })
+      .catch(() => { if (mounted) setExnessSignupUrl(""); });
+    return () => { mounted = false; };
   }, []);
 
   useEffect(() => {
@@ -5502,19 +5528,21 @@ export default function DashboardPage() {
                 />
               </label>
 
-              <label className="field">
+              <div className="field">
                 <span>Broker</span>
-                <select
-                  className="input"
-                  value={cloudMt5DialogMode === "RECONNECT" ? brokerCode : "EXNESS"}
-                  disabled={cloudMt5DialogMode === "RECONNECT"}
-                  onChange={e=>{
+                <div className="cloud-mt5-broker-signup-row">
+                  <select
+                    aria-label="Broker"
+                    className="input"
+                    value={cloudMt5DialogMode === "RECONNECT" ? brokerCode : "EXNESS"}
+                    disabled={cloudMt5DialogMode === "RECONNECT"}
+                    onChange={e=>{
                     if (e.target.value !== "EXNESS") return;
                     setBrokerCode("EXNESS");
                     setBrokerServer("");
                     setCloudMt5DialogError("");
                   }}
-                  required
+                    required
                 >
                   <option value="EXNESS">Exness</option>
                   {brokerCatalog
@@ -5525,13 +5553,30 @@ export default function DashboardPage() {
                       ? customBrokerName || "โบรกเกอร์อื่น ๆ"
                       : "โบรกเกอร์อื่น ๆ · เตรียมรองรับเร็ว ๆ นี้"}
                   </option>
-                </select>
+                  </select>
+                  {cloudMt5DialogMode === "NEW" && (
+                    <button
+                      type="button"
+                      className="cloud-mt5-exness-signup"
+                      disabled={!exnessSignupUrl}
+                      title={exnessSignupUrl ? "สมัคร Exness ผ่าน Partner SCENOVA (เปิดแท็บใหม่)" : "ลิงก์สมัคร Exness ยังไม่พร้อมใช้งาน"}
+                      aria-label="สมัคร Exness ผ่าน Partner SCENOVA (เปิดแท็บใหม่)"
+                      onClick={() => {
+                        if (exnessSignupUrl) window.open(exnessSignupUrl, "_blank", "noopener,noreferrer");
+                      }}
+                    >
+                      <span className="cloud-mt5-exness-signup-mark" aria-hidden="true">E</span>
+                      <span>สมัคร Exness</span>
+                      <span aria-hidden="true">↗</span>
+                    </button>
+                  )}
+                </div>
                 {cloudMt5DialogMode === "NEW" && (
                   <small className="cloud-mt5-password-note">
                     ขณะนี้ SCENOVA เปิดให้เชื่อมต่อผ่าน Exness เท่านั้น · โบรกเกอร์อื่นอยู่ระหว่างเตรียมความพร้อม และจะทยอยเปิดให้บริการเร็ว ๆ นี้
                   </small>
                 )}
-              </label>
+              </div>
 
               {brokerCode === "OTHER" && (
                 <label className="field">
