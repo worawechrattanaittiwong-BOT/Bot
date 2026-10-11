@@ -24,6 +24,10 @@ const mt5EaNavItem: NavItem = {
   section:"TRADING", key:"trading-account", href:"/dashboard?view=account", icon:"account",
   label:"MT5 & EA", hint:"Local / Cloud accounts & EA management"
 };
+const followMasterNavItem: NavItem = {
+  section:"TRADING", key:"follow-master", href:"/follow-master", icon:"copy",
+  label:"Follow Master", hint:"ติดตามโหมดและคำสั่ง START / SAFE STOP (เตรียมระบบ)"
+};
 const fleetMonitorNavItem: NavItem = {
   section:"TRADING", key:"trading-fleet-monitor", href:"/fleet-monitor", icon:"overview",
   label:"Trading Fleet Monitor", hint:"All MT5 slots, live performance & risk monitoring"
@@ -53,6 +57,7 @@ const inviteEarnNavItem: NavItem = {
 export const sharedTradingNavItems: NavItem[] = [
   controlCenterNavItem,
   mt5EaNavItem,
+  followMasterNavItem,
   fleetMonitorNavItem,
   performanceNavItem
 ];
@@ -60,6 +65,7 @@ export const sharedTradingNavItems: NavItem[] = [
 export const ownerNavItems: NavItem[] = [
   controlCenterNavItem,
   mt5EaNavItem,
+  followMasterNavItem,
   fleetMonitorNavItem,
   performanceNavItem,
   brokerNavItem,
