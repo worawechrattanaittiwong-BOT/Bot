@@ -10369,6 +10369,29 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
   background:rgba(110,83,198,.48);
   color:#fff;
 }
+.vps-slot-manager .vps-slot-card footer .btn.vps-slot-disconnect-btn{
+  border-color:rgba(235,176,117,.5);
+  background:rgba(91,58,35,.22);
+  color:#f4d1ad;
+}
+.vps-slot-manager .vps-slot-card footer .btn.vps-slot-disconnect-btn:disabled{
+  opacity:.55;
+  cursor:not-allowed;
+}
+.vps-slot-manager .vps-slot-disconnect-feedback{
+  margin-top:4px;
+  border-radius:7px;
+  padding:7px 9px;
+  background:rgba(145,116,219,.12);
+  color:#d8ccff;
+  font-size:11px;
+  line-height:1.5;
+}
+.vps-slot-manager .vps-slot-disconnect-feedback.error{
+  background:rgba(168,71,71,.14);
+  border:1px solid rgba(220,120,120,.3);
+  color:#f2b6b6;
+}
 @media(max-width:960px){
   .vps-slot-manager .vps-slot-grid{
     grid-template-columns:repeat(2,minmax(0,1fr));

@@ -391,6 +391,9 @@ export default function DashboardPage() {
   const [customBrokerName, setCustomBrokerName] = useState("");
   const [brokerServer, setBrokerServer] = useState("");
   const [cloudMt5DialogError, setCloudMt5DialogError] = useState("");
+  const [disconnectingSlotId, setDisconnectingSlotId] = useState("");
+  const [disconnectStatus, setDisconnectStatus] = useState("");
+  const [disconnectError, setDisconnectError] = useState<{slotId:string;message:string}|null>(null);
   const [tradingPassword, setTradingPassword] = useState("");
   const [cloudMt5DialogMode, setCloudMt5DialogMode] = useState<"NEW"|"RECONNECT">("NEW");
   const [cloudMt5DialogAccountId, setCloudMt5DialogAccountId] = useState("");
@@ -3249,6 +3252,71 @@ export default function DashboardPage() {
     await performMt5Reset();
   }
 
+  async function disconnectVpsSlotMt5(slotId:string) {
+    if (disconnectingSlotId || busy || vpsPurchaseBusy) return;
+    const slot = cloudSlots.find((item:any)=>String(item?.id || "")===String(slotId || ""));
+    if (!slot || !slot.can_control || String(slot.mode || "").toUpperCase() !== "CLOUD") {
+      setError("ไม่มีสิทธิ์ตัดการเชื่อมต่อ MT5 ของ Slot นี้");
+      return;
+    }
+    if (!slot.instance_id && !slot.mt5_account_id) {
+      setError("Slot นี้ยังไม่มีการเชื่อมต่อ MT5 ให้ตัด");
+      return;
+    }
+
+    const confirmed = await confirmPopup({
+      title:"ตัดการเชื่อมต่อ MT5 · Slot #" + String(slot.slot_number || ""),
+      tone:"warning",
+      message:
+        "ต้องการตัดการเชื่อมต่อ MT5 เฉพาะ Slot #" + String(slot.slot_number || "") +
+        (slot.account_number ? " (MT5 " + String(slot.account_number) + ")" : "") +
+        " หรือไม่?\n\nระบบจะรอให้ VPS ยืนยันการปิด MT5 เดิมก่อนปลดบัญชีและลบรหัสเชื่อมต่อ ไม่ลบ Slot หรือสิทธิ์สมาชิก และไม่กระทบ Slot อื่น\n\nถ้าบอทกำลัง RUNNING หรือมี Position / Pending Order ค้างอยู่ ระบบจะไม่ตัดทันทีเพื่อป้องกันออเดอร์ค้างที่ Broker",
+      confirmLabel:"ตัดการเชื่อมต่อ"
+    });
+    if (!confirmed) return;
+
+    setDisconnectingSlotId(slotId);
+    setDisconnectStatus("กำลังตรวจการเชื่อมต่อ...");
+    setDisconnectError(null);
+    setError("");
+    setNotice("");
+    try {
+      const resetUrl = "/bot/mt5/reset?slotId=" + encodeURIComponent(slotId);
+      let result = await api(resetUrl, { method:"POST" });
+      let attempts = 0;
+      while (result?.pendingCloudStop && attempts < 45) {
+        setDisconnectStatus("กำลังรอ VPS ยืนยันการปิด MT5...");
+        await new Promise(resolve=>window.setTimeout(resolve, 1200));
+        result = await api(resetUrl, { method:"POST" });
+        attempts += 1;
+      }
+      if (result?.pendingCloudStop) {
+        throw new Error("VPS ยังไม่ยืนยันการปิด MT5 จึงยังไม่ตัดการเชื่อมต่อ กรุณาตรวจสอบ VPS แล้วลองใหม่");
+      }
+      if (!result?.ok) throw new Error(String(result?.message || "ตัดการเชื่อมต่อ MT5 ไม่สำเร็จ"));
+
+      if (String(selectedSlotIdRef.current || "") === slotId) {
+        setTradingPassword("");
+        setAccountNumber("");
+        setBrokerServer("");
+        setInstallToken("");
+        setInstallInstanceId("");
+        setCloudMt5DialogError("");
+      }
+      setDisconnectStatus("ตัดการเชื่อมต่อแล้ว กำลังอัปเดต Slot...");
+      await load(slotId);
+      setNotice("ตัดการเชื่อมต่อ MT5 ของ Slot #" + String(slot.slot_number || "") + " แล้ว · กด เชื่อม MT5 เพื่อเชื่อมใหม่");
+    } catch (e:any) {
+      setDisconnectError({
+        slotId,
+        message:String(e?.message || "ตัดการเชื่อมต่อ MT5 ไม่สำเร็จ")
+      });
+    } finally {
+      setDisconnectingSlotId("");
+      setDisconnectStatus("");
+    }
+  }
+
   async function deleteVpsSlot(slotId:string) {
     if (busy) return;
     const slot = cloudSlots.find((item:any)=>String(item?.id || "")===String(slotId || ""));
@@ -5422,10 +5490,14 @@ export default function DashboardPage() {
                 primaryActive={primaryCloudActive}
                 canBuy={canBuyVpsSlot}
                 busy={vpsPurchaseBusy}
+                disconnectingSlotId={disconnectingSlotId}
+                disconnectStatus={disconnectStatus}
+                disconnectError={disconnectError}
                 capacity={Number(cloudCatalog?.available || 0)}
                 ownerCanPrice={String(data.user?.role || "").toUpperCase()==="OWNER"}
                 onSelect={(slotId:string)=>selectSlot(slotId)}
                 onConnect={(slotId:string)=>prepareCloudMt5Dialog(slotId,"NEW")}
+                onDisconnect={(slotId:string)=>void disconnectVpsSlotMt5(slotId)}
                 onDelete={(slotId:string)=>void deleteVpsSlot(slotId)}
                 onBuy={()=>openVpsSlotDialog("")}
                 onRenew={(slotId:string)=>openVpsSlotDialog(slotId)}
@@ -6196,10 +6268,14 @@ function VpsSlotManager(props:{
   primaryActive:boolean;
   canBuy:boolean;
   busy:boolean;
+  disconnectingSlotId:string;
+  disconnectStatus:string;
+  disconnectError:{slotId:string;message:string}|null;
   capacity:number;
   ownerCanPrice:boolean;
   onSelect:(slotId:string)=>void;
   onConnect:(slotId:string)=>void;
+  onDisconnect:(slotId:string)=>void;
   onDelete:(slotId:string)=>void;
   onBuy:()=>void;
   onRenew:(slotId:string)=>void;
@@ -6335,16 +6411,34 @@ function VpsSlotManager(props:{
                     {primary ? "ต่ออายุแพ็กเกจหลัก" : "ต่ออายุ Slot เสริม"}
                   </button>
                 )}
+                {Boolean(slot.can_control) && Boolean(slot.instance_id || slot.mt5_account_id) && (
+                  <button
+                    type="button"
+                    className="btn ghost vps-slot-disconnect-btn"
+                    disabled={props.busy || Boolean(props.disconnectingSlotId)}
+                    onClick={()=>props.onDisconnect(String(slot.id))}
+                    title="ตัดการเชื่อมต่อ MT5 ของ Slot นี้โดยไม่ลบ Slot"
+                  >
+                    {props.disconnectingSlotId === String(slot.id) ? "กำลังตัด..." : "ตัดการเชื่อมต่อ"}
+                  </button>
+                )}
                 {!primary && (
                   <button
                     type="button"
                     className="btn ghost"
+                    disabled={Boolean(props.disconnectingSlotId)}
                     onClick={()=>props.onDelete(String(slot.id))}
                   >
                     ลบ Slot
                   </button>
                 )}
               </footer>
+              {props.disconnectingSlotId === String(slot.id) && (
+                <div className="vps-slot-disconnect-feedback" role="status">{props.disconnectStatus}</div>
+              )}
+              {props.disconnectError?.slotId === String(slot.id) && (
+                <div className="vps-slot-disconnect-feedback error" role="alert">{props.disconnectError.message}</div>
+              )}
             </article>
           );
         })}
