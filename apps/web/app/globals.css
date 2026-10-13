@@ -9916,6 +9916,29 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
   font-weight:650!important;
 }
 
+.cloud-mt5-password-visibility{
+  flex:0 0 36px;
+  width:36px;
+  height:36px;
+  display:grid;
+  place-items:center;
+  border:0;
+  border-radius:9px;
+  background:transparent;
+  color:#9ab1d2;
+  cursor:pointer;
+  touch-action:manipulation;
+}
+.cloud-mt5-password-visibility:hover,
+.cloud-mt5-password-visibility:focus-visible{
+  color:#c9ddff;
+  background:rgba(108,153,234,.15);
+}
+.cloud-mt5-password-visibility:focus-visible{
+  outline:2px solid #79a8ff;
+  outline-offset:1px;
+}
+
 .cloud-mt5-password-note{
   display:block!important;
   margin-top:6px!important;

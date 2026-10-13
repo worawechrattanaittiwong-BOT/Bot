@@ -395,6 +395,7 @@ export default function DashboardPage() {
   const [disconnectStatus, setDisconnectStatus] = useState("");
   const [disconnectError, setDisconnectError] = useState<{slotId:string;message:string}|null>(null);
   const [tradingPassword, setTradingPassword] = useState("");
+  const [showTradingPassword, setShowTradingPassword] = useState(false);
   const [cloudMt5DialogMode, setCloudMt5DialogMode] = useState<"NEW"|"RECONNECT">("NEW");
   const [cloudMt5DialogAccountId, setCloudMt5DialogAccountId] = useState("");
   const [installToken, setInstallToken] = useState("");
@@ -3383,6 +3384,7 @@ export default function DashboardPage() {
     setCloudMt5DialogMode(dialogMode);
     setCloudMt5DialogAccountId(dialogMode === "RECONNECT" ? String(slot?.mt5_account_id || "") : "");
     setTradingPassword("");
+    setShowTradingPassword(false);
     setCloudMt5DialogError("");
 
     if (dialogMode === "RECONNECT" && slot?.account_number) {
@@ -5713,6 +5715,7 @@ export default function DashboardPage() {
           className="cloud-mt5-dialog"
           onClose={()=>{
             setTradingPassword("");
+            setShowTradingPassword(false);
             setCloudMt5DialogAccountId("");
             setCloudMt5DialogMode("NEW");
                   setCloudMt5DialogError("");
@@ -5855,23 +5858,39 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              <label className="field cloud-mt5-password-field">
-                <span>MT5 Trading Password</span>
+              <div className="field cloud-mt5-password-field">
+                <span id="cloud-mt5-trading-password-label">MT5 Trading Password</span>
                 <span className="cloud-mt5-password-shell">
                   <ScenovaIcon name="lock" size={20}/>
                   <input
-                    type="password"
+                    id="cloud-mt5-trading-password"
+                    aria-labelledby="cloud-mt5-trading-password-label"
+                    type={showTradingPassword ? "text" : "password"}
                     autoComplete="off"
                     value={tradingPassword}
                     onChange={e=>setTradingPassword(e.target.value)}
                     placeholder="Trading Password"
                     required
                   />
+                  <button
+                    type="button"
+                    className="cloud-mt5-password-visibility"
+                    aria-label={showTradingPassword ? "ซ่อนรหัสผ่าน MT5" : "แสดงรหัสผ่าน MT5"}
+                    title={showTradingPassword ? "ซ่อนรหัสผ่าน" : "แสดงรหัสผ่าน"}
+                    aria-pressed={showTradingPassword}
+                    onClick={()=>setShowTradingPassword(value=>!value)}
+                  >
+                    <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6S2 12 2 12Z"/>
+                      <circle cx="12" cy="12" r="3"/>
+                      {!showTradingPassword && <path d="m3 3 18 18"/>}
+                    </svg>
+                  </button>
                 </span>
                 <small className="cloud-mt5-password-note">
                   เข้ารหัส AES-256-GCM ก่อนจัดเก็บ และใช้เฉพาะเชื่อมต่อ MT5 บน VPS
                 </small>
-              </label>
+              </div>
             </div>
 
             <p className="cloud-mt5-password-note">
