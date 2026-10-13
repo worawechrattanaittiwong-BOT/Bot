@@ -282,6 +282,121 @@ function statusTone(status: string) {
   return "bad";
 }
 
+// Display-only Fleet scope. Does not revoke subscriptions, unlink MT5 or command EA.
+const FLEET_OFFLINE_HIDE_MS = 24 * 60 * 60 * 1000;
+
+function isFleetEligible(slot: FleetSlot, nowMs: number) {
+  if (!slot.account) return false;
+
+  // Expiration is based on the actual entitlement end, never on runtime state.
+  const expiryMs = slot.subscription.expiresAt
+    ? Date.parse(slot.subscription.expiresAt) : NaN;
+  if (Number.isFinite(expiryMs) && expiryMs <= nowMs) return false;
+  if (String(slot.subscription.status || "").toUpperCase() === "EXPIRED") return false;
+
+  // A confirmed zero/negative balance AND equity in a synced MT5 snapshot
+  // indicates a depleted account. Historical drawdown alone is not proof.
+  if (slot.runtime.lastSeenAt && num(slot.money.balance) <= 0 && num(slot.money.equity) <= 0) {
+    return false;
+  }
+
+  if (!slot.runtime.heartbeatOnline) {
+    // First prefer the EA's last heartbeat. A never-seen account is excluded
+    // only after its subscription start has aged over 24h; a new connection
+    // with no heartbeat must remain visible while it is being established.
+    const since = slot.runtime.lastSeenAt || slot.subscription.startsAt;
+    const lastSeenMs = since ? Date.parse(since) : NaN;
+    if (Number.isFinite(lastSeenMs) && nowMs - lastSeenMs > FLEET_OFFLINE_HIDE_MS) {
+      return false;
+    }
+  }
+  return true;
+}
+
+// Match the Fleet API's aggregation over only the accounts kept on this page.
+// API responses and every other dashboard remain unchanged.
+function fleetVisibleResponse(raw: FleetResponse): FleetResponse {
+  const nowMs = Date.now();
+  const slots = raw.slots.filter(slot => isFleetEligible(slot, nowMs));
+  const currencyMap = new Map<string, CurrencyTotal>();
+  let online = 0;
+  let running = 0;
+  let stopped = 0;
+  let offline = 0;
+  let empty = 0;
+  let totalPositions = 0;
+  let totalPendingOrders = 0;
+  let totalClosedBaskets = 0;
+  let totalWins = 0;
+  let highestMaxDrawdownPercent = 0;
+
+  for (const slot of slots) {
+    const hasAccount = Boolean(slot.account?.id);
+    const live = Boolean(slot.runtime.heartbeatOnline);
+    const state = String(slot.runtime.actualState || "").toUpperCase();
+    if (!hasAccount) empty++;
+    if (live) online++;
+    if (hasAccount && live && state === "RUNNING") running++;
+    else if (hasAccount && live) stopped++;
+    else if (hasAccount) offline++;
+
+    totalPositions += num(slot.runtime.positions);
+    totalPendingOrders += num(slot.runtime.pendingOrders);
+    totalClosedBaskets += num(slot.performance.closedBaskets);
+    totalWins += num(slot.performance.wins);
+    highestMaxDrawdownPercent = Math.max(highestMaxDrawdownPercent, num(slot.money.maxDrawdownPercent));
+
+    if (hasAccount) {
+      const currency = String(slot.runtime.currency || "USD").toUpperCase();
+      const current = currencyMap.get(currency) || {
+        currency, accounts: 0, balance: 0, equity: 0, floatingProfit: 0,
+        todayClosedProfit: 0, netProfit: 0, netProfit30d: 0
+      };
+      current.accounts++;
+      current.balance += num(slot.money.balance);
+      current.equity += num(slot.money.equity);
+      current.floatingProfit += num(slot.money.floatingProfit);
+      current.todayClosedProfit += num(slot.money.todayClosedProfit);
+      current.netProfit += num(slot.money.netProfit);
+      current.netProfit30d += num(slot.money.netProfit30d);
+      currencyMap.set(currency, current);
+    }
+  }
+
+  const currencyTotals = Array.from(currencyMap.values()).sort((a, b) => a.currency.localeCompare(b.currency));
+  const normalizedCurrencies: string[] = [];
+  const unsupportedCurrencies: string[] = [];
+  let totalBalanceUsdEquivalent = 0;
+  let totalNetProfitUsdEquivalent = 0;
+  for (const item of currencyTotals) {
+    const factor = item.currency === "USD" ? 1 : item.currency === "USC" ? 0.01 : null;
+    if (factor === null) {
+      unsupportedCurrencies.push(item.currency);
+      continue;
+    }
+    normalizedCurrencies.push(item.currency);
+    totalBalanceUsdEquivalent += item.balance * factor;
+    totalNetProfitUsdEquivalent += item.netProfit * factor;
+  }
+
+  return {
+    ...raw,
+    slots,
+    summary: {
+      ...raw.summary,
+      totalSlots: slots.length,
+      connectedAccounts: slots.filter(slot => Boolean(slot.account?.id)).length,
+      online, running, stopped, offline, empty,
+      totalPositions, totalPendingOrders, totalClosedBaskets, totalWins,
+      winRate: totalClosedBaskets > 0 ? totalWins / totalClosedBaskets * 100 : 0,
+      highestMaxDrawdownPercent,
+      totalBalanceUsdEquivalent, totalNetProfitUsdEquivalent,
+      usdEquivalentComplete: unsupportedCurrencies.length === 0,
+      normalizedCurrencies, unsupportedCurrencies, currencyTotals
+    }
+  };
+}
+
 function Metric({
   label,
   value,
@@ -300,7 +415,8 @@ function Metric({
 }
 
 export default function FleetMonitorPage() {
-  const [data, setData] = useState<FleetResponse | null>(null);
+  const [rawData, setData] = useState<FleetResponse | null>(null);
+  const data = useMemo(() => rawData ? fleetVisibleResponse(rawData) : null, [rawData]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -443,8 +559,8 @@ export default function FleetMonitorPage() {
             <h1>Trading Fleet Monitor</h1>
             <p>
               {data.elevated
-                ? "เฉพาะบัญชี MT5 ที่ยังเชื่อมอยู่จริงในระบบแบบ Read-only"
-                : "เฉพาะบัญชี MT5 ของคุณที่ยังเชื่อมอยู่แบบ Read-only"}
+                ? "บัญชี MT5 ในระบบ · ไม่รวมพอร์ตทุนหมด, ออฟไลน์เกิน 24 ชม. หรือหมดอายุ · Read-only"
+                : "บัญชี MT5 ของคุณ · ไม่รวมพอร์ตทุนหมด, ออฟไลน์เกิน 24 ชม. หรือหมดอายุ · Read-only"}
             </p>
           </div>
           <div className={styles.headActions}>
