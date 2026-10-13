@@ -7272,6 +7272,15 @@ function BotSettingsModal(props:any) {
     }
     if (profileKey) props.onEdit?.(profileKey,value);
     props.onEdit?.(kind === "lot" ? "lot" : "maxPositions",value);
+    // RACE Basket only: 0.01 lot = 2 units of account currency.
+    // Maximum positions do not affect this target. Changes are drafts until saved.
+    if (controlMode === "RACE" && kind === "lot" &&
+        String(props.settings?.raceProfitTargetMode || "BASKET").toUpperCase() === "BASKET") {
+      const selectedRaceLot = Number(value);
+      if (Number.isFinite(selectedRaceLot) && selectedRaceLot > 0) {
+        props.onEdit?.("raceCloseAllProfitMoney",Math.round(selectedRaceLot * 20000) / 100);
+      }
+    }
   };
   const riskProfiles:Record<string,{basket:string;dailyLoss:string;dailyProfit:string}> = {
     AUTO:{basket:"autoMaxBasketLossMoney",dailyLoss:"autoDailyLossMoney",dailyProfit:"autoDailyProfitTargetMoney"},
@@ -7700,7 +7709,7 @@ function BotSettingsModal(props:any) {
                       <button type="button" className={raceProfitTargetMode==="POSITION"?"active":""} onClick={()=>{props.onEdit?.("raceProfitTargetMode","POSITION");props.onEdit?.("raceCloseAllProfitEnabled",false)}}><ScenovaIcon name="orders" size={16}/><span><b>ต่อไม้</b></span></button>
                     </div>
                   </div>
-                  <label className="cc-bot-v2-field">{settingHelpLabel("race-profit-target",raceProfitTargetMode==="POSITION"?"เป้ากำไรต่อไม้":"เป้ากำไรทั้งชุด",raceProfitTargetMode==="POSITION"?"ไม้ไหนกำไรถึงยอดนี้ EA จะปิดไม้นั้นทันที":"กำไรรวมถึงยอดนี้ EA บน MT5/VPS จะปิด RACE ทั้งชุดทันที ไม่รอหน้าเว็บและไม่ลากกำไร","profit")}<MoneyInput value={raceProfitTargetMode==="POSITION"?racePerPositionProfitMoney:raceCloseAllProfitMoney} currency={accountCurrency} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.(raceProfitTargetMode==="POSITION"?"racePerPositionProfitMoney":"raceCloseAllProfitMoney",v)}/><small>{raceProfitTargetMode==="POSITION"?"ใช้เฉพาะ RACE · ไม้ไหนถึงเป้าปิดไม้นั้นทันที":"ใช้เฉพาะ RACE · ถึงเป้าปิดทั้งชุดทันทีจาก EA บน MT5/VPS · ไม่ลากกำไร"}</small></label>
+                  <label className="cc-bot-v2-field">{settingHelpLabel("race-profit-target",raceProfitTargetMode==="POSITION"?"เป้ากำไรต่อไม้":"เป้ากำไรทั้งชุด",raceProfitTargetMode==="POSITION"?"ไม้ไหนกำไรถึงยอดนี้ EA จะปิดไม้นั้นทันที":"กำไรรวมถึงยอดนี้ EA บน MT5/VPS จะปิด RACE ทั้งชุดทันที ไม่รอหน้าเว็บและไม่ลากกำไร","profit")}<MoneyInput value={raceProfitTargetMode==="POSITION"?racePerPositionProfitMoney:raceCloseAllProfitMoney} currency={accountCurrency} suffix="เงินบัญชี" onCommit={(v:string)=>props.onEdit?.(raceProfitTargetMode==="POSITION"?"racePerPositionProfitMoney":"raceCloseAllProfitMoney",v)}/><small>{raceProfitTargetMode==="POSITION"?"ใช้เฉพาะ RACE · ไม้ไหนถึงเป้าปิดไม้นั้นทันที":"RACE · เป้าทั้งชุดปรับตาม Lot (0.01 Lot = 2 "+accountCurrency+") ไม่คูณจำนวนไม้ · แก้เป้าเองได้ · EA ปิดเมื่อถึงเป้า"}</small></label>
                 </div> : <div className="cc-bot-v2-fields exit-fields">
                   <div className="cc-bot-v2-field cc-bot-profit-kind-field">
                     {settingHelpLabel("profit-kind","รูปแบบกำไร","เลือกปิดกำไรรวมทั้งชุด หรือปิดทีละไม้","profit")}
