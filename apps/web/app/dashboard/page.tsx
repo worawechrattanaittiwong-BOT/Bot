@@ -260,7 +260,7 @@ const defaultSettings = {
   autoLot: 0.01,
   autoMaxPositions: 3,
   raceLot: 0.01,
-  raceMaxPositions: 5,
+  raceMaxPositions: 1,
   counterLot: 0.01,
   counterMaxPositions: 20,
   counterSizingVersion: 2,
@@ -316,9 +316,9 @@ const defaultSettings = {
   indicatorV6Mode: "SOFT_WEIGHT",
   controlMode: undefined,
   engineMode: "AUTO",
-  raceCloseAllProfitEnabled: false,
-  raceProfitTargetMode: "POSITION",
-  raceCloseAllProfitMoney: 1,
+  raceCloseAllProfitEnabled: true,
+  raceProfitTargetMode: "BASKET",
+  raceCloseAllProfitMoney: 2,
   racePerPositionProfitMoney: 1,
   counterPerPositionProfitMoney: 1,
   zeroGridFirstGapPrice: 3,
@@ -531,16 +531,17 @@ export default function DashboardPage() {
           if (!Number.isFinite(Number(nextSettings.counterPerPositionProfitMoney)) || Number(nextSettings.counterPerPositionProfitMoney) <= 0) nextSettings.counterPerPositionProfitMoney = 1;
         }
         if (loadedControlMode === "RACE") {
-          const raceProfitMode = String(nextSettings.raceProfitTargetMode || "").toUpperCase();
+          // Honor any explicitly saved legacy RACE toggle before using new defaults.
+          const raceProfitMode = String(storedSettings.raceProfitTargetMode ?? "").toUpperCase();
           nextSettings.raceProfitTargetMode = ["BASKET","POSITION","OFF"].includes(raceProfitMode)
             ? raceProfitMode
             : (storedSettings.raceCloseAllProfitEnabled === true
                 ? "BASKET"
                 : storedSettings.raceCloseAllProfitEnabled === false
                   ? "OFF"
-                  : "POSITION");
+                  : "BASKET");
           nextSettings.raceCloseAllProfitEnabled = nextSettings.raceProfitTargetMode === "BASKET";
-          if (!Number.isFinite(Number(nextSettings.raceCloseAllProfitMoney)) || Number(nextSettings.raceCloseAllProfitMoney) <= 0) nextSettings.raceCloseAllProfitMoney = 1;
+          if (!Number.isFinite(Number(nextSettings.raceCloseAllProfitMoney)) || Number(nextSettings.raceCloseAllProfitMoney) <= 0) nextSettings.raceCloseAllProfitMoney = 2;
           if (!Number.isFinite(Number(nextSettings.racePerPositionProfitMoney)) || Number(nextSettings.racePerPositionProfitMoney) <= 0) nextSettings.racePerPositionProfitMoney = 1;
         }
 
@@ -4311,8 +4312,8 @@ export default function DashboardPage() {
       // Build the legacy/runtime target mirror from the ACTIVE profile only.
       // Persisted profile fields remain untouched when another mode is selected.
       if (payload.controlMode === "RACE") {
-        const raceMode = String(payload.raceProfitTargetMode || "POSITION").toUpperCase();
-        payload.raceProfitTargetMode = ["BASKET","POSITION","OFF"].includes(raceMode) ? raceMode : "POSITION";
+        const raceMode = String(payload.raceProfitTargetMode || "BASKET").toUpperCase();
+        payload.raceProfitTargetMode = ["BASKET","POSITION","OFF"].includes(raceMode) ? raceMode : "BASKET";
         payload.raceCloseAllProfitEnabled = payload.raceProfitTargetMode === "BASKET";
       }
       if (payload.controlMode === "AUTO") {
@@ -7449,9 +7450,9 @@ function BotSettingsModal(props:any) {
     if (mode === "RACE") {
       props.onEdit?.("engineMode","RACE");
       props.onEdit?.("profitTargetMode","OFF");
-      const raceMode = String(props.settings?.raceProfitTargetMode || "POSITION").toUpperCase();
-      props.onEdit?.("raceProfitTargetMode",["BASKET","POSITION","OFF"].includes(raceMode) ? raceMode : "POSITION");
-      if (!Number.isFinite(Number(props.settings?.raceCloseAllProfitMoney)) || Number(props.settings?.raceCloseAllProfitMoney) <= 0) props.onEdit?.("raceCloseAllProfitMoney",1);
+      const raceMode = String(props.settings?.raceProfitTargetMode || "BASKET").toUpperCase();
+      props.onEdit?.("raceProfitTargetMode",["BASKET","POSITION","OFF"].includes(raceMode) ? raceMode : "BASKET");
+      if (!Number.isFinite(Number(props.settings?.raceCloseAllProfitMoney)) || Number(props.settings?.raceCloseAllProfitMoney) <= 0) props.onEdit?.("raceCloseAllProfitMoney",2);
       if (!Number.isFinite(Number(props.settings?.racePerPositionProfitMoney)) || Number(props.settings?.racePerPositionProfitMoney) <= 0) props.onEdit?.("racePerPositionProfitMoney",1);
       return;
     }
@@ -7485,9 +7486,9 @@ function BotSettingsModal(props:any) {
     : (entryMode === "AUTO_MOMENTUM"
         ? "M1 / M5 / M15 / M30 / H1 วิเคราะห์ทิศทางอัตโนมัติ"
         : "บังคับทิศตามที่เลือกจนกว่าจะเปลี่ยนค่า");
-  const raceProfitTargetMode = String(props.settings?.raceProfitTargetMode || "POSITION").toUpperCase();
+  const raceProfitTargetMode = String(props.settings?.raceProfitTargetMode || "BASKET").toUpperCase();
   const raceCloseAllProfitEnabled = raceProfitTargetMode === "BASKET";
-  const raceCloseAllProfitMoney = Number(props.settings?.raceCloseAllProfitMoney || 1);
+  const raceCloseAllProfitMoney = Number(props.settings?.raceCloseAllProfitMoney || 2);
   const racePerPositionProfitMoney = Number(props.settings?.racePerPositionProfitMoney || 1);
   const counterPerPositionProfitMoney = Number(props.settings?.counterPerPositionProfitMoney || 1);
   const manualStopEnabled = Number(props.settings?.manualStopLossPoints || 0) > 0;
