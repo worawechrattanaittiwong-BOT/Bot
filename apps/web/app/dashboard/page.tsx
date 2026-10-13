@@ -3766,6 +3766,42 @@ export default function DashboardPage() {
     }
   }
 
+  async function confirmSafeStop() {
+    if (stopBlocked || botCommandLockRef.current) return;
+
+    const slotId = String(selectedSlotIdRef.current || data?.selectedSlot?.id || "");
+    const currentSlot = (data?.slots || []).find(
+      (slot:any)=>String(slot?.id || "") === slotId
+    ) || data?.selectedSlot || {};
+    const accountNo = String(currentSlot?.account_number || data?.account?.account_number || "").trim();
+    const slotLabel = String(currentSlot?.mode || "").toUpperCase() === "CLOUD"
+      ? "VPS Slot #" + String(currentSlot?.slot_number || "1")
+      : "Local MT5";
+
+    const confirmed = await confirmPopup({
+      title:"ยืนยันหยุดบอท (Safe Stop)",
+      tone:"warning",
+      message:
+        "บัญชี MT5: " + (accountNo || "ยังไม่พบเลขบัญชี") +
+        "\nตำแหน่ง: " + slotLabel +
+        "\n\nSafe Stop คือการหยุดเปิดรอบเทรดใหม่ แล้วให้ EA จัดการรอบหรือออเดอร์ที่ค้างอยู่ตามเงื่อนไขเดิม" +
+        "\n\n• ไม่ใช่คำสั่งปิดสถานะทั้งหมดทันที" +
+        "\n• Position ที่ยังเปิดอยู่อาจมีกำไรหรือขาดทุนเปลี่ยนแปลงระหว่างรอหยุด" +
+        "\n• เมื่อต้องการเทรดต่อ ต้องกดเริ่มบอทใหม่" +
+        "\n\nหากเผลอแตะปุ่มหยุด ให้กด ยกเลิก",
+      cancelLabel:"ยกเลิก · ไม่หยุด",
+      confirmLabel:"ยืนยันหยุดบอท"
+    });
+    if (!confirmed) return;
+    if (slotId !== String(selectedSlotIdRef.current || data?.selectedSlot?.id || "")) {
+      setError("บัญชีที่เลือกเปลี่ยนไปแล้ว กรุณาตรวจสอบและกดหยุดอีกครั้ง");
+      return;
+    }
+    if (stopBlocked || botCommandLockRef.current) return;
+
+    await command("/bot/stop","Safe Stop แล้ว · ไม่เปิดรอบใหม่ และรอรอบปัจจุบันปิดตามเงื่อนไขปกติ");
+  }
+
   async function command(path: string, success: string) {
     const singleClickBotCommand =
       path.startsWith("/bot/start") || path.startsWith("/bot/stop");
@@ -5088,7 +5124,7 @@ export default function DashboardPage() {
                   <div className="cc-v12-quick-actions cc-v19-hero-quick-actions">
                     <button className="symbol" disabled={symbolBusy} onClick={openTradingSymbolPicker}><ScenovaIcon name="trend" size={15}/><span><b>{desiredTradingSymbol||activeTradingSymbol||"เลือก Symbol"}</b><small>{cloudSymbolFlow && !desiredTradingSymbol ? "รอ XAU จาก MT5" : "เลือก Symbol"}</small></span></button>
                     <button className="start" disabled={startBlocked} onClick={()=>command("/bot/start","ส่งคำสั่ง Start แล้ว บอทกำลังเริ่มทำงาน")}><ScenovaIcon name="play" size={15}/><span><b>เริ่มบอท</b><small>Start</small></span></button>
-                    <button className="stop" disabled={stopBlocked} onClick={()=>command("/bot/stop","Safe Stop แล้ว · ไม่เปิดรอบใหม่ และรอรอบปัจจุบันปิดตามเงื่อนไขปกติ")}><ScenovaIcon name="stop" size={15}/><span><b>หยุดปลอดภัย</b><small>Safe Stop</small></span></button>
+                    <button className="stop" disabled={stopBlocked} onClick={()=>void confirmSafeStop()}><ScenovaIcon name="stop" size={15}/><span><b>หยุดปลอดภัย</b><small>Safe Stop</small></span></button>
                     <button className="close" disabled={busy} onClick={async()=>{const ok=await confirmPopup({tone:"warning",title:"ยืนยันปิดสถานะทั้งหมด",message:"คำสั่งนี้จะปิด Position ของ SCENOVA ทั้งหมดทันที และรีเซ็ตสถานะรอบที่ค้างของบัญชีนี้ ใช้ได้แม้หน้าจอแสดง 0 Position ยืนยันดำเนินการหรือไม่?",confirmLabel:"ปิดสถานะทั้งหมด",cancelLabel:"ยกเลิก"});if(ok)await command("/bot/close-all","ส่งคำสั่งปิดสถานะทั้งหมดและรีเซ็ตสถานะแล้ว")}}><ScenovaIcon name="close" size={15}/><span><b>ปิดสถานะทั้งหมด</b><small>Close All Positions</small></span></button>
                     <button className="terminal" onClick={()=>setLogsOpen(true)}><ScenovaIcon name="terminal" size={15}/><span><b>Terminal</b><small>Live Logs</small></span></button>
                   </div>
@@ -5394,7 +5430,7 @@ export default function DashboardPage() {
                   <span>{botStarting ? <i className="cc-start-spinner" aria-hidden="true"/> : botRunning ? <i className="cc-start-pulse" aria-hidden="true"/> : "▶"}</span>
                   <b>{botStarting ? "กำลังเริ่ม" : botRunning ? "กำลังทำงาน" : "เริ่มบอท"}</b>
                 </button>
-                <button className="cc-mobile-command stop" disabled={stopBlocked} onClick={()=>command("/bot/stop","Safe Stop แล้ว · ไม่เปิดรอบใหม่ และรอรอบปัจจุบันปิดตามเงื่อนไขปกติ")}>
+                <button className="cc-mobile-command stop" disabled={stopBlocked} onClick={()=>void confirmSafeStop()}>
                   <span>■</span><b>หยุดบอท</b>
                 </button>
               </div>
