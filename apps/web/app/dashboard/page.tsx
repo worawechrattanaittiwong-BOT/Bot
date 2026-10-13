@@ -13,6 +13,7 @@ import { BotPerformanceSummary } from "../../components/BotPerformanceSummary";
 import { useSystemPopup } from "../../components/SystemPopupProvider";
 import { TradingModeGuideVideos } from "../../components/TradingModeGuideVideos";
 import { ExnessSignupCard } from "../../components/ExnessSignupCard";
+import { BulkVpsSlots } from "../../components/BulkVpsSlots";
 
 type Dashboard = {
   user: any;
@@ -5543,6 +5544,10 @@ export default function DashboardPage() {
                 onPrimaryRenew={openPrimaryPackagePage}
                 onConfigurePricing={openOwnerAddonPricing}
               />
+            )}
+
+            {String(data.selectedSlot?.mode || "").toUpperCase() === "CLOUD" && (
+              <BulkVpsSlots owner={userRole === "OWNER"} onGranted={()=>void load(selectedSlotIdRef.current)}/>
             )}
 
             {data.selectedSlot?.mode === "LOCAL" ? (
