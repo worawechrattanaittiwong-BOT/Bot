@@ -36,7 +36,7 @@ assert.match(login, /\/api\/public\/brokers\/exness\/signup\?platform=/);
 assert.match(loginCss, /\.partnerCard\{/);
 assert.match(loginCss, /\.partnerButton\{/);
 
-assert.match(brokerPage, /EXNESS PARTNER CENTER/);
+assert.match(brokerPage, /SCENOVA \/ EXNESS/);
 assert.match(brokerPage, /CustomerBrokerCenter/);
 assert.match(brokerPage, /showWhenInactive/);
 assert.match(brokerPage, /ลิงก์สำหรับคอมพิวเตอร์/);

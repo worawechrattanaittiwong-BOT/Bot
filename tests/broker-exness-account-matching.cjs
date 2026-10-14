@@ -11,8 +11,10 @@ assert(controller.includes('@Get("client-match-preview")'));
 assert(controller.includes('@UseGuards(AdminGuard)'));
 assert(ui.includes('client-match-preview'));
 assert(ui.includes('setInterval(() => {'));
-assert(ui.indexOf('dashboardCaption')<ui.indexOf('<form id="exness-partner" className={styles.card} onSubmit={save}>'));
-assert(ui.indexOf('settingsCaption')<ui.indexOf('CLIENT MATCHING'));
+assert(ui.indexOf('<section id="ib-performance"') < ui.indexOf('<section id="exness-clients"'));
+assert(ui.indexOf('<section id="exness-clients"') < ui.indexOf('<details id="exness-rebate"'));
+assert(ui.indexOf('<details id="exness-rebate"') < ui.indexOf('<form id="exness-partner" className={styles.card} onSubmit={save}>'));
+assert(ui.includes('CLIENT MATCHING'));
 const transpiled=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2021,experimentalDecorators:true}}).outputText;
 const ctx={exports:{},require:(id)=>{
  if(id==='@nestjs/common')return {Injectable:()=>a=>a};

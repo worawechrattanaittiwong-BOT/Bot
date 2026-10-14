@@ -50,3 +50,42 @@
   .mobileClientCard .selectButton{width:100%;padding:11px;font-size:12px}
   .mobileEmpty{color:#bdb1c9;font-size:12px}
 }
+
+/* Rebate compact controls: configure only when an account is selected. */
+.heading{gap:8px}
+.heading h2{font-size:15px;margin:0}
+.heading a{padding:7px 9px;font-size:11px}
+.helpDetails{margin:7px 0 4px}
+.helpDetails summary{font-size:11px;color:#a99ac6;cursor:pointer;padding:7px 0;list-style:none}
+.helpDetails summary::-webkit-details-marker{display:none}
+.helpDetails summary::before{content:"ⓘ";margin-right:6px}
+.helpDetails .notice{margin:4px 0 10px;padding:10px 12px}
+.tabs{gap:6px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin;margin:11px 0;padding-bottom:3px}
+.tabs button{flex:0 0 auto;white-space:nowrap;padding:8px 10px;font-size:11px}
+.toolbar{margin:4px 0 7px}
+.toolbar button{padding:7px 10px}
+.editor{margin:9px 0 10px;padding:0 12px;border-radius:10px}
+.editor summary{cursor:pointer;list-style:none;padding:12px 0;font-size:12px;font-weight:800;color:#e4d1ff}
+.editor summary::-webkit-details-marker{display:none}
+.editor summary::after{content:"⌄";float:right;color:#b49bea}
+.editor[open] summary::after{content:"⌃"}
+.editorBody{padding:0 0 12px}
+.fields{margin:10px 0;gap:9px}
+.fields input{padding:9px 10px;font-size:12px}
+.mobileClientCard{padding:11px;gap:6px}
+.mobileCardHead{gap:2px}
+.mobileCardHead b{font-size:13px}
+.mobileCardArrow{font-size:10px}
+.mobileCardDest{padding:7px 9px;font-size:12px}
+.mobileCardStats{gap:5px 9px}
+.mobileCardStats span{font-size:10px}
+.mobileCardStats b{font-size:11px}
+.mobileClientCard .selectButton{padding:9px;font-size:11px}
+.pager{margin-top:9px}
+.pager button{padding:7px 9px}
+@media(max-width:750px){
+ .heading a{width:auto;text-align:center}
+ .tabs button{flex:0 0 auto}
+ .mobileClientCards{gap:8px;margin:8px 0}
+ .fields{grid-template-columns:1fr}
+}

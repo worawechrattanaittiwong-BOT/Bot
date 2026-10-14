@@ -55,7 +55,9 @@ export function ExnessRebateControl() {
     setDestination(String(row.destination_client_account||""));
     setPercent(String(row.rebate_percent??30));
     setMessage("เลือกบัญชีเทรดต้นทางแล้ว กรุณาตรวจเปอร์เซ็นต์และกรอกบัญชีปลายทางที่ Exness อนุญาตก่อนบันทึก");
-    document.getElementById("exness-rebate-edit")?.scrollIntoView({behavior:"smooth",block:"start"});
+    const editor = document.getElementById("exness-rebate-edit");
+    if (editor instanceof HTMLDetailsElement) editor.open = true;
+    editor?.scrollIntoView({behavior:"smooth",block:"start"});
   };
   async function changePercent() {
     const value=Number(percent);
@@ -94,23 +96,27 @@ export function ExnessRebateControl() {
     finally{setBusy("");}
   }
   return <section className={css.wrap} aria-label="ศูนย์ควบคุม Rebate จาก Exness">
-    <div className={css.heading}><div><small>EXNESS PARTNERS · REBATE CONTROL</small><h2>ควบคุมเงินคืนผ่าน Exness</h2><p>SCENOVA เป็นเพียงแผงควบคุม · Exness เป็นผู้กำหนดยอดและจ่ายเงินเข้าบัญชีลูกค้า</p></div><a href="https://my.exnessaffiliates.com/" target="_blank" rel="noopener noreferrer">เปิด Exness Partners ↗</a></div>
-    <div className={css.notice}>การตั้งค่าเงินคืนแยกตาม MT5 ต้นทาง (บัญชีลูกค้า) ไม่ใช่ยอดรวมของลูกค้าทั้งคน · แต่ละบัญชีอาจระบุบัญชีปลายทางรับเงินเดียวกันได้ถ้า Exness ยอมรับ · ไม่มี Rebate Wallet หรือการจ่ายเงินผ่าน SCENOVA · ตัวเลขและสถานะทั้งหมดอ่านจาก Exness API · การเปลี่ยนเปอร์เซ็นต์หรือเริ่มอนุมัติต้องยืนยันโดยผู้ดูแล</div>
+    <div className={css.heading}><div><h2>Rebate Control</h2></div><a href="https://my.exnessaffiliates.com/" target="_blank" rel="noopener noreferrer">Exness Partners ↗</a></div>
+    <details className={css.helpDetails}>
+      <summary>ข้อมูลการจัดการเงินคืน</summary>
+      <div className={css.notice}>Rebate ตั้งค่าแยกตามบัญชี MT5 ต้นทาง แต่สามารถใช้บัญชีรับเงินเดียวกันได้หาก Exness อนุญาต · Exness เป็นผู้คำนวณและจ่ายเงิน ไม่มีเงินคืนใน Wallet ของ SCENOVA · การตั้งค่าหรืออนุมัติรายการต้องยืนยันโดยผู้ดูแล</div>
+    </details>
     <nav className={css.tabs} aria-label="เมนู Rebate">
       {sections.map(item=><button key={item.name} type="button" aria-current={section===item.name?"page":undefined} className={section===item.name?css.active:""} onClick={()=>{setSection(item.name);setError("");setMessage("");}}>{item.label}</button>)}
     </nav>
-    <div className={css.toolbar}><div><b>{sections.find(x=>x.name===section)?.label}</b><span>{sections.find(x=>x.name===section)?.hint}</span></div><button type="button" disabled={Boolean(busy)} onClick={()=>void load(section,offsets[section])}>{busy.startsWith("load:")?"กำลังโหลด...":"↻ อ่านข้อมูลจาก Exness"}</button></div>
+    <div className={css.toolbar}><div><b>{sections.find(x=>x.name===section)?.label}</b></div><button type="button" disabled={Boolean(busy)} onClick={()=>void load(section,offsets[section])}>{busy.startsWith("load:")?"กำลังโหลด...":"↻ อัปเดต"}</button></div>
     {error&&<p className={css.error} role="alert">{error}</p>}
     {message&&<p className={css.success} role="status">{message}</p>}
-    {section==="clients"&&<div id="exness-rebate-edit" className={css.editor}>
-      <h3>ตั้งค่าเงินคืนแยกตามบัญชีเทรดต้นทาง</h3>
-      <p>เลือกเลข MT5 ต้นทางแต่ละบัญชีจากรายการด้านล่าง แล้วกำหนดเปอร์เซ็นต์และบัญชีรับเงินปลายทางตามที่ Exness รองรับ การกำหนดปลายทางเดียวกันหลายบัญชีไม่ได้รวมกฎ Rebate เป็นรายการเดียว</p>
+    {section==="clients"&&<details id="exness-rebate-edit" className={css.editor}>
+      <summary>ตั้งค่า Rebate รายบัญชี</summary>
+      <div className={css.editorBody}>
       <div className={css.fields}><label>เลขบัญชี Exness<input inputMode="numeric" value={account} onChange={e=>setAccount(e.target.value)} placeholder="เลขบัญชีลูกค้า" /></label><label>บัญชีปลายทางรับเงิน<input inputMode="numeric" value={destination} onChange={e=>setDestination(e.target.value)} placeholder="เลขบัญชีปลายทาง" /></label><label>Rebate (%)<input type="number" step="0.01" min="0" max="100" value={percent} onChange={e=>setPercent(e.target.value)}/></label></div>
-      <button type="button" className={css.primary} disabled={Boolean(busy)||!account||!destination} onClick={()=>void changePercent()}>ตรวจสอบและบันทึกไป Exness</button>
-    </div>}
+      <button type="button" className={css.primary} disabled={Boolean(busy)||!account||!destination} onClick={()=>void changePercent()}>บันทึกไป Exness</button>
+      </div>
+    </details>}
     {section==="rebates"&&<div className={css.editor}>
       <h3>อนุมัติผ่าน Exness (2 ขั้นตอน)</h3>
-      <p>เลือก Rebate ID จากรายงานด้านล่าง แล้วกดเริ่มอนุมัติ หลังจากยืนยันผ่านช่องทาง Exness ให้ใส่ Verification Token เฉพาะในหน้านี้</p>
+
       <div className={css.actions}><button className={css.primary} disabled={Boolean(busy)||selectedIds.length===0||Boolean(attemptId)} type="button" onClick={()=>void startApproval()}>เริ่มอนุมัติที่ Exness ({selectedIds.length})</button></div>
       {attemptId&&<div className={css.verification}><b>รอการยืนยันจาก Exness</b><span>อย่าเผยแพร่โทเคนหรือรหัสยืนยันให้บุคคลอื่น · การยืนยันรายการเดิมมีเวลา 15 นาที</span><input type="password" autoComplete="off" placeholder="verification_token จาก Exness" value={token} onChange={e=>setToken(e.target.value)}/><button className={css.primary} type="button" disabled={Boolean(busy)||token.trim().length<6} onClick={()=>void finishApproval()}>ส่งการยืนยันให้ Exness</button></div>}
     </div>}

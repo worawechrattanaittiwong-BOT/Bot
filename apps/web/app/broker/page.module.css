@@ -756,3 +756,111 @@
 .detailRebate strong{color:#f5edff;font-weight:750}
 .detailWarning{margin:10px 0 0;padding:9px 11px;border:1px solid rgba(239,178,101,.25);background:rgba(220,134,56,.07);border-radius:9px;color:#e6c59f;font-size:11px;line-height:1.55}
 @media(max-width:720px){.detailAccounts{grid-template-columns:1fr}.accountDetails{padding:12px;margin:4px 0 14px}.accountDetailsHead button{width:100%}.detailsButton{width:auto;min-width:130px}}
+
+/* Broker Compact UI: show core actions, expand only what is needed. */
+.shell{width:min(1000px,calc(100% - 32px));padding-top:20px}
+.header{margin-bottom:10px;align-items:center}
+.header h1{font-size:27px}
+.card{padding:15px;margin-bottom:10px;box-shadow:none;border-radius:14px}
+.quickNav{display:flex;flex-wrap:nowrap;gap:6px;margin:12px 0;overflow-x:auto;scrollbar-width:thin;padding-bottom:4px}
+.quickNav a{flex:0 0 auto;padding:8px 11px;font-size:11px;border-radius:9px;white-space:nowrap}
+.healthGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin:8px 0 12px}
+.healthCard{display:flex;flex-direction:row;align-items:center;justify-content:space-between;gap:6px;padding:10px 12px;min-height:42px;border-radius:11px;background:rgba(118,78,201,.065)}
+.healthCard small{font-size:10px;letter-spacing:0;color:#a69ab9;white-space:nowrap}
+.healthCard strong{font-size:11px;white-space:nowrap;line-height:1.2}
+.foldCard{background:linear-gradient(145deg,rgba(23,17,36,.96),rgba(12,10,21,.96));border:1px solid rgba(154,122,255,.19);border-radius:13px;margin:0 0 9px;min-width:0;scroll-margin-top:22px;overflow:visible}
+.foldSummary{display:flex;align-items:center;justify-content:space-between;gap:13px;padding:12px 15px;min-height:54px;list-style:none;cursor:pointer;color:#e9e0fa}
+.foldSummary::-webkit-details-marker{display:none}
+.foldSummary::marker{content:""}
+.foldSummary:focus-visible,.subDisclosure summary:focus-visible,.verifyDisclosure summary:focus-visible{outline:2px solid #ac8eff;outline-offset:2px;border-radius:8px}
+.foldSummary>span:first-child{display:flex;align-items:center;gap:10px;flex-wrap:wrap;min-width:0}
+.foldSummary b{font-size:13px;color:#f2ebff}
+.foldSummary small{font-size:11px;font-weight:500;color:#aa9ebc}
+.foldChevron{font-size:19px;color:#aa92ee;line-height:1;transition:transform .16s;flex:none}
+.foldCard[open]>.foldSummary .foldChevron{transform:rotate(180deg)}
+.foldCard[open]>.foldSummary{border-bottom:1px solid rgba(158,125,233,.14)}
+.foldBody{padding:12px 14px 14px}
+.foldCard>.card{border:0;border-radius:0;background:transparent;box-shadow:none;padding:12px 14px 15px;margin:0}
+.foldCard>.card .preview{display:none}
+.foldRebate>section{border:0;background:transparent;box-shadow:none;border-radius:0;padding:12px}
+.foldToolbar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;color:#e9dff5;font-size:12px}
+.foldToolbar button{padding:7px 10px;min-height:32px}
+.subDisclosure{border-top:1px solid rgba(160,132,218,.12);margin:11px 0 0;padding:3px 0}
+.subDisclosure summary{cursor:pointer;list-style:none;color:#a996ce;font-weight:600;font-size:11px;padding:8px 0}
+.subDisclosure summary::before{content:"ⓘ";padding-right:6px}
+.subDisclosure summary::-webkit-details-marker{display:none}
+.subDisclosure .runHistory{margin:4px 0 10px;padding:10px}
+.connectPanel{margin:3px 0 10px;padding:14px;border-radius:12px}
+.connectIntro{margin:0 0 12px}
+.connectIntro h3{font-size:15px;margin:0}
+.simpleFields{gap:10px}
+.simpleFields input{padding:10px 12px;min-height:40px}
+.simpleActions{margin-top:11px;gap:9px}
+.simpleActions button{min-height:38px;padding:7px 12px}
+.advancedSettings{margin:10px 0;padding:0 12px 9px}
+.advancedSettings summary{font-size:12px;padding:10px 3px}
+.automationBar{padding:11px;margin-bottom:9px}
+.syncLine{margin-top:10px}
+#ib-performance{margin:0 0 12px;padding:12px 14px;border-radius:13px}
+.ibTitle{gap:8px}
+.ibTitle b{font-size:13px}
+.ibTitle button{font-size:11px;min-height:34px;padding:7px 10px}
+.timestamp{display:block;color:#80748f;font-size:10px;margin-top:7px}
+.clientsHead{padding-bottom:10px}
+.matchSummary{padding:9px 11px;margin:10px 0 4px}
+.clientList{margin-top:2px}
+.clientRow{grid-template-columns:minmax(135px,1.25fr) minmax(110px,.8fr) minmax(93px,.6fr) auto;gap:9px;min-height:58px;padding:10px 0}
+.clientIdentity,.mt5Cell,.clientStatus{gap:4px}
+.clientIdentity b{font-size:12px}
+.clientIdentity span{font-size:10px}
+.mt5Cell b{font-size:11px;overflow-wrap:anywhere;white-space:normal}
+.clientAction{gap:6px;flex-wrap:wrap}
+.clientAction .detailsButton{min-width:0;min-height:34px;padding:7px 11px;font-size:11px}
+.verifyDisclosure{position:relative;flex:0 0 auto}
+.verifyDisclosure summary{list-style:none;cursor:pointer;font-size:11px;color:#bcb0da;background:rgba(113,82,181,.1);border:1px solid rgba(144,118,195,.25);border-radius:9px;padding:8px 10px;min-height:34px}
+.verifyDisclosure summary::-webkit-details-marker{display:none}
+.verifyDisclosure[open]{flex:1 1 100%}
+.verifyBody{display:flex;align-items:center;justify-content:flex-end;gap:7px;margin-top:8px}
+.verifyBody select{width:112px;min-height:34px}
+.verifyBody button{min-height:34px}
+.accountDetails{margin:0 0 10px;padding:12px}
+.detailAccounts{gap:8px;margin-top:10px}
+.detailAccount{padding:11px;gap:8px}
+.detailRebate{gap:5px;padding-top:9px}
+.transferAdminRow{padding:9px 11px}
+@media(max-width:900px){.healthGrid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:720px){
+  .shell{width:calc(100% - 20px);padding-top:12px;padding-bottom:44px}
+  .header h1{font-size:23px}
+  .header span{font-size:10px}
+  .healthGrid{grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;margin:7px 0 11px}
+  .healthCard{flex-direction:column;justify-content:center;gap:4px;padding:8px 4px;min-height:52px;text-align:center}
+  .healthCard small{font-size:9px}
+  .healthCard strong{font-size:10px}
+  .quickNav a{flex:0 0 auto;padding:7px 10px}
+  .card{padding:12px}
+  .foldSummary{padding:11px 13px;min-height:51px}
+  .foldBody{padding:10px 12px 12px}
+  .foldSummary>span:first-child{gap:7px}
+  .foldSummary small{font-size:10px}
+  #ib-performance{padding:11px}
+  .clientRow{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px 10px;padding:12px 0}
+  .clientIdentity{grid-column:1}
+  .mt5Cell{grid-column:2;align-self:start}
+  .clientStatus{grid-column:1;align-self:center}
+  .clientAction{grid-column:2;justify-content:flex-end;padding:0}
+  .clientAction .detailsButton{font-size:10px;padding:7px 9px}
+  .verifyDisclosure summary{font-size:10px;padding:8px 9px}
+  .verifyDisclosure[open]{flex-basis:100%}
+  .verifyBody select{width:115px}
+  .accountDetailsHead button{width:auto}
+  .detailAccount{padding:11px}
+  .foldRebate>section{padding:10px}
+  .simpleActions button{width:auto;flex:1 1 160px}
+}
+@media(max-width:380px){
+  .healthCard small{font-size:8px}
+  .healthCard strong{font-size:9px}
+  .clientAction{gap:5px}
+  .clientAction .detailsButton{padding:7px}
+}

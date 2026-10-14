@@ -6,7 +6,7 @@ const apiSrc=fs.readFileSync('apps/api/src/brokers/exness-partnership-api.servic
 const autoSrc=fs.readFileSync('apps/api/src/brokers/broker-automation.service.ts','utf8');
 const ctlSrc=fs.readFileSync('apps/api/src/brokers/broker-automation.controller.ts','utf8');
 const ui=fs.readFileSync('apps/web/app/broker/page.tsx','utf8');
-assert(ui.includes('<b>EXNESS IB DASHBOARD · 30 วันล่าสุด</b>'));
+assert(ui.includes('<b>รายได้ IB · 30 วัน</b>'));
 assert(ui.includes('/admin/brokers/exness/automation/performance-preview'));
 assert(ui.includes('clientReportPath: String(connection?.clientReportPath || "/api/reports/clients/accounts/")'));
 assert(ui.includes('enabled: apiForm.enabled'));
