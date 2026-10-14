@@ -6,7 +6,6 @@ import {
 import { randomUUID } from "crypto";
 import { DbService } from "../db.service";
 import { BrokerBenefitService } from "./broker-benefit.service";
-import { BrokerFinanceService } from "./broker-finance.service";
 import { ExnessPartnershipApiService } from "./exness-partnership-api.service";
 
 type TriggerType = "MANUAL" | "SCHEDULED";
@@ -19,8 +18,7 @@ export class BrokerAutomationService
   constructor(
     private readonly db: DbService,
     private readonly api: ExnessPartnershipApiService,
-    private readonly benefits: BrokerBenefitService,
-    private readonly finance: BrokerFinanceService
+    private readonly benefits: BrokerBenefitService
   ) {}
 
   onApplicationBootstrap() {
@@ -327,65 +325,8 @@ export class BrokerAutomationService
         }
       }
 
-      if (state.autoImportCommissions && state.commissionReportPath) {
-        for (const item of reports.commissions) {
-          try {
-            const partnerClient = await this.matchPartnerClient(item);
-            if (!partnerClient?.id) continue;
-
-            const eventId = this.commissionEventId(item);
-            const currency = this.commissionCurrency(item);
-            const grossCommissionMinor = this.commissionMinor(
-              item,
-              Number(reports.commissionAmountScale || 100)
-            );
-            const occurredAt = this.occurredAt(item);
-
-            if (!eventId || !currency || !grossCommissionMinor || !occurredAt) {
-              errors.push("commission: missing canonical fields");
-              continue;
-            }
-
-            try {
-              const result = await this.finance.recordCommission(
-                {
-                  partnerClientId: String(partnerClient.id),
-                  externalEventId: eventId,
-                  symbol: this.symbol(item) || undefined,
-                  volumeLots: this.volumeLots(item),
-                  grossCommissionMinor,
-                  currency,
-                  occurredAt,
-                  rawReference: JSON.stringify({
-                    source: "EXNESS_API",
-                    eventId,
-                    externalClientRef: this.clientRef(item) || null,
-                    accountLast4: this.accountNumber(item).slice(-4) || null,
-                    symbol: this.symbol(item) || null
-                  })
-                },
-                "EXNESS_API"
-              );
-              counts.commissionsImported += 1;
-
-              if (state.autoReleaseRebates && result.rebateEntryId) {
-                await this.finance.releaseRebate(
-                  String(result.rebateEntryId),
-                  "EXNESS_API"
-                );
-                counts.rebatesReleased += 1;
-              }
-            } catch (error: any) {
-              const message = String(error?.message || error);
-              if (!message.includes("ถูกบันทึกแล้ว")) {
-                errors.push("commission: " + message.slice(0,200));
-              }
-            }
-          } catch (error: any) {
-            errors.push("commission: " + String(error?.message || error).slice(0,200));
-          }
-        }
-      }
+      // SCENOVA is never the payer or rebate ledger. Exness handles all monetary rebates.
+      // Partner reward reports are read in Exness Rebate Control, not imported to local wallets.
 
       const status = errors.length ? "PARTIAL" : "SUCCESS";
       await this.finishRun(

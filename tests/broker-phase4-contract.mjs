@@ -35,8 +35,8 @@ assert.match(automation, /SYNC_ALREADY_RUNNING/);
 assert.match(automation, /sync_lock_until=now\(\)\+interval '10 minutes'/);
 assert.match(automation, /last_test_status='PASS'/);
 assert.match(automation, /verifyClientFromApi/);
-assert.match(automation, /recordCommission/);
-assert.match(automation, /releaseRebate/);
+assert.doesNotMatch(automation, /this\.finance\.recordCommission/);
+assert.doesNotMatch(automation, /this\.finance\.releaseRebate/);
 assert.doesNotMatch(automation, /JSON\.stringify\(item\)\.slice/);
 
 assert.match(controller, /@Controller\("admin\/brokers\/exness\/automation"\)/);

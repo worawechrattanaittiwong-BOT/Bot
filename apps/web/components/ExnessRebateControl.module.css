@@ -1,0 +1,32 @@
+.wrap {border:1px solid rgba(139,110,216,.28);border-radius:20px;padding:clamp(16px,2vw,25px);background:linear-gradient(145deg,rgba(30,23,49,.92),rgba(13,10,24,.97));min-width:0;color:#eae2fb}
+.heading {display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.heading small{font-weight:800;letter-spacing:.13em;font-size:10px;color:#b9a2ff}
+.heading h2{font-size:21px;line-height:1.35;margin:6px 0;color:#fff}
+.heading p,.editor p{font-size:12px;line-height:1.65;color:#aaa0bd;margin:4px 0}
+.heading a {text-decoration:none;color:#c9b7ff;border:1px solid rgba(158,132,230,.32);border-radius:10px;padding:10px 13px;font-size:12px;font-weight:800}
+.notice{background:rgba(145,102,237,.10);border:1px solid rgba(171,136,246,.23);border-radius:11px;margin:17px 0;padding:12px 15px;font-size:12px;line-height:1.65;color:#d4c4f4}
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0}
+.tabs button{background:rgba(118,91,185,.08);color:#ada1c7;border:1px solid rgba(151,124,210,.2);padding:10px 14px;border-radius:10px;cursor:pointer;font-size:12px;font-weight:750}
+.tabs .active {background:linear-gradient(135deg,#7354df,#9a75e9);color:#fff;border-color:#a08af0}
+.toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;flex-wrap:wrap}
+.toolbar>div{display:grid;gap:4px}.toolbar b{font-size:14px}.toolbar span,.pager span{font-size:11px;color:#9f93b5}
+.toolbar button,.pager button {background:transparent;border:1px solid rgba(157,133,225,.3);padding:9px 12px;border-radius:9px;color:#cfbaff;font-size:11px;cursor:pointer}
+.editor{padding:17px;margin-bottom:17px;border:1px solid rgba(155,126,223,.2);border-radius:13px;background:rgba(121,76,216,.045)}
+.editor h3{font-size:15px;margin:0 0 7px}.fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:16px 0}
+.fields label{display:grid;gap:7px;color:#c6b8db;font-size:11px;font-weight:750}
+.fields input,.verification input{background:#0b0915;border:1px solid rgba(167,135,235,.32);border-radius:9px;color:#f6f0ff;padding:11px;width:100%;min-width:0;font-size:13px}
+.fields input:focus,.verification input:focus{outline:2px solid #9270e8;outline-offset:1px}
+.primary{background:#805ef0;color:white;border:1px solid #9c7af5;border-radius:9px;padding:11px 15px;font-size:12px;font-weight:800;cursor:pointer}
+.primary:disabled,.toolbar button:disabled,.pager button:disabled{opacity:.5;cursor:not-allowed}
+.verification{display:grid;gap:10px;margin-top:13px}.verification b{font-size:12px}.verification span{font-size:11px;color:#cdbec6}
+.actions{margin-top:14px}.error,.success{font-size:12px;border-radius:9px;padding:11px 13px;line-height:1.55;margin:12px 0}
+.error{background:rgba(200,73,95,.12);border:1px solid rgba(240,120,120,.3);color:#ffc2c7}
+.success{background:rgba(68,150,102,.12);border:1px solid rgba(95,210,138,.22);color:#ace5ba}
+.tableScroll{overflow-x:auto;border:1px solid rgba(150,128,195,.2);border-radius:11px}
+.table{border-collapse:collapse;width:100%;font-size:11px;white-space:nowrap}
+.table th{text-align:left;background:rgba(134,91,211,.12);color:#cbb8e9;padding:12px 13px;font-weight:800}
+.table td{padding:12px 13px;color:#c0b4d2;border-top:1px solid rgba(150,128,195,.12)}
+.table tr:hover td{background:rgba(137,98,221,.055)}.table input{accent-color:#8d64e9}
+.selectButton{background:rgba(124,91,213,.18);border:1px solid rgba(168,134,237,.4);border-radius:7px;color:#dbcaf8;font-size:11px;padding:7px 10px;cursor:pointer}
+.pager{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:13px}.pager>div{display:flex;align-items:center;gap:9px}
+@media(max-width:750px){.fields{grid-template-columns:1fr}.tabs button{flex:1 1 44%}.heading a{width:100%;text-align:center}}

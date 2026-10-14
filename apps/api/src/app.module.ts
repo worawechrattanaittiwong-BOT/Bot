@@ -80,11 +80,11 @@ import { AdminBrokerController, BrokerController, PublicBrokerController } from 
 import { BrokerService } from "./brokers/broker.service";
 import { BrokerTransferService } from "./brokers/broker-transfer.service";
 import { BrokerBenefitService } from "./brokers/broker-benefit.service";
-import { AdminBrokerFinanceController, BrokerRebateController } from "./brokers/broker-finance.controller";
-import { BrokerFinanceService } from "./brokers/broker-finance.service";
 import { AdminBrokerAutomationController } from "./brokers/broker-automation.controller";
 import { BrokerAutomationService } from "./brokers/broker-automation.service";
 import { ExnessPartnershipApiService } from "./brokers/exness-partnership-api.service";
+import { ExnessRebateService } from "./brokers/exness-rebate.service";
+import { ExnessRebateController } from "./brokers/exness-rebate.controller";
 
 @Module({
   imports: [
@@ -93,7 +93,7 @@ import { ExnessPartnershipApiService } from "./brokers/exness-partnership-api.se
       signOptions: { expiresIn: "7d" }
     })
   ],
-  controllers: [AdminBrokerAutomationController, AdminBrokerFinanceController, BrokerRebateController, AdminBrokerController, BrokerController, PublicBrokerController, ModeGuideVideoAdminController, ModeGuideVideoController, AdminPaymentQrSettingsController, InAppCampaignAssetController, InAppCampaignAdminController, InAppCampaignController, RuntimeEventWorkerController, RuntimeEventStreamController, ServerSoftwareUpdateAdminController, ServerSoftwareUpdateWorkerController, CloudUpdateAdminController, CloudUpdateWorkerController, CloudServerAdminController, ServerEnrollmentController, OwnerManagementController, OwnerMobileController, CommissionPayoutWorkerController, AdminCommissionWithdrawalsController, CommissionWalletWithdrawalController, AdminApiCredentialsController, AdminServiceLinksController, ProductionHardeningController, RuntimeMigrationController, RuntimeMigrationAgentController, RuntimeSafetyController, CloudTestController, CloudAdminController, CloudCustomerController, CloudPaymentController, CloudBulkController, LocalPackageCustomerController, LocalPackageAdminController, RootController, CatalogController, AuthController, AccountSecurityController, TrialCouponController, BotController, DashboardLiveController, MobileMirrorController, FleetMonitorController, AiAssistantController, AdminAiAssistantController, PartnerController, ReferralController, ManualMt5Controller, TradingSymbolController, EaTradingSymbolController, AdminController, EaController, AgentActionController, InstallerController, BacktestController, PerformanceController, PerformanceAnalyticsController, PerformanceActionsController, SharedPerformanceController, HealthController, WorkerController],
+  controllers: [AdminBrokerAutomationController, ExnessRebateController, AdminBrokerController, BrokerController, PublicBrokerController, ModeGuideVideoAdminController, ModeGuideVideoController, AdminPaymentQrSettingsController, InAppCampaignAssetController, InAppCampaignAdminController, InAppCampaignController, RuntimeEventWorkerController, RuntimeEventStreamController, ServerSoftwareUpdateAdminController, ServerSoftwareUpdateWorkerController, CloudUpdateAdminController, CloudUpdateWorkerController, CloudServerAdminController, ServerEnrollmentController, OwnerManagementController, OwnerMobileController, CommissionPayoutWorkerController, AdminCommissionWithdrawalsController, CommissionWalletWithdrawalController, AdminApiCredentialsController, AdminServiceLinksController, ProductionHardeningController, RuntimeMigrationController, RuntimeMigrationAgentController, RuntimeSafetyController, CloudTestController, CloudAdminController, CloudCustomerController, CloudPaymentController, CloudBulkController, LocalPackageCustomerController, LocalPackageAdminController, RootController, CatalogController, AuthController, AccountSecurityController, TrialCouponController, BotController, DashboardLiveController, MobileMirrorController, FleetMonitorController, AiAssistantController, AdminAiAssistantController, PartnerController, ReferralController, ManualMt5Controller, TradingSymbolController, EaTradingSymbolController, AdminController, EaController, AgentActionController, InstallerController, BacktestController, PerformanceController, PerformanceAnalyticsController, PerformanceActionsController, SharedPerformanceController, HealthController, WorkerController],
   providers: [
     AiAssistantService,
     AiContextService,
@@ -103,7 +103,7 @@ import { ExnessPartnershipApiService } from "./brokers/exness-partnership-api.se
     AiStoreService,
     BrokerAutomationService,
     ExnessPartnershipApiService,
-    BrokerFinanceService,
+    ExnessRebateService,
     BrokerBenefitService,
     BrokerService,
     BrokerTransferService,

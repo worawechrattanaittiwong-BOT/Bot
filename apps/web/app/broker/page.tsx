@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { OwnerMobileNav, OwnerSidebar } from "../../components/OwnerSidebar";
 import { adminApi, api, getToken } from "../../lib/api";
 import styles from "./page.module.css";
+import { ExnessRebateControl } from "../../components/ExnessRebateControl";
 
 type Account = {
   user: {
@@ -91,12 +92,6 @@ type ClientMatchPreview = {
   usableAccountRows: number;
   matched: Array<{ userId: string; accountLast4: string[] }>;
   note: string;
-};
-
-type FinanceDashboard = {
-  policies: Array<{levelCode:string; rebatePercent:number; active:boolean}>;
-  events: Array<{id:string;userCode:string;currency:string;grossCommissionMinor:number;rebateAmountMinor:number;rebateEntryId:string|null;rebateStatus:string|null;status:string;externalEventId:string}>;
-  totals: Array<{currency:string;confirmedCommissionMinor:number;activeRebateMinor:number;paidRebateMinor:number;commissionCount:number}>;
 };
 
 type TransferAdminResponse = {requests:Array<{
@@ -202,10 +197,8 @@ export default function BrokerPage() {
   const [clients, setClients] = useState<ClientState>({ levels: [], clients: [] });
   const [apiForm, setApiForm] = useState<ApiForm>(connectionForm());
   const [ibPreview, setIbPreview] = useState<IbPerformancePreview | null>(null);
-  const [finance, setFinance] = useState<FinanceDashboard | null>(null);
   const [transfers,setTransfers] = useState<TransferAdminResponse | null>(null);
   const [transferError,setTransferError]=useState("");
-  const [financeError, setFinanceError] = useState("");
   const [ibError, setIbError] = useState("");
   const [ibCheckedAt, setIbCheckedAt] = useState<string | null>(null);
   const [ibLoading, setIbLoading] = useState(false);
@@ -383,25 +376,6 @@ export default function BrokerPage() {
     }
   }
 
-  async function refreshFinance() {
-    try {
-      const result = await adminApi("/admin/brokers/exness/finance");
-      setFinance(result);
-      setFinanceError("");
-    } catch (err: unknown) { setFinanceError(errorText(err, "โหลดข้อมูล Rebate ไม่สำเร็จ")); }
-  }
-
-  async function approveRebate(entryId: string) {
-    if (!window.confirm("ยืนยันอนุมัติ Rebate รายการนี้เป็น AVAILABLE? การอนุมัตินี้ไม่ใช่การโอนเงินจริงเข้าบัญชี Exness")) return;
-    setActionBusy("rebate-" + entryId);
-    try {
-      await adminApi("/admin/brokers/exness/finance/rebates/" + encodeURIComponent(entryId) + "/release", {method:"POST"});
-      await refreshFinance();
-      setMessage("อนุมัติ Rebate แล้ว · ยังไม่โอนเงินจริงเข้าบัญชี Exness");
-    } catch (err:unknown) { setPartnerError(errorText(err, "อนุมัติ Rebate ไม่สำเร็จ")); }
-    finally { setActionBusy(""); }
-  }
-
   async function refreshAutomation() {
     const result = await adminApi("/admin/brokers/exness/automation");
     setAutomation(result);
@@ -431,8 +405,8 @@ export default function BrokerPage() {
         clientReportPath: apiForm.clientReportPath.trim(),
         commissionReportPath: apiForm.commissionReportPath.trim(),
         autoVerifyClients: apiForm.autoVerifyClients,
-        autoImportCommissions: apiForm.autoImportCommissions,
-        autoReleaseRebates: connection.autoReleaseRebates,
+        autoImportCommissions: false,
+        autoReleaseRebates: false,
         commissionAmountScale: connection.commissionAmountScale,
         authIdentityField: connection.authIdentityField
       })
@@ -628,7 +602,7 @@ export default function BrokerPage() {
             <a href="#ib-performance">ภาพรวมรายได้ IB</a>
             <a href="#exness-partner">ตั้งค่าพาร์ตเนอร์</a>
             <a href="#exness-clients">ตรวจสอบลูกค้า</a>
-            <a href="#exness-rebate">อนุมัติ Rebate</a>
+            <a href="#exness-rebate">Exness Rebate Control</a>
             <a href="#exness-transfers">คำขอย้ายพาร์ตเนอร์</a>
           </nav>
           <div className={styles.healthGrid} aria-label="สถานะ Exness API">
@@ -697,7 +671,7 @@ export default function BrokerPage() {
                   สำหรับผู้ดูแลขั้นสูงเท่านั้น: ต้องตรวจเส้นทาง API ตามสิทธิ์บัญชี Exness และเปรียบเทียบยอดกับรายงานจริงก่อนเปิด Auto Import หรือ Scheduled Sync การทดสอบการเชื่อมต่อไม่จ่าย Rebate และไม่เปิดคำสั่งเทรด
                 </p>
                 <div className={styles.apiActions}>
-                  <label className={styles.toggle}><input type="checkbox" checked={apiForm.autoImportCommissions} disabled={!apiForm.commissionReportPath.trim() || Boolean(actionBusy)} onChange={event=>setApiForm(v=>({...v,autoImportCommissions:event.target.checked}))}/><span>นำเข้าคอมมิชชันอัตโนมัติ (ต้องยืนยันความถูกต้องของรายงานก่อนเปิด)</span></label>
+                  <p className={styles.apiHelp}>Rebate และคอมมิชชันสำหรับคืนลูกค้าดูผ่าน Exness Rebate Control เท่านั้น ไม่มีการนำเข้ากระเป๋าเงิน SCENOVA</p>
                   <div className={styles.automationBar}>
                     <div><b>Scheduled API Sync</b><small>เปิดการซิงก์อัตโนมัติเฉพาะเมื่อทดสอบ API ผ่านแล้ว · การเปลี่ยนสถานะมีผลเมื่อกดบันทึก API</small></div>
                     <label className={styles.toggle}><input type="checkbox" checked={apiForm.enabled} disabled={!apiConnected || Boolean(actionBusy)} onChange={event => setApiForm(current => ({ ...current, enabled: event.target.checked }))}/><span>{apiForm.enabled ? "เปิดอัตโนมัติ" : "ปิดอัตโนมัติ"}</span></label>
@@ -902,15 +876,7 @@ export default function BrokerPage() {
             </footer>
           </form>
 
-          <section id="exness-rebate" className={styles.card}>
-            <div className={styles.sectionHead}><div><small>EXNESS REBATE CENTER</small><b>อนุมัติ Rebate 30% จากคอมมิชชันที่ยืนยันแล้ว</b><span>การอนุมัติเปลี่ยนยอดเป็น AVAILABLE เท่านั้น · ไม่มีการโอนเงินจริงผ่านระบบนี้</span></div><button type="button" className={styles.secondaryButton} onClick={refreshFinance} disabled={Boolean(actionBusy)}>โหลดข้อมูล Rebate</button></div>
-            <div className={styles.rebateNotice}>ช่องทางจ่าย: Exness Account · รอ Exness ยืนยันสิทธิ์ API และผลรายการโอนเงินจริง ก่อนบันทึกเป็น PAID</div>
-            {financeError && <p className={styles.dashboardError}>{financeError}</p>}
-            {finance ? <>
-              <div className={styles.rebateStats}>{finance.policies.map(p=><div key={p.levelCode}><small>{p.levelCode}</small><b>{p.rebatePercent}%</b><span>{p.active ? "ใช้งาน" : "ปิด"}</span></div>)}{finance.totals.map(t=><div key={t.currency}><small>คอมมิชชัน {t.currency}</small><b>{(t.confirmedCommissionMinor/100).toLocaleString()}</b><span>ยอด Rebate {(t.activeRebateMinor/100).toLocaleString()} · จ่ายแล้ว {(t.paidRebateMinor/100).toLocaleString()}</span></div>)}</div>
-              <div className={styles.rebateRows}>{finance.events.filter(e=>e.rebateEntryId).slice(0,30).map(e=><div key={e.id}><span>{e.userCode} · {e.externalEventId}</span><span>{(e.rebateAmountMinor/100).toFixed(2)} {e.currency} · {e.rebateStatus}</span>{e.rebateStatus==="PENDING" && e.status==="CONFIRMED" ? <button type="button" disabled={Boolean(actionBusy)} onClick={()=>approveRebate(e.rebateEntryId!)}>อนุมัติ</button> : <span>{e.rebateStatus==="AVAILABLE" ? "รอ Exness ยืนยันการจ่าย" : "—"}</span>}</div>)}{!finance.events.length && <p>ยังไม่มีรายการคอมมิชชันที่นำเข้า กรุณาตรวจ Commission Report ก่อน</p>}</div>
-            </> : <p>กดโหลดข้อมูล Rebate เพื่อแสดงนโยบายและรายการรออนุมัติ</p>}
-          </section>
+          <div id="exness-rebate"><ExnessRebateControl/></div>
 
           <section id="exness-transfers" className={styles.card}>
             <div className={styles.sectionHead}>

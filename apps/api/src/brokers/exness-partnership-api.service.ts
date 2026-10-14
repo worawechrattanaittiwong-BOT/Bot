@@ -155,8 +155,8 @@ export class ExnessPartnershipApiService {
       clientReportPath: String(row?.client_report_path || ""),
       commissionReportPath: String(row?.commission_report_path || ""),
       autoVerifyClients: Boolean(row?.auto_verify_clients),
-      autoImportCommissions: Boolean(row?.auto_import_commissions),
-      autoReleaseRebates: Boolean(row?.auto_release_rebates),
+      autoImportCommissions: false,
+      autoReleaseRebates: false,
       commissionAmountScale: Number(row?.commission_amount_scale || 100),
       syncIntervalMinutes: Number(row?.sync_interval_minutes || 15),
       lastTestStatus: String(row?.last_test_status || "NOT_TESTED"),
@@ -210,11 +210,12 @@ export class ExnessPartnershipApiService {
     const clientReportPath = this.normalizePath(input.clientReportPath);
     const commissionReportPath = this.normalizePath(input.commissionReportPath);
     const autoVerifyClients = input.autoVerifyClients === true;
-    const autoImportCommissions = input.autoImportCommissions === true;
-    const autoReleaseRebates = input.autoReleaseRebates === true;
-    if (autoReleaseRebates) {
-      throw new BadRequestException("SCENOVA Rebate ต้องผ่านการอนุมัติแอดมินก่อน ห้ามเปิด Auto Release");
+    // Both legacy internal payout/commission-ledger flags are permanently disabled.
+    if (input.autoImportCommissions === true || input.autoReleaseRebates === true) {
+      throw new BadRequestException("SCENOVA ไม่จัดการเงินคืนเอง โปรดใช้ Exness Rebate Control แทน");
     }
+    const autoImportCommissions = false;
+    const autoReleaseRebates = false;
 
     if (autoVerifyClients && !clientReportPath) {
       throw new BadRequestException("เปิด Auto Verify ไม่ได้จนกว่าจะใส่ Client Report Path");
@@ -414,6 +415,26 @@ export class ExnessPartnershipApiService {
       throw new ConflictException("Exness API HTTP " + response.status);
     }
     return body;
+  }
+
+  // Mutation scope is deliberately fixed: no arbitrary URLs or other broker operations.
+  async mutateRebate(method:"POST"|"PATCH",path:string,body:Record<string,unknown>) {
+    const allowed=new Set([
+      "POST /api/v2/autorebates/approve/start/",
+      "POST /api/v2/autorebates/approve/complete/"
+    ]);
+    if(!allowed.has(method+" "+path) && !(
+      method==="PATCH" && /^\/api\/v2\/autorebates\/clients\/\d{5,20}\/$/.test(path)
+    ))throw new BadRequestException("Exness mutation endpoint ไม่ได้รับอนุญาต");
+    const jwt=await this.authenticate();
+    const response=await fetch(this.baseUrl+path,{
+      method,headers:{accept:"application/json",authorization:"JWT "+jwt,"content-type":"application/json"},
+      body:JSON.stringify(body),signal:AbortSignal.timeout(20000)
+    });
+    // Never surface secrets or arbitrary upstream JSON in errors.
+    if(!response.ok)throw new ConflictException("Exness Rebate API HTTP "+response.status+" · โปรดตรวจสิทธิ์และข้อมูลใน Exness Partners");
+    const raw=await response.text();
+    try { return raw?JSON.parse(raw):{}; }catch { return {}; }
   }
 
   async testConnection(actor: string) {
