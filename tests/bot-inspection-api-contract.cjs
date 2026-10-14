@@ -38,10 +38,10 @@ function setup(role="USER"){
         return {rows:[
           {id:"ticket-1",source:"TRADE",recorded_at:START,event:"EXIT",status:null,direction:"BUY",
             volume:.03,price:4123, pnl:-35.30,position_id:"777",deal_ticket:"999",symbol:"XAUUSDm",
-            currency:"USD",control_mode:"ZERO_GRID",deal_time_msc:String(Date.parse(START)),delivered_at:null,acked_at:null},
+            currency:"USD",control_mode:"ZERO_GRID",event_at:START,time_source:"MT5",delivered_at:null,acked_at:null},
           {id:"1",source:"COMMAND",recorded_at:END,event:"SAFE_STOP",status:"ACKED",
             direction:null,volume:null,price:null,pnl:null,position_id:null,deal_ticket:null,
-            symbol:null,currency:null,control_mode:null,deal_time_msc:null,delivered_at:END,acked_at:END}
+            symbol:null,currency:null,control_mode:null,event_at:END,time_source:"SERVER",delivered_at:END,acked_at:END}
         ]};
       if(sql.includes("c.command IN ('START','SAFE_STOP','CLOSE_ALL')"))
         return {rows:[{id:"2",command:"SAFE_STOP",status:"ACKED",created_at:END,delivered_at:END,acked_at:END},
@@ -94,4 +94,23 @@ test("invalid time window and pagination are rejected before report reads",async
  await assert.rejects(controller.report({user:{sub:OWNER}},ACCOUNT,"2026-01-01T00:00:00Z","2026-10-14T12:00:00Z","0"), e=>e.status===400);
  await assert.rejects(controller.report({user:{sub:OWNER}},ACCOUNT,START,END,"-1"),e=>e.status===400);
  assert.equal(sqlCalls.filter(c=>c.sql.includes("FROM trade_journal")).length,0);
+});
+
+test("all trade range filters and timeline sorting use MT5 event time with broker UTC offset",async()=>{
+ const {controller,sqlCalls}=setup("OWNER");
+ await controller.report({user:{sub:OWNER}},ACCOUNT,START,END,"0");
+ const journal=sqlCalls.filter(c=>c.sql.includes("FROM trade_journal j"));
+ assert(journal.length>=3);
+ assert(journal.every(q=>q.sql.includes("brokerUtcOffsetSeconds")));
+ const events=sqlCalls.find(c=>c.sql.includes("SELECT * FROM ("));
+ assert(events.sql.includes("ORDER BY event_at DESC"));
+ assert(events.sql.includes("AS event_at"));
+ const entries=sqlCalls.find(c=>c.sql.includes("LIMIT 1501"));
+ assert(entries.sql.includes("AS created_at"));
+ assert(entries.sql.includes("brokerUtcOffsetSeconds"));
+});
+
+test('server role wins over forged JWT role for cross-account inspection',async()=>{
+  const {controller}=setup('USER');
+  await assert.rejects(controller.report({user:{sub:CUSTOMER,role:'OWNER'}},ACCOUNT,START,END,'0'), e=>e.status===404);
 });

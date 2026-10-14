@@ -6,6 +6,20 @@ import { approximateTradeGroups, attachSessionTrades, buildBotSessions, inspectB
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_DAYS = 90;
 const DAY_MS = 86_400_000;
+// Deal time is broker-local epoch milliseconds. Offset must be removed before
+// interpreting as UTC, otherwise GMT+3 brokers appear three hours in the future.
+// Keep a safe fallback for journal rows sent by old EAs without original timestamps.
+const TRADE_TIME_SQL = `CASE
+  WHEN (j.metadata->>'dealTimeMsc') ~ '^[0-9]{13}$'
+  THEN to_timestamp(
+    (j.metadata->>'dealTimeMsc')::numeric / 1000
+    - CASE WHEN (j.metadata->>'brokerUtcOffsetSeconds') ~ '^[+-]?[0-9]{1,5}$'
+      THEN CASE WHEN abs((j.metadata->>'brokerUtcOffsetSeconds')::numeric) <= 50400
+        THEN (j.metadata->>'brokerUtcOffsetSeconds')::numeric ELSE 0 END
+      ELSE 0 END
+  )
+  ELSE j.created_at
+END`;
 
 @Controller("bot-inspection")
 @UseGuards(JwtGuard)
@@ -88,7 +102,7 @@ export class BotInspectionController {
               count(*) FILTER (WHERE j.event_type='EXIT')::int AS exits,
               round(coalesce(sum(j.net_profit) FILTER (WHERE j.event_type IN ('ENTRY','EXIT')),0),2) AS pnl
        FROM trade_journal j
-       WHERE j.mt5_account_id=$1 AND j.created_at >= $2::timestamptz AND j.created_at < $3::timestamptz
+       WHERE j.mt5_account_id=$1 AND ${TRADE_TIME_SQL} >= $2::timestamptz AND ${TRADE_TIME_SQL} < $3::timestamptz
        GROUP BY 1 ORDER BY 1`,[account.id,start,finish]
     );
 
@@ -96,24 +110,25 @@ export class BotInspectionController {
     const events=await this.db.query(
       `SELECT * FROM (
          SELECT 'TRADE'::text AS source, j.id::text AS id,j.created_at AS recorded_at,
+                ${TRADE_TIME_SQL} AS event_at,
                 j.event_type::text AS event, NULL::text AS status, j.direction::text AS direction,
                 j.volume AS volume,j.price AS price,j.net_profit AS pnl,j.position_id::text AS position_id,
                 j.deal_ticket::text AS deal_ticket,j.metadata->>'symbol' AS symbol,
                 j.metadata->>'currency' AS currency,
                 j.metadata->>'controlMode' AS control_mode,
-                j.metadata->>'dealTimeMsc' AS deal_time_msc,
+                CASE WHEN (j.metadata->>'dealTimeMsc') ~ '^[0-9]{13}$' THEN 'MT5'::text ELSE 'RECEIVED'::text END AS time_source,
                 NULL::timestamptz AS delivered_at,NULL::timestamptz AS acked_at
          FROM trade_journal j WHERE j.mt5_account_id=$1
-           AND j.created_at >= $2::timestamptz AND j.created_at < $3::timestamptz
+           AND ${TRADE_TIME_SQL} >= $2::timestamptz AND ${TRADE_TIME_SQL} < $3::timestamptz
          UNION ALL
-         SELECT 'COMMAND'::text,c.id::text,c.created_at,c.command::text,c.status::text,
+         SELECT 'COMMAND'::text,c.id::text,c.created_at,c.created_at,c.command::text,c.status::text,
                 NULL::text,NULL::numeric,NULL::numeric,NULL::numeric,
-                NULL::text,NULL::text,NULL::text,NULL::text,NULL::text,NULL::text,
+                NULL::text,NULL::text,NULL::text,NULL::text,NULL::text,'SERVER'::text,
                 c.delivered_at,c.acked_at
          FROM bot_commands c JOIN bot_instances bi ON bi.id=c.bot_instance_id
          WHERE bi.mt5_account_id=$1 AND c.created_at >= $2::timestamptz AND c.created_at < $3::timestamptz
            AND c.created_at >= $5::timestamptz
-       ) e ORDER BY recorded_at DESC,source DESC,id DESC
+       ) e ORDER BY event_at DESC,source DESC,id DESC
        LIMIT 101 OFFSET $4::int`,[account.id,start,finish,parsedOffset,account.created_at]
     );
 
@@ -126,12 +141,12 @@ export class BotInspectionController {
        ORDER BY c.created_at DESC,c.id DESC LIMIT 1001`,[account.id,start,finish,account.created_at]
     );
     const tradeRows=await this.db.query(
-      `SELECT j.id::text AS id,j.created_at,j.event_type,j.direction,j.volume,j.net_profit,
+      `SELECT j.id::text AS id,${TRADE_TIME_SQL} AS created_at,j.event_type,j.direction,j.volume,j.net_profit,
               j.position_id::text AS position_id,j.metadata->>'currency' AS currency
        FROM trade_journal j
-       WHERE j.mt5_account_id=$1 AND j.created_at >= $2::timestamptz AND j.created_at < $3::timestamptz
+       WHERE j.mt5_account_id=$1 AND ${TRADE_TIME_SQL} >= $2::timestamptz AND ${TRADE_TIME_SQL} < $3::timestamptz
          AND j.event_type IN ('ENTRY','EXIT')
-       ORDER BY j.created_at DESC,j.id DESC LIMIT 1501`,[account.id,start,finish]
+       ORDER BY ${TRADE_TIME_SQL} DESC,j.id DESC LIMIT 1501`,[account.id,start,finish]
     );
     const limitedEvents=events.rows.slice(0,100);
     const incompleteCommands=commands.rows.length>1000;
@@ -163,10 +178,8 @@ export class BotInspectionController {
         price:e.price===null?null:Number(e.price),pnl:e.pnl===null?null:Number(e.pnl),
         positionId:e.position_id,dealTicket:e.deal_ticket,symbol:e.symbol,currency:e.currency,
         controlMode:e.control_mode,
-        executedAt:/^\d{13}$/.test(String(e.deal_time_msc||"")) &&
-          Number(e.deal_time_msc)>1_600_000_000_000 &&
-          Number(e.deal_time_msc)<now+DAY_MS
-            ? new Date(Number(e.deal_time_msc)).toISOString() : null,
+        timeSource:e.time_source,
+        executedAt:e.time_source==='MT5'?e.event_at:null,
         deliveredAt:e.delivered_at,ackedAt:e.acked_at
       })),
       offset:parsedOffset,nextOffset:events.rows.length>100?parsedOffset+100:null

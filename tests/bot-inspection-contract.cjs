@@ -108,3 +108,22 @@ test('inspection flags trade after STOP request, before EA delivery, without cla
  assert(findings.some(f=>f.code==='CLOSE_REASON_UNAVAILABLE'&&f.level==='INFO'));
  assert(!JSON.stringify(findings).includes('ยืนยันว่า Stop Out'));
 });
+
+test('group P/L includes entry-side broker commission and fees',()=>{
+  const rows=[
+    {id:'entry',created_at:'2026-10-14T12:00:00Z',event_type:'ENTRY',volume:.03,position_id:'p',currency:'USD',net_profit:-.12},
+    {id:'exit',created_at:'2026-10-14T12:01:00Z',event_type:'EXIT',volume:.03,position_id:'p',currency:'USD',net_profit:1.00}
+  ];
+  const groups=approximateTradeGroups(rows);
+  assert.equal(groups.length,1);
+  assert.equal(groups[0].netProfit,.88);
+  assert.equal(groups[0].complete,true);
+});
+
+test('inspection uses actual normalized trade time: late-uploaded old entry not flagged after STOP',()=>{
+  const stop=[{id:'stop',command:'SAFE_STOP',status:'ACKED',created_at:'2026-10-14T12:34:40Z',delivered_at:'2026-10-14T12:34:58Z'}];
+  // created_at is the corrected time projected by the SQL query, not ingestion time.
+  const deals=[{id:'old-entry',created_at:'2026-10-14T12:33:00Z',event_type:'ENTRY',net_profit:0}];
+  const findings=inspectBotEvents(stop,deals);
+  assert(!findings.some(f=>f.code==='ENTRY_DURING_STOP_DELIVERY'));
+});

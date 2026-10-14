@@ -42,13 +42,15 @@ export function approximateTradeGroups(rows:TradeRow[]) {
     const currency=String(t.currency||"UNKNOWN").toUpperCase();
     if(current.currency!==currency)current.currency="MIXED";
     const volume=Math.max(0,Number(t.volume)||0);
+    // Both entry and exit deals can carry commission/swap/fees. Counting only
+    // exit P/L overstates the cycle result on some live brokers.
+    current.netProfit+=Number(t.net_profit)||0;
     if(event==="ENTRY"){
       current.entries++;
       current.grossLots+=volume;
       openPositions.set(pos,(openPositions.get(pos)||0)+volume);
     } else{
       current.exits++;
-      current.netProfit+=Number(t.net_profit)||0;
       if(openPositions.has(pos)){
         const remainder=(openPositions.get(pos)||0)-volume;
         if(remainder<=0.0000001)openPositions.delete(pos);else openPositions.set(pos,remainder);
@@ -121,7 +123,8 @@ export function inspectBotEvents(commands:CommandRow[],trades:TradeRow[]) {
       }
     }
   }
-  const severeLoss=trades.filter(t=>t.event_type==="EXIT" && (Number(t.net_profit)||0)<0);
+  const severeLoss=trades.filter(t=>t.event_type==="EXIT" && (Number(t.net_profit)||0)<0)
+    .sort((a,b)=>+new Date(a.created_at)-+new Date(b.created_at));
   if(severeLoss.length){
     findings.push({code:"CLOSE_REASON_UNAVAILABLE",title:"เหตุผลปิดขาดทุนยังตรวจไม่ครบ",
       detail:"Trade Journal ยังไม่มี MT5 DEAL_REASON จึงไม่สามารถยืนยัน Stop Out/ปิดมือ/EA ได้",

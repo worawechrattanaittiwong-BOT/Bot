@@ -11,7 +11,7 @@ type Account = {
   userCode:string|null;lastTradeAt:string|null;
 };
 type Event = {
-  id:string;source:"TRADE"|"COMMAND";recordedAt:string;executedAt:string|null;
+  id:string;source:"TRADE"|"COMMAND";recordedAt:string;executedAt:string|null;timeSource:"MT5"|"RECEIVED"|"SERVER";
   event:string;status:string|null;direction:string|null;volume:number|null;
   price:number|null;pnl:number|null;positionId:string|null;dealTicket:string|null;
   symbol:string|null;currency:string|null;controlMode:string|null;
@@ -49,6 +49,12 @@ const thai=(raw:string|null|undefined,seconds=true)=>{
 const amount=(n:number)=>Number(n).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
 const num=(n:unknown)=>Number.isFinite(Number(n))?Number(n):0;
 const last4=(n:string)=>"••••"+String(n||"").slice(-4);
+function accountType(server:string):"REAL"|"DEMO"|"UNKNOWN" {
+  const label=String(server||"").toUpperCase();
+  if(/DEMO|TRIAL|TRIA[0-9]+|PRACTICE/.test(label))return "DEMO";
+  if(/REAL|LIVE/.test(label))return "REAL";
+  return "UNKNOWN";
+}
 
 export default function BotInspectionPage(){
   const [accounts,setAccounts]=useState<Account[]>([]);
@@ -88,7 +94,7 @@ export default function BotInspectionPage(){
 
   const selected=accounts.find(a=>a.id===accountId);
   const visible=useMemo(()=>accounts.filter(a=>{
-    const type=String(a.server||"").toUpperCase().includes("TRIAL")||String(a.server||"").toUpperCase().includes("DEMO")?"DEMO":"REAL";
+    const type=accountType(a.server);
     if(filter==="ACTIVE"&&a.archived)return false;
     if(filter==="ARCHIVED"&&!a.archived)return false;
     if((filter==="REAL"||filter==="DEMO")&&type!==filter)return false;
@@ -99,8 +105,7 @@ export default function BotInspectionPage(){
   function chooseFilter(value:Filter){
     setFilter(value);
     const filtered=accounts.filter(a=>{
-      const server=String(a.server||"").toUpperCase();
-      const type=server.includes("TRIAL")||server.includes("DEMO")?"DEMO":"REAL";
+      const type=accountType(a.server);
       return value==="ALL"||(value==="ACTIVE"&&!a.archived)||(value==="ARCHIVED"&&a.archived)||((value==="REAL"||value==="DEMO")&&type===value);
     });
     if(!filtered.some(a=>a.id===accountId)){requestVersion.current++;setAccountId(filtered[0]?.id||"");setReport(null);setTimeline([]);}
@@ -163,7 +168,7 @@ export default function BotInspectionPage(){
               <label className={styles.field}><span>เลือกบัญชี MT5</span>
                 <select value={accountId} onChange={e=>{requestVersion.current++;setAccountId(e.target.value);setReport(null);setTimeline([]);setBusy(false);}} aria-label="เลือกบัญชี MT5">
                   {visible.length===0&&!selected?<option value="">ไม่มีบัญชีตามตัวกรอง</option>:(selected&&!visible.some(a=>a.id===selected.id)?[selected,...visible]:visible).map(a=>
-                    <option key={a.id} value={a.id}>{last4(a.number)} · {a.userCode?a.userCode+" · ":""}{a.broker} · {a.archived?"ถอดออก":"ใช้งาน"}</option>
+                    <option key={a.id} value={a.id}>MT5 {a.number} · {a.server} · {a.userCode?a.userCode+" · ":""}{a.archived?"ถอดออก":"ใช้งาน"}</option>
                   )}
                 </select>
               </label>
@@ -177,11 +182,11 @@ export default function BotInspectionPage(){
             </div>
             {query||filter!=="ALL"?<div className={styles.matches}>
               {visible.slice(0,14).map(a=><button key={a.id} type="button" className={a.id===accountId?styles.matchSelected:""} onClick={()=>{requestVersion.current++;setAccountId(a.id);setReport(null);setTimeline([]);setBusy(false);}}>
-                {last4(a.number)} <span>{a.userCode||a.broker} · {a.archived?"ถอดออก":"ใช้งาน"}</span>
+                {last4(a.number)} <span>{a.server} · {a.userCode||a.broker} · {a.archived?"ถอดออก":"ใช้งาน"}</span>
               </button>)}
               {!visible.length&&<p>ไม่พบบัญชีตามตัวกรอง</p>}
             </div>:null}
-            {selected&&<div className={styles.accountInfo}><b>MT5 {last4(selected.number)}</b><span>{selected.server} · {selected.mode}</span><em className={selected.archived?styles.archived:styles.active}>{selected.archived?"ถอดออก / ตรวจย้อนหลัง":"ใช้งาน"}</em></div>}
+            {selected&&<div className={styles.accountInfo}><b>MT5 {last4(selected.number)}</b><span>{selected.server} · {selected.mode} · {accountType(selected.server)==="UNKNOWN"?"ไม่ยืนยัน Real/Demo":accountType(selected.server)}</span><em className={selected.archived?styles.archived:styles.active}>{selected.archived?"ถอดออก / ตรวจย้อนหลัง":"ใช้งาน"}</em></div>}
             <div className={styles.dateBar}>
               <label className={styles.field}><span>เริ่ม (ไทย)</span><input type="datetime-local" value={from} onChange={e=>{requestVersion.current++;setFrom(e.target.value);setReport(null);setTimeline([]);setBusy(false);}}/></label>
               <label className={styles.field}><span>ถึง (ไทย)</span><input type="datetime-local" value={to} onChange={e=>{requestVersion.current++;setTo(e.target.value);setReport(null);setTimeline([]);setBusy(false);}}/></label>
@@ -256,7 +261,7 @@ export default function BotInspectionPage(){
                     </summary>
                     <div className={styles.itemBody}>
                       <div>บันทึกเข้า SCENOVA <b>{thai(e.recordedAt)}</b></div>
-                      {e.executedAt&&<div>เวลาทำดีล MT5 <b>{thai(e.executedAt)}</b></div>}
+                      {e.executedAt?<div>เวลาเกิดดีล MT5 <b>{thai(e.executedAt)}</b></div>:e.source==="TRADE"?<div>เวลาเกิดดีล MT5 <b>ไม่พบ · ใช้เวลารับ Log แทน</b></div>:null}
                       {e.source==="COMMAND"?<>
                         <div>ส่งถึง EA <b>{thai(e.deliveredAt)}</b></div>
                         <div>ยืนยัน (ACK) <b>{thai(e.ackedAt)}</b></div>
@@ -277,6 +282,7 @@ export default function BotInspectionPage(){
                 {report.limitations.sessionsIncomplete&&<p>รอบบอทมีข้อมูลเกินขีดจำกัดการแสดง อาจขาดบางรอบ</p>}
                 {report.limitations.groupsIncomplete&&<p>มีดีลจำนวนมาก ระบบแสดงเฉพาะส่วนล่าสุด กลุ่มดีลอาจไม่ครบ</p>}
                 <p>บัญชีที่ถอดออกไม่ได้แปลว่าพอร์ตแตกเสมอ ต้องตรวจบัญชีและเหตุปิดจาก MT5 เพิ่มเติม</p>
+                <p>ใช้เวลาที่เกิดดีล MT5 หลังหัก UTC Offset ของโบรกเกอร์ในการกรองและเรียง หากไม่มีเวลา MT5 จะใช้เวลาเซิร์ฟเวอร์รับ Log</p>
                 <p>ผลรวมจาก Journal ไม่รวมเหตุการณ์ BASKET ซ้ำ และอาจไม่ตรงยอดสุทธิ MT5 เมื่อมีข้อมูลที่ไม่ถูกส่งเข้า SCENOVA</p>
               </details>
             </section>
