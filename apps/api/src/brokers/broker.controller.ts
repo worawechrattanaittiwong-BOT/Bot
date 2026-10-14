@@ -11,6 +11,7 @@ import {
 } from "@nestjs/common";
 import { AdminGuard, JwtGuard } from "../security";
 import { BrokerService } from "./broker.service";
+import { BrokerTransferService } from "./broker-transfer.service";
 import { BrokerBenefitService } from "./broker-benefit.service";
 
 @Controller("public/brokers")
@@ -28,8 +29,27 @@ export class PublicBrokerController {
 export class BrokerController {
   constructor(
     private readonly brokers: BrokerService,
-    private readonly benefits: BrokerBenefitService
+    private readonly benefits: BrokerBenefitService,
+    private readonly transfers: BrokerTransferService
   ) {}
+
+  @Get("exness/transfer")
+  async transfer(@Req() req:any) { return this.transfers.customer(String(req.user.sub || "")); }
+
+  @Post("exness/transfer")
+  async prepareTransfer(@Req() req:any, @Body() body:{accountId?:string;accountNumber?:string;consent?:boolean}) {
+    return this.transfers.prepare(String(req.user.sub || ""),body || {});
+  }
+
+  @Post("exness/transfer/:id/submitted")
+  async transferSubmitted(@Req() req:any, @Param("id") id:string) {
+    return this.transfers.markSubmitted(String(req.user.sub || ""),id);
+  }
+
+  @Post("exness/transfer/:id/check")
+  async checkTransfer(@Req() req:any, @Param("id") id:string) {
+    return this.transfers.checkExness(String(req.user.sub || ""),id);
+  }
 
   @Get("exness/signup")
   async exnessSignup() {
@@ -63,9 +83,13 @@ export class BrokerController {
 export class AdminBrokerController {
   constructor(
     private readonly brokers: BrokerService,
-    private readonly benefits: BrokerBenefitService
+    private readonly benefits: BrokerBenefitService,
+    private readonly transfers: BrokerTransferService
   ) {}
 
+
+  @Get("exness/transfers")
+  async transfersList() { return this.transfers.adminList(); }
 
   @Get("exness/clients")
   async exnessClients(@Query("q") q = "") {

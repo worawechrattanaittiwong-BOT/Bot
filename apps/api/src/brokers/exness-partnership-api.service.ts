@@ -494,6 +494,23 @@ export class ExnessPartnershipApiService {
     return [];
   }
 
+  // Read-only. Check an EXACT trading login against the API-configured client report.
+  // Visibility in an Exness partner report does NOT prove Exness approved a transfer.
+  async hasPartnerAccount(accountNumber: string): Promise<boolean> {
+    if (!/^[0-9]{5,20}$/.test(accountNumber)) throw new BadRequestException("เลขบัญชีเทรดไม่ถูกต้อง");
+    await this.ensureSchema();
+    const settings = await this.db.one("SELECT client_report_path FROM broker_api_connections WHERE broker_code='EXNESS'");
+    const path = String(settings?.client_report_path || "");
+    if (!path) throw new ConflictException("ยังไม่ได้ตั้งค่า Client Report API จึงตรวจสอบบัญชีไม่ได้");
+    const token = await this.authenticate();
+    const records = this.arrayFromPayload(await this.request(path,token));
+    return records.some((item:any) => {
+      const candidate = item?.client_account ?? item?.clientAccount ?? item?.account_number
+        ?? item?.accountNumber ?? item?.mt5_account ?? item?.trading_account ?? item?.account?.login;
+      return String(candidate ?? "").trim() === accountNumber;
+    });
+  }
+
   async rawReports(token: string) {
     await this.ensureSchema();
     const row = await this.db.one(

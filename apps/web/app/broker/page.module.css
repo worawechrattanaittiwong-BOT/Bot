@@ -721,3 +721,11 @@
 .advancedSettings summary>span {font-weight:400;font-size:11px;color:#9d91b4;margin-left:10px}
 .advancedSettings[open] .apiGrid {margin-top:10px}
 @media(max-width:680px){.simpleFields{grid-template-columns:1fr}.connectIntro h3{font-size:17px}.simpleActions{align-items:stretch}.simpleActions button{width:100%}.advancedSettings summary>span{display:block;margin:7px 0 0 0}}
+
+#exness-transfers {scroll-margin-top:24px}
+.transferAdminHelp {color:#dacaa9;background:rgba(255,193,81,.06);border:1px solid rgba(255,193,81,.16);padding:11px 14px;border-radius:10px;font-size:11px;line-height:1.6;margin:12px 0}
+.transferAdminList {display:grid;gap:8px;margin-top:13px;max-height:480px;overflow:auto}
+.transferAdminList p {color:#a89bbb;font-size:12px}
+.transferAdminRow {display:grid;grid-template-columns:1fr 1fr 1fr;gap:13px;align-items:center;padding:12px 14px;border:1px solid rgba(150,125,215,.15);border-radius:10px;background:rgba(137,105,214,.035)}
+.transferAdminRow > div {display:grid;gap:5px;min-width:0}.transferAdminRow b {color:#e9e0f8;font-size:12px;overflow-wrap:anywhere}.transferAdminRow span {color:#9a8fac;font-size:11px}
+@media(max-width:700px){.transferAdminRow{grid-template-columns:1fr;gap:8px}}

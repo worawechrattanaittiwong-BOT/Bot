@@ -99,6 +99,11 @@ type FinanceDashboard = {
   totals: Array<{currency:string;confirmedCommissionMinor:number;activeRebateMinor:number;paidRebateMinor:number;commissionCount:number}>;
 };
 
+type TransferAdminResponse = {requests:Array<{
+  id:string;userCode:string;accountLast4:string;partnerCode:string;status:string;
+  submittedAt:string|null;checkedAt:string|null;visibleAt:string|null;createdAt:string;
+}>};
+
 type ApiForm = {
   enabled: boolean;
   email: string;
@@ -198,6 +203,8 @@ export default function BrokerPage() {
   const [apiForm, setApiForm] = useState<ApiForm>(connectionForm());
   const [ibPreview, setIbPreview] = useState<IbPerformancePreview | null>(null);
   const [finance, setFinance] = useState<FinanceDashboard | null>(null);
+  const [transfers,setTransfers] = useState<TransferAdminResponse | null>(null);
+  const [transferError,setTransferError]=useState("");
   const [financeError, setFinanceError] = useState("");
   const [ibError, setIbError] = useState("");
   const [ibCheckedAt, setIbCheckedAt] = useState<string | null>(null);
@@ -274,9 +281,10 @@ export default function BrokerPage() {
     const result = await adminApi("/admin/brokers/exness/settings");
     applySettings(result);
 
-    const [automationResult, clientsResult] = await Promise.allSettled([
+    const [automationResult, clientsResult, transferResult] = await Promise.allSettled([
       adminApi("/admin/brokers/exness/automation"),
-      adminApi("/admin/brokers/exness/clients")
+      adminApi("/admin/brokers/exness/clients"),
+      adminApi("/admin/brokers/exness/transfers")
     ]);
 
     const optionalErrors: string[] = [];
@@ -292,6 +300,9 @@ export default function BrokerPage() {
     } else {
       optionalErrors.push(errorText(clientsResult.reason, "โหลดรายการลูกค้าไม่สำเร็จ"));
     }
+
+    if (transferResult.status === "fulfilled") setTransfers(transferResult.value);
+    else setTransferError(errorText(transferResult.reason,"โหลดคำขอย้ายพาร์ตเนอร์ไม่สำเร็จ"));
 
     if (optionalErrors.length) setPartnerError(optionalErrors.join(" · "));
     setLoading(false);
@@ -360,6 +371,15 @@ export default function BrokerPage() {
       setError(errorText(err, "บันทึกไม่สำเร็จ"));
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function refreshTransfers() {
+    try {
+      const result=await adminApi("/admin/brokers/exness/transfers");
+      setTransfers(result);setTransferError("");
+    } catch (err:unknown) {
+      setTransferError(errorText(err,"โหลดคำขอย้ายพาร์ตเนอร์ไม่สำเร็จ"));
     }
   }
 
@@ -609,6 +629,7 @@ export default function BrokerPage() {
             <a href="#exness-partner">ตั้งค่าพาร์ตเนอร์</a>
             <a href="#exness-clients">ตรวจสอบลูกค้า</a>
             <a href="#exness-rebate">อนุมัติ Rebate</a>
+            <a href="#exness-transfers">คำขอย้ายพาร์ตเนอร์</a>
           </nav>
           <div className={styles.healthGrid} aria-label="สถานะ Exness API">
             <div className={styles.healthCard}><small>EXNESS API</small><strong className={apiConnected ? styles.healthGood : styles.healthWarn}>{apiConnected ? "✓ ผ่านการทดสอบล่าสุด" : "! ต้องตรวจสอบ"}</strong><span>{connection?.lastTestStatus || "ยังไม่ทดสอบ"} · ทดสอบ {dateTime(connection?.lastTestedAt || null)}</span></div>
@@ -889,6 +910,22 @@ export default function BrokerPage() {
               <div className={styles.rebateStats}>{finance.policies.map(p=><div key={p.levelCode}><small>{p.levelCode}</small><b>{p.rebatePercent}%</b><span>{p.active ? "ใช้งาน" : "ปิด"}</span></div>)}{finance.totals.map(t=><div key={t.currency}><small>คอมมิชชัน {t.currency}</small><b>{(t.confirmedCommissionMinor/100).toLocaleString()}</b><span>ยอด Rebate {(t.activeRebateMinor/100).toLocaleString()} · จ่ายแล้ว {(t.paidRebateMinor/100).toLocaleString()}</span></div>)}</div>
               <div className={styles.rebateRows}>{finance.events.filter(e=>e.rebateEntryId).slice(0,30).map(e=><div key={e.id}><span>{e.userCode} · {e.externalEventId}</span><span>{(e.rebateAmountMinor/100).toFixed(2)} {e.currency} · {e.rebateStatus}</span>{e.rebateStatus==="PENDING" && e.status==="CONFIRMED" ? <button type="button" disabled={Boolean(actionBusy)} onClick={()=>approveRebate(e.rebateEntryId!)}>อนุมัติ</button> : <span>{e.rebateStatus==="AVAILABLE" ? "รอ Exness ยืนยันการจ่าย" : "—"}</span>}</div>)}{!finance.events.length && <p>ยังไม่มีรายการคอมมิชชันที่นำเข้า กรุณาตรวจ Commission Report ก่อน</p>}</div>
             </> : <p>กดโหลดข้อมูล Rebate เพื่อแสดงนโยบายและรายการรออนุมัติ</p>}
+          </section>
+
+          <section id="exness-transfers" className={styles.card}>
+            <div className={styles.sectionHead}>
+              <div><small>PARTNER TRANSFER CENTER</small><b>คำขอย้ายพาร์ตเนอร์ของลูกค้า</b><span>ลูกค้าส่งคำขอต่อ Exness ด้วยตนเอง · SCENOVA ตรวจเฉพาะการปรากฏในรายงาน Partner API</span></div>
+              <button className={styles.secondaryButton} type="button" onClick={()=>void refreshTransfers()}>อัปเดตรายการ</button>
+            </div>
+            {transferError&&<p className={styles.dashboardError}>{transferError}</p>}
+            <div className={styles.transferAdminHelp}>สถานะ “แจ้งว่าส่งแล้ว” เป็นข้อมูลที่ลูกค้าระบุ ไม่ใช่คำยืนยันจาก Exness · สถานะ “พบใน Partner API” หมายถึงเลขบัญชีอยู่ในรายงาน ไม่ใช่การอนุมัติการย้ายอย่างเป็นทางการ</div>
+            {transfers ? <div className={styles.transferAdminList}>
+              {transfers.requests.length ? transfers.requests.map(r=><div key={r.id} className={styles.transferAdminRow}>
+                <div><b>{r.userCode}</b><span>บัญชี ••••{r.accountLast4}</span></div>
+                <div><b>{r.status==="PARTNER_VISIBLE"?"พบใน Partner API":r.status==="CUSTOMER_SUBMITTED"?"ลูกค้าแจ้งว่าส่งแล้ว":"เตรียมคำขอ"}</b><span>Partner: {r.partnerCode}</span></div>
+                <div><b>{dateTime(r.submittedAt||r.createdAt)}</b><span>ตรวจล่าสุด: {dateTime(r.checkedAt)}</span></div>
+              </div>) : <p>ยังไม่มีคำขอย้ายพาร์ตเนอร์จากลูกค้า</p>}
+            </div> : <p>กดอัปเดตรายการเพื่อดูคำขอ</p>}
           </section>
 
           <section id="exness-clients" className={styles.card}>

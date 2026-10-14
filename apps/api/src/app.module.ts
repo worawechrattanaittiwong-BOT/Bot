@@ -78,6 +78,7 @@ import { ModeGuideVideoAdminController, ModeGuideVideoController } from "./mode-
 import { ModeGuideVideoService } from "./mode-guide-video.service";
 import { AdminBrokerController, BrokerController, PublicBrokerController } from "./brokers/broker.controller";
 import { BrokerService } from "./brokers/broker.service";
+import { BrokerTransferService } from "./brokers/broker-transfer.service";
 import { BrokerBenefitService } from "./brokers/broker-benefit.service";
 import { AdminBrokerFinanceController, BrokerRebateController } from "./brokers/broker-finance.controller";
 import { BrokerFinanceService } from "./brokers/broker-finance.service";
@@ -105,6 +106,7 @@ import { ExnessPartnershipApiService } from "./brokers/exness-partnership-api.se
     BrokerFinanceService,
     BrokerBenefitService,
     BrokerService,
+    BrokerTransferService,
     ModeGuideVideoService,
     InAppCampaignService,
     RuntimeEventService,

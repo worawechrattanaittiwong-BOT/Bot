@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../lib/api";
 import { ScenovaIcon } from "./ScenovaIcon";
+import { ExnessTransferModal } from "./ExnessTransferModal";
 import styles from "./ExnessSignupCard.module.css";
 
 type SignupInfo = {
@@ -21,9 +22,10 @@ function isMobileDevice() {
   return /Android|iPhone|iPad|iPod|Mobile/i.test(ua) || touchMac;
 }
 
-export function ExnessSignupCard() {
+export function ExnessSignupCard({hasMt5Account=false}:{hasMt5Account?:boolean}) {
   const [info, setInfo] = useState<SignupInfo | null>(null);
   const [open, setOpen] = useState(false);
+  const [transferOpen,setTransferOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -82,14 +84,16 @@ export function ExnessSignupCard() {
       <section className={styles.card}>
         <div className={styles.icon}><ScenovaIcon name="account" size={21}/></div>
         <div className={styles.copy}>
-          <b>ยังไม่มีบัญชี Exness?</b>
-          <span>สมัครผ่าน SCENOVA เพื่อรับราคาพิเศษและสิทธิพิเศษ แล้วค่อยเชื่อม MT5 ได้ทันที</span>
+          <b>{hasMt5Account ? "Exness Partner Center" : "สมัครหรือย้ายพาร์ตเนอร์ Exness"}</b>
+          <span>{hasMt5Account ? "มีบัญชี Exness อยู่แล้ว? เตรียมคำขอย้ายมาอยู่กับ SCENOVA ได้" : "สมัครใหม่ หรือใช้บัญชีเดิมและขอย้ายพาร์ตเนอร์มา SCENOVA"}</span>
         </div>
-        <button type="button" onClick={() => setOpen(true)}>
-          สมัคร Exness
-        </button>
+        <div className={styles.entryActions}>
+          {!hasMt5Account&&<button type="button" onClick={() => setOpen(true)}>สมัคร Exness</button>}
+          <button type="button" className={styles.transferEntryButton} onClick={()=>setTransferOpen(true)}>ย้ายพาร์ตเนอร์</button>
+        </div>
       </section>
 
+      {transferOpen && <ExnessTransferModal onClose={()=>setTransferOpen(false)}/>}
       {open && (
         <div className={styles.backdrop} role="presentation" onMouseDown={() => setOpen(false)}>
           <section

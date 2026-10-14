@@ -215,3 +215,26 @@
     border-radius: 16px;
   }
 }
+
+/* Transfer flow uses the existing Exness signup card and modal, no extra navigation. */
+.entryActions {display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.entryActions button {min-height:40px;padding:0 14px;border-radius:10px;color:#fff;background:#7458e8;border:1px solid #8d72ee;font:inherit;font-size:12px;font-weight:800;cursor:pointer}
+.entryActions .transferEntryButton {background:rgba(136,104,229,.08);border-color:rgba(165,130,243,.4);color:#ddcfff}
+.transferModal {width:min(610px,100%);max-height:min(90vh,900px);overflow-y:auto}
+.transferExplanation {color:#aba1bb;font-size:12px;line-height:1.65;margin:14px 0}
+.transferField {display:grid;gap:7px;margin-top:16px;color:#d9cdec;font-size:12px;font-weight:650}
+.transferField select,.transferField input,.transferField textarea {background:#0b0914;color:#f7f3ff;border:1px solid rgba(158,133,221,.34);border-radius:10px;min-height:43px;padding:11px 13px;width:100%;font:inherit;font-size:12px}
+.transferField textarea {resize:vertical;line-height:1.6}
+.transferField small,.transferHint {font-size:11px;line-height:1.55;color:#998da9}
+.transferReadOnly {padding:11px 13px;border:1px solid rgba(150,125,210,.2);border-radius:10px;color:#d5cbe4;background:#12101b;overflow-wrap:anywhere}
+.transferConsent {display:flex;align-items:flex-start;gap:10px;color:#cabbdc;font-size:12px;line-height:1.55;margin-top:20px;cursor:pointer}
+.transferConsent input {margin-top:3px;accent-color:#8968f5}
+.transferStatus {display:grid;gap:6px;border:1px solid rgba(123,206,162,.26);background:rgba(63,137,101,.09);padding:12px 14px;margin-top:17px;border-radius:11px}
+.transferStatus b {font-size:12px;color:#a8e7bd}.transferStatus span {font-size:11px;line-height:1.5;color:#abaab4}
+.transferActions {display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap}
+.transferActions button,.transferActions a {border:1px solid rgba(157,124,229,.5);background:#231936;padding:10px 14px;border-radius:9px;text-decoration:none;color:#e2d5fb;font-size:12px;font-weight:800;cursor:pointer}
+.transferNotice {margin-top:12px;padding:12px;border-radius:10px;background:rgba(89,159,117,.11);color:#b7e6c8;border:1px solid rgba(84,189,127,.2);font-size:12px;line-height:1.5}
+.transferHistory {margin-top:20px;border-top:1px solid rgba(180,156,230,.14);padding-top:14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.transferHistory b {flex:0 0 100%;font-size:12px;color:#cabdd9}
+.transferHistory button {background:rgba(134,100,208,.1);color:#c4b4e2;border:1px solid rgba(159,134,224,.2);border-radius:8px;padding:8px 12px;cursor:pointer;font-size:11px}
+@media(max-width:560px){.entryActions{grid-column:1/-1;width:100%}.entryActions button{flex:1}.transferModal{max-height:94vh}}
