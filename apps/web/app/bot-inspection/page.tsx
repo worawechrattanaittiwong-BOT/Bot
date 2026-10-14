@@ -48,7 +48,6 @@ const thai=(raw:string|null|undefined,seconds=true)=>{
 };
 const amount=(n:number)=>Number(n).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
 const num=(n:unknown)=>Number.isFinite(Number(n))?Number(n):0;
-const last4=(n:string)=>"••••"+String(n||"").slice(-4);
 function accountType(server:string):"REAL"|"DEMO"|"UNKNOWN" {
   const label=String(server||"").toUpperCase();
   if(/DEMO|TRIAL|TRIA[0-9]+|PRACTICE/.test(label))return "DEMO";
@@ -86,13 +85,13 @@ export default function BotInspectionPage(){
       const rows=Array.isArray(data.accounts)?data.accounts as Account[]:[];
       setAccounts(rows);setRole(String(data.role||"USER"));setUserCode(String(data.userCode||""));
       const initial=new URLSearchParams(window.location.search).get("accountId");
-      setAccountId(rows.find(a=>a.id===initial)?.id||rows[0]?.id||"");
+      // Never preselect the first account. Only an explicit, authorized deep link selects one.
+      setAccountId(initial ? (rows.find(a=>a.id===initial)?.id||"") : "");
     }).catch(e=>{if(alive)setError(String(e?.message||"โหลดบัญชีไม่สำเร็จ"));})
       .finally(()=>{if(alive)setListLoading(false);});
     return()=>{alive=false;};
   },[]);
 
-  const selected=accounts.find(a=>a.id===accountId);
   const visible=useMemo(()=>accounts.filter(a=>{
     const type=accountType(a.server);
     if(filter==="ACTIVE"&&a.archived)return false;
@@ -102,13 +101,41 @@ export default function BotInspectionPage(){
     return !query.trim()||haystack.includes(query.trim().toLowerCase());
   }),[accounts,filter,query]);
 
+  function resetInspection(){
+    requestVersion.current++;
+    setReport(null);
+    setTimeline([]);
+    setNextOffset(null);
+    setBusy(false);
+    setError("");
+    setSessionId("");
+    setGroupId("");
+  }
+
   function chooseFilter(value:Filter){
     setFilter(value);
     const filtered=accounts.filter(a=>{
       const type=accountType(a.server);
-      return value==="ALL"||(value==="ACTIVE"&&!a.archived)||(value==="ARCHIVED"&&a.archived)||((value==="REAL"||value==="DEMO")&&type===value);
+      const matchesType=value==="ALL"||(value==="ACTIVE"&&!a.archived)||(value==="ARCHIVED"&&a.archived)||((value==="REAL"||value==="DEMO")&&type===value);
+      const matchesSearch=!query.trim()||[a.number,a.displayName,a.broker,a.server,a.userCode].join(" ").toLowerCase().includes(query.trim().toLowerCase());
+      return matchesType&&matchesSearch;
     });
-    if(!filtered.some(a=>a.id===accountId)){requestVersion.current++;setAccountId(filtered[0]?.id||"");setReport(null);setTimeline([]);}
+    if(accountId&&!filtered.some(a=>a.id===accountId)){
+      resetInspection();
+      setAccountId("");
+    }
+  }
+
+  function changeSearch(next:string){
+    setQuery(next);
+    if(accountId){
+      const current=accounts.find(a=>a.id===accountId);
+      const haystack=current?[current.number,current.displayName,current.broker,current.server,current.userCode].join(" ").toLowerCase():"";
+      if(!current||(!haystack.includes(next.trim().toLowerCase())&&next.trim())){
+        resetInspection();
+        setAccountId("");
+      }
+    }
   }
 
   async function inspect(){
@@ -165,14 +192,15 @@ export default function BotInspectionPage(){
           </header>
           <section className={styles.panel}>
             <div className={styles.toolbar}>
+              <label className={styles.field}><span>ค้นหาบัญชี</span><input value={query} onChange={e=>changeSearch(e.target.value)} placeholder="เลข MT5 / ลูกค้า / Broker"/></label>
               <label className={styles.field}><span>เลือกบัญชี MT5</span>
-                <select value={accountId} onChange={e=>{requestVersion.current++;setAccountId(e.target.value);setReport(null);setTimeline([]);setBusy(false);}} aria-label="เลือกบัญชี MT5">
-                  {visible.length===0&&!selected?<option value="">ไม่มีบัญชีตามตัวกรอง</option>:(selected&&!visible.some(a=>a.id===selected.id)?[selected,...visible]:visible).map(a=>
+                <select value={accountId} onChange={e=>{resetInspection();setAccountId(e.target.value);}} aria-label="เลือกบัญชี MT5">
+                  <option value="">{visible.length===0?"ไม่พบบัญชีตามตัวกรอง":"— เลือกบัญชี MT5 เพื่อตรวจสอบ —"}</option>
+                  {visible.map(a=>
                     <option key={a.id} value={a.id}>MT5 {a.number} · {a.server} · {a.userCode?a.userCode+" · ":""}{a.archived?"ถอดออก":"ใช้งาน"}</option>
                   )}
                 </select>
               </label>
-              <label className={styles.field}><span>ค้นหาบัญชี</span><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="เลข MT5 / ลูกค้า / Broker"/></label>
             </div>
             <div className={styles.filters} role="group" aria-label="ประเภทบัญชี">
               {([{k:"ALL",l:"ทั้งหมด"},{k:"ACTIVE",l:"ใช้งาน"},{k:"ARCHIVED",l:"ถอดออก"},{k:"REAL",l:"Real"},{k:"DEMO",l:"Demo"}] as const).map(f=>
@@ -180,13 +208,6 @@ export default function BotInspectionPage(){
               )}
               <span className={styles.count}>{visible.length} / {accounts.length}</span>
             </div>
-            {query||filter!=="ALL"?<div className={styles.matches}>
-              {visible.slice(0,14).map(a=><button key={a.id} type="button" className={a.id===accountId?styles.matchSelected:""} onClick={()=>{requestVersion.current++;setAccountId(a.id);setReport(null);setTimeline([]);setBusy(false);}}>
-                {last4(a.number)} <span>{a.server} · {a.userCode||a.broker} · {a.archived?"ถอดออก":"ใช้งาน"}</span>
-              </button>)}
-              {!visible.length&&<p>ไม่พบบัญชีตามตัวกรอง</p>}
-            </div>:null}
-            {selected&&<div className={styles.accountInfo}><b>MT5 {last4(selected.number)}</b><span>{selected.server} · {selected.mode} · {accountType(selected.server)==="UNKNOWN"?"ไม่ยืนยัน Real/Demo":accountType(selected.server)}</span><em className={selected.archived?styles.archived:styles.active}>{selected.archived?"ถอดออก / ตรวจย้อนหลัง":"ใช้งาน"}</em></div>}
             <div className={styles.dateBar}>
               <label className={styles.field}><span>เริ่ม (ไทย)</span><input type="datetime-local" value={from} onChange={e=>{requestVersion.current++;setFrom(e.target.value);setReport(null);setTimeline([]);setBusy(false);}}/></label>
               <label className={styles.field}><span>ถึง (ไทย)</span><input type="datetime-local" value={to} onChange={e=>{requestVersion.current++;setTo(e.target.value);setReport(null);setTimeline([]);setBusy(false);}}/></label>
