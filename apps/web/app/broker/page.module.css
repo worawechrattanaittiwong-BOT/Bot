@@ -673,3 +673,51 @@
 .matchSummary{margin:14px 0 10px;padding:10px 13px;border:1px solid rgba(157,123,251,.15);border-radius:10px;background:rgba(157,123,251,.04);font-size:11px;line-height:1.6;color:#b7aacc}
 .matchedAccount{color:#82deb1 !important;line-height:1.6}
 .unmatchedAccount{color:#8c809c !important;line-height:1.6}
+
+/* Exness Partner Center — scoped operational layout */
+.shell { width: min(1180px, calc(100% - 44px)); }
+.quickNav {display:flex;gap:8px;flex-wrap:wrap;margin:16px 0 18px;position:relative}
+.quickNav a {border:1px solid rgba(165,135,255,.22);border-radius:10px;padding:10px 14px;background:rgba(126,85,247,.09);color:#ded2ff;font-size:12px;text-decoration:none;font-weight:700;transition:background .2s,border-color .2s}
+.quickNav a:hover,.quickNav a:focus-visible {background:rgba(126,85,247,.23);border-color:#9371ed;outline-offset:2px}
+.healthGrid {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:8px 0 22px}
+.healthCard {display:flex;flex-direction:column;gap:10px;padding:19px 20px;background:linear-gradient(145deg,rgba(32,25,52,.96),rgba(15,12,26,.96));border:1px solid rgba(154,130,232,.2);border-radius:16px;min-width:0}
+.healthCard small {color:#a592ca;letter-spacing:.11em;font-size:10px;font-weight:800}
+.healthCard strong {font-size:17px;line-height:1.3}
+.healthCard span {font-size:11px;color:#a49bad;line-height:1.55}
+.healthGood {color:#8ce6b5}.healthWarn {color:#ffc578}
+.revealButton {margin-top:7px;cursor:pointer;border:0;background:transparent;color:#b9a6ff;font-size:11px;padding:3px 0;text-align:left}
+.automationBar {display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;padding:16px;border:1px solid rgba(148,113,247,.28);border-radius:12px;background:rgba(126,85,247,.08);margin-bottom:12px}
+.automationBar > div {display:grid;gap:4px}.automationBar b {color:#f1eaff;font-size:13px}.automationBar small {color:#aaa0bd;font-size:11px;line-height:1.5}
+.runHistory {margin-top:20px;padding:14px;border:1px solid rgba(147,125,199,.2);border-radius:12px}.runHistory > b {color:#e6ddff;font-size:12px}
+.runHistory p {color:#a7a0b5;font-size:12px}.runList {display:grid;gap:4px;margin-top:10px}.runList > div {display:grid;grid-template-columns:1.1fr .7fr 1fr;gap:8px;padding:9px 11px;border-radius:7px;background:rgba(255,255,255,.025);color:#bdb3d0;font-size:11px}.runList strong {color:#d9c7ff}
+#ib-performance,#exness-partner,#exness-api,#exness-clients {scroll-margin-top:24px}
+@media(max-width:760px){.shell{width:calc(100% - 26px)}.healthGrid{grid-template-columns:1fr}.quickNav a{flex:1 1 42%;text-align:center}.runList > div{grid-template-columns:1fr 1fr}.runList > div span:last-child{grid-column:1/-1}}
+
+.rebateNotice{padding:12px 16px;margin:14px 0;color:#e5c590;background:rgba(255,183,71,.08);border:1px solid rgba(255,183,71,.2);border-radius:11px;font-size:12px;line-height:1.6}.rebateStats{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:10px;margin:15px 0}.rebateStats>div{display:grid;gap:7px;padding:15px;background:rgba(136,99,225,.09);border:1px solid rgba(149,117,232,.19);border-radius:12px}.rebateStats small,.rebateStats span{color:#a9a0ba;font-size:11px}.rebateStats b{color:#ede4ff;font-size:21px}.rebateRows{display:grid;gap:8px}.rebateRows>div{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:12px;border:1px solid rgba(147,126,197,.16);border-radius:9px;color:#c8bedb;font-size:12px}.rebateRows button{background:#8460e8;color:#fff;border:0;border-radius:8px;padding:8px 14px;cursor:pointer}.rebateRows button:disabled{opacity:.5}#exness-rebate{scroll-margin-top:24px}
+
+/* Accessible Exness onboarding: primary task first, technical controls folded */
+.connectPanel {border:1px solid rgba(159,127,244,.33);border-radius:18px;padding:clamp(17px,2.5vw,27px);background:linear-gradient(125deg,rgba(112,68,218,.15),rgba(28,19,44,.25) 58%,rgba(9,8,20,.5));margin:16px 0 13px}
+.connectIntro {display:flex;align-items:flex-start;gap:12px;margin-bottom:20px}
+.connectNumber {width:35px;height:35px;border-radius:11px;background:#7856de;color:#fff;font-weight:900;font-size:18px;display:grid;place-items:center;flex:none;box-shadow:0 5px 20px rgba(122,79,231,.25)}
+.connectIntro h3 {margin:2px 0 7px;color:#faf8ff;font-size:19px;line-height:1.3}
+.connectIntro p {color:#baaed2;line-height:1.6;font-size:12px;margin:0}
+.simpleFields {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.simpleFields label {display:flex;flex-direction:column;gap:8px;min-width:0;color:#d9cfeb;font-weight:650;font-size:12px}
+.simpleFields input {background:rgba(8,7,18,.78);color:#fff;border:1px solid rgba(180,157,231,.26);border-radius:11px;padding:13px 14px;outline:none;width:100%;min-height:46px;font:inherit}
+.simpleFields input:focus {border-color:#a48af5;box-shadow:0 0 0 3px rgba(139,94,235,.19)}
+.simpleFields input::placeholder {color:#80758f;font-weight:400}
+.simpleActions {display:flex;align-items:center;flex-wrap:wrap;gap:14px;margin-top:18px}
+.simpleActions button {min-height:44px;padding:10px 19px;white-space:normal}
+.simpleActions span {max-width:450px;color:#b7acc8;line-height:1.5;font-size:11px}
+.signinHelp {font-size:12px;color:#bca9ff;text-decoration:none;font-weight:750}.signinHelp:hover{text-decoration:underline}
+.connectPrivacy {color:#afa3c8;font-size:11px;line-height:1.6;margin:15px 0 0}
+.connectionTrouble {display:grid;gap:5px;padding:13px 15px;border:1px solid rgba(255,142,142,.27);border-radius:11px;background:rgba(147,45,63,.11);margin-top:16px}
+.connectionTrouble b {color:#ffd5d9;font-size:12px}.connectionTrouble span {color:#dac0c7;font-size:12px;line-height:1.6}
+.setupMiniSteps {display:grid;gap:9px;margin:13px 0 23px}
+.setupMiniSteps>div {display:flex;align-items:center;gap:13px;color:#b5abc7;font-size:12px;line-height:1.6}
+.setupMiniSteps b {display:grid;place-items:center;width:27px;height:27px;flex:none;border:1px solid rgba(161,139,219,.34);background:rgba(121,85,206,.08);border-radius:9px;color:#d8c6ff}
+.advancedSettings {border:1px solid rgba(148,120,215,.25);border-radius:13px;margin:18px 0;padding:4px 15px 15px;background:rgba(17,13,29,.45)}
+.advancedSettings summary {cursor:pointer;list-style:revert;padding:12px 4px;color:#e7ddfd;font-weight:800;font-size:13px}
+.advancedSettings summary>span {font-weight:400;font-size:11px;color:#9d91b4;margin-left:10px}
+.advancedSettings[open] .apiGrid {margin-top:10px}
+@media(max-width:680px){.simpleFields{grid-template-columns:1fr}.connectIntro h3{font-size:17px}.simpleActions{align-items:stretch}.simpleActions button{width:100%}.advancedSettings summary>span{display:block;margin:7px 0 0 0}}

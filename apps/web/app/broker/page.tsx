@@ -93,11 +93,20 @@ type ClientMatchPreview = {
   note: string;
 };
 
+type FinanceDashboard = {
+  policies: Array<{levelCode:string; rebatePercent:number; active:boolean}>;
+  events: Array<{id:string;userCode:string;currency:string;grossCommissionMinor:number;rebateAmountMinor:number;rebateEntryId:string|null;rebateStatus:string|null;status:string;externalEventId:string}>;
+  totals: Array<{currency:string;confirmedCommissionMinor:number;activeRebateMinor:number;paidRebateMinor:number;commissionCount:number}>;
+};
+
 type ApiForm = {
+  enabled: boolean;
   email: string;
   password: string;
   clientReportPath: string;
+  commissionReportPath: string;
   autoVerifyClients: boolean;
+  autoImportCommissions: boolean;
   syncIntervalMinutes: number;
 };
 
@@ -159,9 +168,12 @@ function runLabel(status?: string) {
 
 function connectionForm(connection?: AutomationConnection | null): ApiForm {
   return {
+    enabled: Boolean(connection?.enabled),
     email: "",
     password: "",
     clientReportPath: String(connection?.clientReportPath || "/api/reports/clients/accounts/"),
+    commissionReportPath: String(connection?.commissionReportPath || ""),
+    autoImportCommissions: Boolean(connection?.autoImportCommissions),
     autoVerifyClients: Boolean(connection?.autoVerifyClients),
     syncIntervalMinutes: Number(connection?.syncIntervalMinutes || 15)
   };
@@ -185,6 +197,8 @@ export default function BrokerPage() {
   const [clients, setClients] = useState<ClientState>({ levels: [], clients: [] });
   const [apiForm, setApiForm] = useState<ApiForm>(connectionForm());
   const [ibPreview, setIbPreview] = useState<IbPerformancePreview | null>(null);
+  const [finance, setFinance] = useState<FinanceDashboard | null>(null);
+  const [financeError, setFinanceError] = useState("");
   const [ibError, setIbError] = useState("");
   const [ibCheckedAt, setIbCheckedAt] = useState<string | null>(null);
   const [ibLoading, setIbLoading] = useState(false);
@@ -195,6 +209,7 @@ export default function BrokerPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [actionBusy, setActionBusy] = useState("");
+  const [showApiPassword, setShowApiPassword] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [partnerError, setPartnerError] = useState("");
@@ -348,6 +363,25 @@ export default function BrokerPage() {
     }
   }
 
+  async function refreshFinance() {
+    try {
+      const result = await adminApi("/admin/brokers/exness/finance");
+      setFinance(result);
+      setFinanceError("");
+    } catch (err: unknown) { setFinanceError(errorText(err, "โหลดข้อมูล Rebate ไม่สำเร็จ")); }
+  }
+
+  async function approveRebate(entryId: string) {
+    if (!window.confirm("ยืนยันอนุมัติ Rebate รายการนี้เป็น AVAILABLE? การอนุมัตินี้ไม่ใช่การโอนเงินจริงเข้าบัญชี Exness")) return;
+    setActionBusy("rebate-" + entryId);
+    try {
+      await adminApi("/admin/brokers/exness/finance/rebates/" + encodeURIComponent(entryId) + "/release", {method:"POST"});
+      await refreshFinance();
+      setMessage("อนุมัติ Rebate แล้ว · ยังไม่โอนเงินจริงเข้าบัญชี Exness");
+    } catch (err:unknown) { setPartnerError(errorText(err, "อนุมัติ Rebate ไม่สำเร็จ")); }
+    finally { setActionBusy(""); }
+  }
+
   async function refreshAutomation() {
     const result = await adminApi("/admin/brokers/exness/automation");
     setAutomation(result);
@@ -370,14 +404,14 @@ export default function BrokerPage() {
     const result = await adminApi("/admin/brokers/exness/automation/connection", {
       method: "PUT",
       body: JSON.stringify({
-        email: apiForm.email.trim(),
-        password: apiForm.password,
-        enabled: connection.enabled,
+        email: "",
+        password: "",
+        enabled: apiForm.enabled,
         syncIntervalMinutes: apiForm.syncIntervalMinutes,
         clientReportPath: apiForm.clientReportPath.trim(),
-        commissionReportPath: connection.commissionReportPath,
+        commissionReportPath: apiForm.commissionReportPath.trim(),
         autoVerifyClients: apiForm.autoVerifyClients,
-        autoImportCommissions: connection.autoImportCommissions,
+        autoImportCommissions: apiForm.autoImportCommissions,
         autoReleaseRebates: connection.autoReleaseRebates,
         commissionAmountScale: connection.commissionAmountScale,
         authIdentityField: connection.authIdentityField
@@ -418,16 +452,18 @@ export default function BrokerPage() {
     setMessage("");
 
     try {
-      // If credentials were typed, save them securely before trying Exness.
-      if (typedEmail && typedPassword) await persistApiForm();
-      const result = await adminApi("/admin/brokers/exness/automation/test", {
-        method: "POST"
-      });
+      // Only replace saved credentials after Exness has verified the new pair.
+      const result = typedEmail && typedPassword
+        ? await adminApi("/admin/brokers/exness/automation/connect", {
+            method: "POST",
+            body: JSON.stringify({ email: apiForm.email.trim(), password: apiForm.password })
+          })
+        : await adminApi("/admin/brokers/exness/automation/test", { method: "POST" });
       await refreshAutomation();
       if (!result?.ok) {
         setPartnerError(String(result?.detail || "ทดสอบ Exness API ไม่ผ่าน"));
       } else {
-        setMessage("เชื่อมต่อ Exness Partnership API สำเร็จ");
+        setMessage("เชื่อมต่อ Exness สำเร็จ ✓ ข้อมูลเข้าสู่ระบบถูกเก็บอย่างปลอดภัย · ระบบซิงก์ยังไม่เปิดอัตโนมัติ");
       }
     } catch (err: unknown) {
       setPartnerError(errorText(err, "ทดสอบ Exness API ไม่สำเร็จ"));
@@ -567,8 +603,152 @@ export default function BrokerPage() {
           {partnerError && <div className={styles.error}>{partnerError}</div>}
           {message && <div className={styles.success}>{message}</div>}
 
+          <nav className={styles.quickNav} aria-label="เมนู Exness Partner Center">
+            <a href="#exness-api">เชื่อมต่อ Exness</a>
+            <a href="#ib-performance">ภาพรวมรายได้ IB</a>
+            <a href="#exness-partner">ตั้งค่าพาร์ตเนอร์</a>
+            <a href="#exness-clients">ตรวจสอบลูกค้า</a>
+            <a href="#exness-rebate">อนุมัติ Rebate</a>
+          </nav>
+          <div className={styles.healthGrid} aria-label="สถานะ Exness API">
+            <div className={styles.healthCard}><small>EXNESS API</small><strong className={apiConnected ? styles.healthGood : styles.healthWarn}>{apiConnected ? "✓ ผ่านการทดสอบล่าสุด" : "! ต้องตรวจสอบ"}</strong><span>{connection?.lastTestStatus || "ยังไม่ทดสอบ"} · ทดสอบ {dateTime(connection?.lastTestedAt || null)}</span></div>
+            <div className={styles.healthCard}><small>SYNC AUTOMATION</small><strong className={connection?.enabled ? styles.healthGood : styles.healthWarn}>{connection?.enabled ? "● เปิดทำงาน" : "○ ปิดอยู่"}</strong><span>ทุก {connection?.syncIntervalMinutes || 15} นาที · รอบล่าสุด {dateTime(connection?.lastSyncAt || null)}</span></div>
+            <div className={styles.healthCard}><small>CLIENT REPORT</small><strong className={reportReady ? styles.healthGood : styles.healthWarn}>{reportReady ? "✓ ตั้งค่าแล้ว" : "! ยังไม่ตั้งค่า"}</strong><span>Auto Verify: {connection?.autoVerifyClients ? "เปิด" : "ปิด"} · ล่าสุด {runLabel(lastRun?.status)}</span></div>
+          </div>
+          <section id="exness-api" className={styles.card}>
+            <div className={styles.sectionHead}>
+              <div>
+                <small>EXNESS CONNECTION</small>
+                <b>เชื่อมต่อ Exness แบบง่าย</b>
+                <span>มีบัญชี Exness Partners อยู่แล้ว? กรอกแล้วกดตรวจสอบได้ทันที</span>
+              </div>
+              <div className={autoReady ? styles.ready : styles.notReady}>
+                <i/>
+                {autoReady ? "Auto Verify พร้อม" : "รอเชื่อม API"}
+              </div>
+            </div>
+
+            <div className={styles.statusStrip}>
+              <div>
+                <small>API</small>
+                <b>{apiConnected ? "Connected" : connection?.configured ? "รอ Test" : "ยังไม่เชื่อม"}</b>
+              </div>
+              <div>
+                <small>Client Report</small>
+                <b>{reportReady ? "พร้อม" : "ยังไม่ตั้ง Path"}</b>
+              </div>
+              <div>
+                <small>Auto Verify</small>
+                <b>{apiForm.autoVerifyClients ? "เปิด" : "ปิด"}</b>
+              </div>
+            </div>
+
+            {connection ? (
+              <>
+                <div className={styles.connectPanel}>
+                  <div className={styles.connectIntro}>
+                    <div className={styles.connectNumber}>1</div>
+                    <div><h3>เชื่อมต่อบัญชี Exness Partners</h3><p>ใช้อีเมลและรหัสผ่านที่คุณเข้าสู่เว็บไซต์ Exness Partners ได้ ไม่ใช่รหัสบัญชีเทรด MT5</p></div>
+                  </div>
+                  <div className={styles.simpleFields}>
+                    <label><span>อีเมล Exness Partners</span><input type="email" value={apiForm.email} onChange={event=>setApiForm(v=>({...v,email:event.target.value}))} placeholder={connection.configured ? "บันทึกไว้แล้ว · กรอกเมื่อต้องการเปลี่ยน" : "your-email@example.com"} autoComplete="off" /></label>
+                    <label><span>รหัสผ่าน Exness Partners</span><input type={showApiPassword ? "text" : "password"} value={apiForm.password} onChange={event=>setApiForm(v=>({...v,password:event.target.value}))} placeholder={connection.configured ? "บันทึกไว้แล้ว · กรอกเมื่อต้องการเปลี่ยน" : "รหัสผ่าน Exness Partners"} autoComplete="new-password" />
+                      <button type="button" className={styles.revealButton} onClick={()=>setShowApiPassword(v=>!v)} aria-label={showApiPassword?"ซ่อนรหัสผ่าน":"แสดงรหัสผ่าน"} aria-pressed={showApiPassword}>{showApiPassword?"◉ ซ่อนรหัสผ่าน":"◎ แสดงรหัสผ่าน"}</button>
+                    </label>
+                  </div>
+                  <div className={styles.simpleActions}>
+                    <button type="button" className={styles.primaryButton} disabled={Boolean(actionBusy)||(!connection.configured && !(apiForm.email.trim() && apiForm.password))} onClick={testApi}>{actionBusy==="test-api" ? "กำลังตรวจสอบกับ Exness..." : apiForm.email.trim() || apiForm.password ? "ตรวจสอบและเชื่อมต่อ" : "ตรวจสอบการเชื่อมต่อเดิม"}</button>
+                    <span>{connection.configured ? "หากไม่เปลี่ยนรหัสผ่าน ปล่อยทั้งสองช่องว่างแล้วกดตรวจสอบได้เลย" : "กรอกอีเมลและรหัสผ่านให้ครบ แล้วกดตรวจสอบ"}</span>
+                    <a className={styles.signinHelp} href="https://my.exnessaffiliates.com/" rel="noopener noreferrer" target="_blank">เปิด Exness Partners ↗</a>
+                  </div>
+                  {connection.lastTestStatus === "FAIL" && <div className={styles.connectionTrouble}><b>เชื่อมต่อครั้งล่าสุดไม่สำเร็จ</b><span>{connection.lastTestDetail.includes("401") ? "Exness ปฏิเสธข้อมูลเข้าสู่ระบบ (401) โปรดกรอกข้อมูล Exness Partners อีกครั้ง ถ้ายังไม่ผ่านให้ติดต่อ Exness เพื่อตรวจสิทธิ์ API จากเซิร์ฟเวอร์" : "ตรวจข้อมูลเข้าสู่ระบบหรือการเชื่อมต่อ แล้วทดลองใหม่อีกครั้ง"}</span></div>}
+                  <p className={styles.connectPrivacy}>🔒 ระบบจะบันทึกข้อมูลใหม่เมื่อ Exness ยืนยันการเชื่อมต่อผ่านแล้วเท่านั้น และจะไม่แสดงรหัสผ่านเดิมกลับมา</p>
+                </div>
+                <div className={styles.setupMiniSteps}><div><b>2</b><span>เชื่อมต่อผ่านแล้ว ดูรายงานลูกค้าและรายได้ IB ได้ทันที</span></div><div><b>3</b><span>หากต้องการซิงก์อัตโนมัติ ให้ตั้งค่าขั้นสูงหลังตรวจสอบรายงานแล้ว</span></div></div>
+                <details className={styles.advancedSettings}>
+                  <summary>⚙ ตั้งค่าขั้นสูง <span>รายงาน API · ซิงก์อัตโนมัติ · เครื่องมือผู้ดูแล</span></summary>
+                  <div className={styles.apiGrid}>
+                    <label className={styles.pathField}><span>Commission Report API Path</span><input type="text" value={apiForm.commissionReportPath} onChange={event=>setApiForm(v=>({...v,commissionReportPath:event.target.value}))} placeholder="/api/reports/..." autoComplete="off" /></label>
+                    <label className={styles.pathField}><span>Client Report API Path</span><input type="text" value={apiForm.clientReportPath} onChange={event=>setApiForm(v=>({...v,clientReportPath:event.target.value}))} placeholder="/api/reports/clients/accounts/" autoComplete="off" /></label>
+                    <label><span>ความถี่ในการซิงก์ (นาที)</span><input type="number" min={5} max={1440} value={apiForm.syncIntervalMinutes} onChange={event=>setApiForm(v=>({...v,syncIntervalMinutes:Number(event.target.value||15)}))} /></label>
+                  </div>
+                <p className={styles.apiHelp}>
+                  สำหรับผู้ดูแลขั้นสูงเท่านั้น: ต้องตรวจเส้นทาง API ตามสิทธิ์บัญชี Exness และเปรียบเทียบยอดกับรายงานจริงก่อนเปิด Auto Import หรือ Scheduled Sync การทดสอบการเชื่อมต่อไม่จ่าย Rebate และไม่เปิดคำสั่งเทรด
+                </p>
+                <div className={styles.apiActions}>
+                  <label className={styles.toggle}><input type="checkbox" checked={apiForm.autoImportCommissions} disabled={!apiForm.commissionReportPath.trim() || Boolean(actionBusy)} onChange={event=>setApiForm(v=>({...v,autoImportCommissions:event.target.checked}))}/><span>นำเข้าคอมมิชชันอัตโนมัติ (ต้องยืนยันความถูกต้องของรายงานก่อนเปิด)</span></label>
+                  <div className={styles.automationBar}>
+                    <div><b>Scheduled API Sync</b><small>เปิดการซิงก์อัตโนมัติเฉพาะเมื่อทดสอบ API ผ่านแล้ว · การเปลี่ยนสถานะมีผลเมื่อกดบันทึก API</small></div>
+                    <label className={styles.toggle}><input type="checkbox" checked={apiForm.enabled} disabled={!apiConnected || Boolean(actionBusy)} onChange={event => setApiForm(current => ({ ...current, enabled: event.target.checked }))}/><span>{apiForm.enabled ? "เปิดอัตโนมัติ" : "ปิดอัตโนมัติ"}</span></label>
+                  </div>
+                  <label className={styles.toggle}>
+                    <input
+                      type="checkbox"
+                      checked={apiForm.autoVerifyClients}
+                      onChange={event => setApiForm(current => ({
+                        ...current,
+                        autoVerifyClients: event.target.checked
+                      }))}
+                    />
+                    <span>ตรวจและยืนยันลูกค้าอัตโนมัติ (เปิดหลังตรวจการจับคู่ MT5 แล้วเท่านั้น)</span>
+                  </label>
+
+                  <div className={styles.buttonRow}>
+                    {connection.officialSchemaUrl && (
+                      <a
+                        className={styles.textButton}
+                        href={connection.officialSchemaUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        API Schema ↗
+                      </a>
+                    )}
+                    <button
+                      type="button"
+                      className={styles.secondaryButton}
+                      onClick={saveApi}
+                      disabled={Boolean(actionBusy)}
+                    >
+                      {actionBusy === "save-api" ? "กำลังบันทึก..." : "บันทึก API"}
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.primaryButton}
+                      onClick={syncNow}
+                      disabled={Boolean(actionBusy) || !apiConnected || !reportReady}
+                    >
+                      {actionBusy === "sync" ? "กำลัง Sync..." : "Sync ตอนนี้"}
+                    </button>
+                  </div>
+                </div>
+
+
+                </details>
+
+                <div className={styles.runHistory}>
+                  <b>ประวัติซิงก์ล่าสุด</b>
+                  {automation?.runs?.length ? <div className={styles.runList}>{automation.runs.slice(0,5).map(run => <div key={run.id}><span>{dateTime(run.started_at)}</span><strong>{runLabel(run.status)}</strong><span>พบ {Number(run.clients_seen || 0)} · ยืนยัน {Number(run.clients_verified || 0)}</span></div>)}</div> : <p>ยังไม่มีประวัติการซิงก์</p>}
+                </div>
+                <div className={styles.syncLine}>
+                  <span>ทดสอบล่าสุด <b>{dateTime(connection.lastTestedAt)}</b></span>
+                  <span>Sync ล่าสุด <b>{dateTime(connection.lastSyncAt)}</b></span>
+                  <span>
+                    ผลล่าสุด <b>{runLabel(lastRun?.status)}</b>
+                    {lastRun
+                      ? " · พบ " + Number(lastRun.clients_seen || 0) +
+                        " / ยืนยัน " + Number(lastRun.clients_verified || 0)
+                      : ""}
+                  </span>
+                </div>
+              </>
+            ) : (
+              <div className={styles.empty}>ยังโหลดสถานะ Exness API ไม่สำเร็จ</div>
+            )}
+          </section>
+
           <div className={styles.dashboardCaption}>รายงานพาร์ทเนอร์ · แสดงตลอดเมื่อเปิดหน้า Broker</div>
-          <section className={styles.ibPanel}>
+          <section id="ib-performance" className={styles.ibPanel}>
                   <div className={styles.ibTitle}>
                     <div>
                       <b>EXNESS IB DASHBOARD · 30 วันล่าสุด</b>
@@ -597,13 +777,13 @@ export default function BrokerPage() {
 
           <div className={styles.settingsCaption}>การตั้งค่าและการตรวจสอบลูกค้า</div>
 
-          <form className={styles.card} onSubmit={save}>
+          <form id="exness-partner" className={styles.card} onSubmit={save}>
             <div className={styles.topRow}>
               <div className={styles.exness}>
                 <div className={styles.logo}>E</div>
                 <div>
-                  <b>Exness Partner Setup</b>
-                  <span>ลิงก์ที่ลูกค้าใช้เริ่มสมัครผ่าน SCENOVA</span>
+                  <b>ลิงก์ชวนลูกค้าสมัคร Exness</b>
+                  <span>ส่วนนี้ใช้ตั้งลิงก์แนะนำลูกค้า ไม่ใช่รหัสผ่านสำหรับเชื่อม API</span>
                 </div>
               </div>
 
@@ -701,171 +881,17 @@ export default function BrokerPage() {
             </footer>
           </form>
 
-          <section className={styles.card}>
-            <div className={styles.sectionHead}>
-              <div>
-                <small>PARTNER VERIFICATION</small>
-                <b>ตรวจลูกค้าใต้ Partner</b>
-                <span>ยืนยันจาก Exness แล้วจับคู่ด้วยบัญชี MT5 ของลูกค้า</span>
-              </div>
-              <div className={autoReady ? styles.ready : styles.notReady}>
-                <i/>
-                {autoReady ? "Auto Verify พร้อม" : "รอเชื่อม API"}
-              </div>
-            </div>
-
-            <div className={styles.statusStrip}>
-              <div>
-                <small>API</small>
-                <b>{apiConnected ? "Connected" : connection?.configured ? "รอ Test" : "ยังไม่เชื่อม"}</b>
-              </div>
-              <div>
-                <small>Client Report</small>
-                <b>{reportReady ? "พร้อม" : "ยังไม่ตั้ง Path"}</b>
-              </div>
-              <div>
-                <small>Auto Verify</small>
-                <b>{apiForm.autoVerifyClients ? "เปิด" : "ปิด"}</b>
-              </div>
-            </div>
-
-            {connection ? (
-              <>
-                <div className={styles.apiGrid}>
-                  <label>
-                    <span>Partner Email</span>
-                    <input
-                      type="email"
-                      value={apiForm.email}
-                      onChange={event => setApiForm(current => ({
-                        ...current,
-                        email: event.target.value
-                      }))}
-                      placeholder={connection.configured ? "ตั้งค่าแล้ว · ใส่เมื่อเปลี่ยน" : "Partner Email"}
-                      autoComplete="off"
-                    />
-                  </label>
-
-                  <label>
-                    <span>Partner Password</span>
-                    <input
-                      type="password"
-                      value={apiForm.password}
-                      onChange={event => setApiForm(current => ({
-                        ...current,
-                        password: event.target.value
-                      }))}
-                      placeholder={connection.configured ? "ตั้งค่าแล้ว · ใส่เมื่อเปลี่ยน" : "Password"}
-                      autoComplete="off"
-                    />
-                  </label>
-
-                  <label className={styles.pathField}>
-                    <span>Client Report API Path</span>
-                    <input
-                      type="text"
-                      value={apiForm.clientReportPath}
-                      onChange={event => setApiForm(current => ({
-                        ...current,
-                        clientReportPath: event.target.value
-                      }))}
-                      placeholder="/api/..."
-                      autoComplete="off"
-                    />
-                  </label>
-
-                  <label>
-                    <span>ตรวจทุกกี่นาที</span>
-                    <input
-                      type="number"
-                      min={5}
-                      max={1440}
-                      value={apiForm.syncIntervalMinutes}
-                      onChange={event => setApiForm(current => ({
-                        ...current,
-                        syncIntervalMinutes: Number(event.target.value || 15)
-                      }))}
-                    />
-                  </label>
-                </div>
-
-                <p className={styles.apiHelp}>
-                  ใช้ Exness Partnership API v2 (POST /api/v2/auth/)
-                  · หากต้องการแก้ปัญหา 401 ให้กรอก Email และรหัสผ่าน Exness Partners ปัจจุบันให้ครบทั้งสองช่อง
-                  แล้วกด Test Connection ได้เลย ระบบจะบันทึกชุดใหม่เข้าคลังเข้ารหัสก่อนทดสอบ
-                  · หากเว้นว่างทั้งสองช่อง ระบบจะทดสอบด้วยชุดที่บันทึกไว้
-                  · การทดสอบและสรุป IB เป็นแบบอ่านอย่างเดียว ไม่ยืนยันลูกค้าหรือจ่าย Rebate ให้อัตโนมัติ
-                </p>
-                <div className={styles.apiActions}>
-                  <label className={styles.toggle}>
-                    <input
-                      type="checkbox"
-                      checked={apiForm.autoVerifyClients}
-                      onChange={event => setApiForm(current => ({
-                        ...current,
-                        autoVerifyClients: event.target.checked
-                      }))}
-                    />
-                    <span>ตรวจและยืนยันลูกค้าอัตโนมัติ (เปิดหลังตรวจการจับคู่ MT5 แล้วเท่านั้น)</span>
-                  </label>
-
-                  <div className={styles.buttonRow}>
-                    {connection.officialSchemaUrl && (
-                      <a
-                        className={styles.textButton}
-                        href={connection.officialSchemaUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        API Schema ↗
-                      </a>
-                    )}
-                    <button
-                      type="button"
-                      className={styles.secondaryButton}
-                      onClick={saveApi}
-                      disabled={Boolean(actionBusy)}
-                    >
-                      {actionBusy === "save-api" ? "กำลังบันทึก..." : "บันทึก API"}
-                    </button>
-                    <button
-                      type="button"
-                      className={styles.secondaryButton}
-                      onClick={testApi}
-                      disabled={Boolean(actionBusy) || (!connection.configured && !(apiForm.email.trim() && apiForm.password))}
-                    >
-                      {actionBusy === "test-api" ? "กำลังทดสอบ..." : "Test Connection"}
-                    </button>
-                    <button
-                      type="button"
-                      className={styles.primaryButton}
-                      onClick={syncNow}
-                      disabled={Boolean(actionBusy) || !apiConnected || !reportReady}
-                    >
-                      {actionBusy === "sync" ? "กำลัง Sync..." : "Sync ตอนนี้"}
-                    </button>
-                  </div>
-                </div>
-
-
-                <div className={styles.syncLine}>
-                  <span>ทดสอบล่าสุด <b>{dateTime(connection.lastTestedAt)}</b></span>
-                  <span>Sync ล่าสุด <b>{dateTime(connection.lastSyncAt)}</b></span>
-                  <span>
-                    ผลล่าสุด <b>{runLabel(lastRun?.status)}</b>
-                    {lastRun
-                      ? " · พบ " + Number(lastRun.clients_seen || 0) +
-                        " / ยืนยัน " + Number(lastRun.clients_verified || 0)
-                      : ""}
-                  </span>
-                </div>
-              </>
-            ) : (
-              <div className={styles.empty}>ยังโหลดสถานะ Exness API ไม่สำเร็จ</div>
-            )}
+          <section id="exness-rebate" className={styles.card}>
+            <div className={styles.sectionHead}><div><small>EXNESS REBATE CENTER</small><b>อนุมัติ Rebate 30% จากคอมมิชชันที่ยืนยันแล้ว</b><span>การอนุมัติเปลี่ยนยอดเป็น AVAILABLE เท่านั้น · ไม่มีการโอนเงินจริงผ่านระบบนี้</span></div><button type="button" className={styles.secondaryButton} onClick={refreshFinance} disabled={Boolean(actionBusy)}>โหลดข้อมูล Rebate</button></div>
+            <div className={styles.rebateNotice}>ช่องทางจ่าย: Exness Account · รอ Exness ยืนยันสิทธิ์ API และผลรายการโอนเงินจริง ก่อนบันทึกเป็น PAID</div>
+            {financeError && <p className={styles.dashboardError}>{financeError}</p>}
+            {finance ? <>
+              <div className={styles.rebateStats}>{finance.policies.map(p=><div key={p.levelCode}><small>{p.levelCode}</small><b>{p.rebatePercent}%</b><span>{p.active ? "ใช้งาน" : "ปิด"}</span></div>)}{finance.totals.map(t=><div key={t.currency}><small>คอมมิชชัน {t.currency}</small><b>{(t.confirmedCommissionMinor/100).toLocaleString()}</b><span>ยอด Rebate {(t.activeRebateMinor/100).toLocaleString()} · จ่ายแล้ว {(t.paidRebateMinor/100).toLocaleString()}</span></div>)}</div>
+              <div className={styles.rebateRows}>{finance.events.filter(e=>e.rebateEntryId).slice(0,30).map(e=><div key={e.id}><span>{e.userCode} · {e.externalEventId}</span><span>{(e.rebateAmountMinor/100).toFixed(2)} {e.currency} · {e.rebateStatus}</span>{e.rebateStatus==="PENDING" && e.status==="CONFIRMED" ? <button type="button" disabled={Boolean(actionBusy)} onClick={()=>approveRebate(e.rebateEntryId!)}>อนุมัติ</button> : <span>{e.rebateStatus==="AVAILABLE" ? "รอ Exness ยืนยันการจ่าย" : "—"}</span>}</div>)}{!finance.events.length && <p>ยังไม่มีรายการคอมมิชชันที่นำเข้า กรุณาตรวจ Commission Report ก่อน</p>}</div>
+            </> : <p>กดโหลดข้อมูล Rebate เพื่อแสดงนโยบายและรายการรออนุมัติ</p>}
           </section>
 
-          <section className={styles.card}>
+          <section id="exness-clients" className={styles.card}>
             <div className={styles.clientsHead}>
               <div>
                 <small>CLIENT MATCHING</small>

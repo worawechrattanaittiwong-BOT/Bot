@@ -64,6 +64,11 @@ export class AdminBrokerAutomationController {
     return this.automation.previewClientMatches();
   }
 
+  @Post("connect")
+  async connect(@Req() req: any, @Body() body: { email?: string; password?: string }) {
+    return this.api.connect(body || {}, actor(req));
+  }
+
   @Post("test")
   async test(@Req() req: any) {
     return this.api.testConnection(actor(req));

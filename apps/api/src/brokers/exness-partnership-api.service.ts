@@ -212,6 +212,9 @@ export class ExnessPartnershipApiService {
     const autoVerifyClients = input.autoVerifyClients === true;
     const autoImportCommissions = input.autoImportCommissions === true;
     const autoReleaseRebates = input.autoReleaseRebates === true;
+    if (autoReleaseRebates) {
+      throw new BadRequestException("SCENOVA Rebate ต้องผ่านการอนุมัติแอดมินก่อน ห้ามเปิด Auto Release");
+    }
 
     if (autoVerifyClients && !clientReportPath) {
       throw new BadRequestException("เปิด Auto Verify ไม่ได้จนกว่าจะใส่ Client Report Path");
@@ -314,7 +317,10 @@ export class ExnessPartnershipApiService {
     if (!email || !password) {
       throw new ConflictException("ยังไม่ได้ตั้งค่า Exness Partnership API credentials");
     }
+    return this.authenticateWith(email, password);
+  }
 
+  private async authenticateWith(email: string, password: string) {
     const response = await fetch(this.baseUrl + "/api/v2/auth/", {
       method: "POST",
       headers: {
@@ -348,6 +354,45 @@ export class ExnessPartnershipApiService {
     const token = this.tokenFromBody(body);
     if (!token) throw new ConflictException("Exness auth ไม่ได้ส่ง JWT token กลับมา");
     return token;
+  }
+
+  // Verify new credentials before changing the encrypted vault or any existing connection.
+  async connect(input: { email?: string; password?: string }, actor: string) {
+    await this.ensureSchema();
+    const email = String(input?.email || "").trim();
+    const password = String(input?.password || "");
+    if (!/^\S+@\S+\.\S+$/.test(email) || password.length < 6 || password !== password.trim()) {
+      throw new BadRequestException("กรุณากรอกอีเมลและรหัสผ่าน Exness Partners ให้ครบและถูกต้อง");
+    }
+
+    try {
+      const token = await this.authenticateWith(email, password);
+      await this.request("/api/partner/default_link/", token);
+    } catch (error: any) {
+      // Never persist unverified credentials, overwrite working credentials, or expose tokens.
+      const detail = String(error?.message || "Connection failed").slice(0, 900);
+      return { ok: false, status: "FAIL", detail, saved: false };
+    }
+
+    // Pause automated jobs before rotating vault entries: never sync with a mixed credential pair.
+    await this.db.query(
+      `UPDATE broker_api_connections SET
+         enabled=false,next_sync_at=NULL,last_test_status='NOT_TESTED',
+         last_test_detail='Updating verified Exness credentials',updated_at=now()
+       WHERE broker_code='EXNESS'`
+    );
+    await this.saveSecret("EXNESS_PARTNER_EMAIL", "Exness Partner Email", email, actor);
+    await this.saveSecret("EXNESS_PARTNER_PASSWORD", "Exness Partner Password", password, actor);
+    await this.db.query(
+      `UPDATE broker_api_connections SET
+         last_test_status='PASS',
+         last_test_detail='Connected · /api/v2/auth/ + /api/partner/default_link/ OK',
+         last_tested_at=now(),enabled=false,next_sync_at=NULL,
+         updated_by=$1,updated_at=now()
+       WHERE broker_code='EXNESS'`,
+      [actor.slice(0, 160)]
+    );
+    return { ok: true, status: "PASS", saved: true };
   }
 
   async request(path: string, token?: string) {
