@@ -99,11 +99,15 @@ export class ExnessPartnershipApiService {
       )
       ON CONFLICT(broker_code) DO NOTHING;
 
-      -- Correct legacy defaults without modifying customized configurations.
+      -- Correct legacy defaults only; preserve customized Broker paths and automation flags.
       UPDATE broker_api_connections SET auth_path='/api/v2/auth/',
         summary_path='/api/partner/default_link/',auth_identity_field='login',updated_at=now()
       WHERE broker_code='EXNESS' AND auth_path='/api/auth'
         AND summary_path='/api/partner/summary/' AND auth_identity_field='email';
+      UPDATE broker_api_connections SET
+        client_report_path='/api/reports/clients/accounts/',updated_at=now()
+      WHERE broker_code='EXNESS'
+        AND client_report_path='/api/v3/reports/clients/shared/';
     `);
     this.schemaReady = true;
   }
@@ -450,6 +454,7 @@ export class ExnessPartnershipApiService {
     const row = await this.db.one(
       "SELECT client_report_path,commission_report_path,commission_amount_scale,auto_verify_clients,auto_import_commissions FROM broker_api_connections WHERE broker_code='EXNESS'"
     );
+    // This report returns client_account (MT5 login) without requiring shared-contact consent.
     // Fetch client report for read-only counts even when Auto Verify is off.
     // The automation service still gates all customer mutations on auto_verify_clients.
     const clients = row?.client_report_path

@@ -664,3 +664,12 @@
 .ibMetrics small{font-size:11px;color:#a99cbd}.ibMetrics b{font-size:17px;color:#e4d8fa;overflow-wrap:anywhere}
 .ibPanel p{margin:10px 0 0;font-size:11px;color:#998eae;line-height:1.7}
 @media(max-width:640px){.ibMetrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+
+/* Broker: persistent top dashboard and read-only client matching. */
+.dashboardCaption,.settingsCaption{margin:6px 0 12px;color:#b9a5f5;font-size:12px;font-weight:850;letter-spacing:.06em}
+.settingsCaption{margin-top:19px;color:#9c91ac}
+.dashboardError{color:#f2a7a7 !important}
+.matchSummary{margin:14px 0 10px;padding:10px 13px;border:1px solid rgba(157,123,251,.15);border-radius:10px;background:rgba(157,123,251,.04);font-size:11px;line-height:1.6;color:#b7aacc}
+.matchedAccount{color:#82deb1 !important;line-height:1.6}
+.unmatchedAccount{color:#8c809c !important;line-height:1.6}

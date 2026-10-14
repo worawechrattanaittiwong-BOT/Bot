@@ -86,6 +86,13 @@ type IbPerformancePreview = {
   note: string;
 };
 
+type ClientMatchPreview = {
+  reportCount: number;
+  usableAccountRows: number;
+  matched: Array<{ userId: string; accountLast4: string[] }>;
+  note: string;
+};
+
 type ApiForm = {
   email: string;
   password: string;
@@ -154,7 +161,7 @@ function connectionForm(connection?: AutomationConnection | null): ApiForm {
   return {
     email: "",
     password: "",
-    clientReportPath: String(connection?.clientReportPath || "/api/v3/reports/clients/shared/"),
+    clientReportPath: String(connection?.clientReportPath || "/api/reports/clients/accounts/"),
     autoVerifyClients: Boolean(connection?.autoVerifyClients),
     syncIntervalMinutes: Number(connection?.syncIntervalMinutes || 15)
   };
@@ -178,6 +185,11 @@ export default function BrokerPage() {
   const [clients, setClients] = useState<ClientState>({ levels: [], clients: [] });
   const [apiForm, setApiForm] = useState<ApiForm>(connectionForm());
   const [ibPreview, setIbPreview] = useState<IbPerformancePreview | null>(null);
+  const [ibError, setIbError] = useState("");
+  const [ibCheckedAt, setIbCheckedAt] = useState<string | null>(null);
+  const [ibLoading, setIbLoading] = useState(false);
+  const [matchPreview, setMatchPreview] = useState<ClientMatchPreview | null>(null);
+  const [matchError, setMatchError] = useState("");
   const [clientQuery, setClientQuery] = useState("");
   const [clientLevels, setClientLevels] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
@@ -281,6 +293,40 @@ export default function BrokerPage() {
       setError(errorText(err, "โหลด Exness Partner Settings ไม่สำเร็จ"));
     });
   }, []);
+
+  // Always display the IB dashboard at the top; refresh read-only data on entry
+  // and every 5 minutes while this page is open. Never trigger client verification.
+  useEffect(() => {
+    if (!account || !apiConnected) return;
+    let active = true;
+    const refresh = async () => {
+      setIbLoading(true);
+      const [performance, matching] = await Promise.allSettled([
+        adminApi("/admin/brokers/exness/automation/performance-preview"),
+        adminApi("/admin/brokers/exness/automation/client-match-preview")
+      ]);
+      if (!active) return;
+      if (performance.status === "fulfilled") {
+        setIbPreview(performance.value);
+        setIbCheckedAt(new Date().toISOString());
+        setIbError("");
+      } else {
+        setIbError("อัปเดต IB Dashboard ไม่สำเร็จ · กดรีเฟรชเพื่อลองใหม่");
+      }
+      if (matching.status === "fulfilled") {
+        setMatchPreview(matching.value);
+        setMatchError("");
+      } else {
+        setMatchError("ตรวจข้อมูลบัญชีจาก Exness ไม่สำเร็จ · โปรดลองใหม่");
+      }
+      setIbLoading(false);
+    };
+    void refresh();
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") void refresh();
+    }, 5 * 60 * 1000);
+    return () => { active = false; window.clearInterval(interval); };
+  }, [account?.user?.userCode, apiConnected]);
 
   async function save(event: FormEvent) {
     event.preventDefault();
@@ -391,16 +437,27 @@ export default function BrokerPage() {
   }
 
   async function previewIbPerformance() {
-    setActionBusy("preview-ib");
-    setPartnerError("");
+    setIbLoading(true);
     try {
-      const result = await adminApi("/admin/brokers/exness/automation/performance-preview");
-      setIbPreview(result);
-    } catch (err: unknown) {
-      setIbPreview(null);
-      setPartnerError(errorText(err, "ดึง IB Performance จาก Exness ไม่สำเร็จ"));
+      const [performance, matching] = await Promise.allSettled([
+        adminApi("/admin/brokers/exness/automation/performance-preview"),
+        adminApi("/admin/brokers/exness/automation/client-match-preview")
+      ]);
+      if (performance.status === "fulfilled") {
+        setIbPreview(performance.value);
+        setIbCheckedAt(new Date().toISOString());
+        setIbError("");
+      } else {
+        setIbError("ดึง IB Performance จาก Exness ไม่สำเร็จ");
+      }
+      if (matching.status === "fulfilled") {
+        setMatchPreview(matching.value);
+        setMatchError("");
+      } else {
+        setMatchError("ตรวจข้อมูลบัญชีจาก Exness ไม่สำเร็จ");
+      }
     } finally {
-      setActionBusy("");
+      setIbLoading(false);
     }
   }
 
@@ -509,6 +566,36 @@ export default function BrokerPage() {
           {error && <div className={styles.error}>{error}</div>}
           {partnerError && <div className={styles.error}>{partnerError}</div>}
           {message && <div className={styles.success}>{message}</div>}
+
+          <div className={styles.dashboardCaption}>รายงานพาร์ทเนอร์ · แสดงตลอดเมื่อเปิดหน้า Broker</div>
+          <section className={styles.ibPanel}>
+                  <div className={styles.ibTitle}>
+                    <div>
+                      <b>EXNESS IB DASHBOARD · 30 วันล่าสุด</b>
+                      <span>ดึงข้อมูลเมื่อเปิดหน้า · อัปเดตอัตโนมัติทุก 5 นาที · อ่านข้อมูลอย่างเดียว</span>
+                    </div>
+                    <button
+                      type="button" className={styles.secondaryButton}
+                      onClick={previewIbPerformance}
+                      disabled={ibLoading || !apiConnected}
+                    >{ibLoading ? "กำลังอัปเดต..." : "รีเฟรชแดชบอร์ด"}</button>
+                  </div>
+                  {ibPreview ? <>
+                    <div className={styles.ibMetrics}>
+                      <div><small>คลิกลิงก์</small><b>{ibPreview.totals.clickCount.toLocaleString()}</b></div>
+                      <div><small>สมัคร</small><b>{ibPreview.totals.registrationCount.toLocaleString()}</b></div>
+                      <div><small>ผ่าน KYC</small><b>{ibPreview.totals.kycPassed.toLocaleString()}</b></div>
+                      <div><small>ฝากครั้งแรก</small><b>{ibPreview.totals.firstDepositCount.toLocaleString()}</b></div>
+                      <div><small>ปริมาณ Lots</small><b>{ibPreview.totals.volumeLots.toLocaleString("en-US", {maximumFractionDigits:4})}</b></div>
+                      <div><small>Rewards (USD)</small><b>${ibPreview.totals.rewardUsd.toLocaleString("en-US", {minimumFractionDigits:2,maximumFractionDigits:2})}</b></div>
+                    </div>
+                    <p>{ibPreview.fromDate} ถึง {ibPreview.toDate} · {ibPreview.note} · {ibPreview.groupCount} กลุ่มข้อมูล</p>
+                  </> : <p>{apiConnected ? (ibLoading ? "กำลังโหลดข้อมูลจาก Exness..." : "ยังไม่มีข้อมูล · กดรีเฟรชเพื่อลองใหม่") : "รอ Test Connection เพื่อโหลดข้อมูล Exness"}</p>}
+            {ibError && <p className={styles.dashboardError}>{ibError}</p>}
+            {ibCheckedAt && <p>อัปเดตล่าสุด {dateTime(ibCheckedAt)}</p>}
+          </section>
+
+          <div className={styles.settingsCaption}>การตั้งค่าและการตรวจสอบลูกค้า</div>
 
           <form className={styles.card} onSubmit={save}>
             <div className={styles.topRow}>
@@ -760,30 +847,6 @@ export default function BrokerPage() {
                   </div>
                 </div>
 
-                <div className={styles.ibPanel}>
-                  <div className={styles.ibTitle}>
-                    <div>
-                      <b>Exness IB Performance · 30 วันล่าสุด</b>
-                      <span>รายงานจาก GET /api/reports/ib/performance/ · ไม่เปลี่ยนสิทธิ์ลูกค้าหรือยอดเงิน</span>
-                    </div>
-                    <button
-                      type="button" className={styles.secondaryButton}
-                      onClick={previewIbPerformance}
-                      disabled={Boolean(actionBusy) || !apiConnected}
-                    >{actionBusy === "preview-ib" ? "กำลังดึงข้อมูล..." : "ดึงรายงาน IB"}</button>
-                  </div>
-                  {ibPreview ? <>
-                    <div className={styles.ibMetrics}>
-                      <div><small>คลิกลิงก์</small><b>{ibPreview.totals.clickCount.toLocaleString()}</b></div>
-                      <div><small>สมัคร</small><b>{ibPreview.totals.registrationCount.toLocaleString()}</b></div>
-                      <div><small>ผ่าน KYC</small><b>{ibPreview.totals.kycPassed.toLocaleString()}</b></div>
-                      <div><small>ฝากครั้งแรก</small><b>{ibPreview.totals.firstDepositCount.toLocaleString()}</b></div>
-                      <div><small>ปริมาณ Lots</small><b>{ibPreview.totals.volumeLots.toLocaleString("en-US", {maximumFractionDigits:4})}</b></div>
-                      <div><small>Rewards (USD)</small><b>${ibPreview.totals.rewardUsd.toLocaleString("en-US", {minimumFractionDigits:2,maximumFractionDigits:2})}</b></div>
-                    </div>
-                    <p>{ibPreview.fromDate} ถึง {ibPreview.toDate} · {ibPreview.note} · {ibPreview.groupCount} กลุ่มข้อมูล</p>
-                  </> : <p>กด “ดึงรายงาน IB” หลัง Test Connection ผ่าน เพื่อดูยอดรวม 30 วันล่าสุดจาก Exness</p>}
-                </div>
 
                 <div className={styles.syncLine}>
                   <span>ทดสอบล่าสุด <b>{dateTime(connection.lastTestedAt)}</b></span>
@@ -822,6 +885,13 @@ export default function BrokerPage() {
               </form>
             </div>
 
+            <div className={styles.matchSummary}>
+              {matchPreview
+                ? "ข้อมูล Exness ล่าสุด: " + matchPreview.reportCount + " บัญชี · จับคู่ SCENOVA ได้ " +
+                  matchPreview.matched.length + " ผู้ใช้ · การพบข้อมูลยังไม่ใช่การยืนยันสิทธิ์"
+                : "กำลังตรวจข้อมูลบัญชีจากรายงาน Exness แบบอ่านอย่างเดียว"}
+              {matchError && <span className={styles.dashboardError}> · {matchError}</span>}
+            </div>
             <div className={styles.clientList}>
               {clients.clients.length === 0 ? (
                 <div className={styles.empty}>
@@ -867,6 +937,21 @@ export default function BrokerPage() {
                           ? "ตรวจโดย " + client.verificationSource
                           : "ยังไม่มีแหล่งยืนยัน"}
                       </small>
+                      {matchPreview && client.status !== "VERIFIED" && (
+                        <small className={
+                          matchPreview.matched.some(match => match.userId === client.userId)
+                            ? styles.matchedAccount
+                            : styles.unmatchedAccount
+                        }>
+                          {(() => {
+                            const matched = matchPreview.matched.find(match => match.userId === client.userId);
+                            return matched
+                              ? "พบใน Exness · MT5 " + matched.accountLast4.map(last4 => "••••" + last4).join(", ") +
+                                " · รอยืนยันสิทธิ์"
+                              : "ยังไม่พบในรายงานที่ดึงมา";
+                          })()}
+                        </small>
+                      )}
                     </div>
 
                     <div className={styles.clientAction}>

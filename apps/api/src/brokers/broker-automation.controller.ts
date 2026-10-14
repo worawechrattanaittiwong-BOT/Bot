@@ -59,6 +59,11 @@ export class AdminBrokerAutomationController {
     return this.api.performancePreview();
   }
 
+  @Get("client-match-preview")
+  async clientMatchPreview() {
+    return this.automation.previewClientMatches();
+  }
+
   @Post("test")
   async test(@Req() req: any) {
     return this.api.testConnection(actor(req));

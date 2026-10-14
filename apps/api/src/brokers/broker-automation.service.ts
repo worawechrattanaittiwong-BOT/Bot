@@ -61,7 +61,7 @@ export class BrokerAutomationService
 
   private accountNumber(item: any) {
     return this.text(item, [
-      "account_number","accountNumber","mt5_account","mt5Account",
+      "client_account","clientAccount","account_number","accountNumber","mt5_account","mt5Account",
       "trading_account","tradingAccount","account.login","login"
     ]).replace(/[^0-9]/g,"").slice(0,32);
   }
@@ -223,6 +223,39 @@ export class BrokerAutomationService
         JSON.stringify(metadata)
       ]
     );
+  }
+
+  // Read-only Partner membership preview. No verification, discounts or rebate writes.
+  // The response contains only SCENOVA user IDs and masked MT5 suffixes.
+  async previewClientMatches() {
+    const state = await this.api.state();
+    if (!state.clientReportPath) {
+      return { reportCount: 0, matched: [], note: "ยังไม่ได้ตั้ง Client Report API Path" };
+    }
+    const token = await this.api.authenticate();
+    const payload = await this.api.request(state.clientReportPath, token);
+    const clients = this.api.arrayFromPayload(payload);
+    const found = new Map<string, Set<string>>();
+    let usableAccountRows = 0;
+    for (const item of clients) {
+      const accountNumber = this.accountNumber(item);
+      if (!accountNumber) continue;
+      usableAccountRows++;
+      const user = await this.matchUserByAccount(accountNumber);
+      if (!user?.id) continue;
+      const id = String(user.id);
+      if (!found.has(id)) found.set(id, new Set());
+      found.get(id)!.add(accountNumber.slice(-4));
+    }
+    return {
+      reportCount: clients.length,
+      usableAccountRows,
+      matched: [...found].map(([userId, suffixes]) => ({
+        userId, accountLast4: [...suffixes]
+      })),
+      source: "EXNESS_CLIENT_REPORT",
+      note: "พบในรายงาน Exness ไม่ใช่การยืนยันสิทธิ์หรือสถานะ Verified"
+    };
   }
 
   async runSync(triggerType: TriggerType = "MANUAL") {
