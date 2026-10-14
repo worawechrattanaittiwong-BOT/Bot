@@ -22,7 +22,7 @@ function isMobileDevice() {
   return /Android|iPhone|iPad|iPod|Mobile/i.test(ua) || touchMac;
 }
 
-export function ExnessSignupCard({hasMt5Account=false}:{hasMt5Account?:boolean}) {
+export function ExnessSignupCard({hasMt5Account=false,showWhenInactive=false,onTransferClosed}:{hasMt5Account?:boolean;showWhenInactive?:boolean;onTransferClosed?:()=>void}) {
   const [info, setInfo] = useState<SignupInfo | null>(null);
   const [open, setOpen] = useState(false);
   const [transferOpen,setTransferOpen] = useState(false);
@@ -60,7 +60,7 @@ export function ExnessSignupCard({hasMt5Account=false}:{hasMt5Account?:boolean})
   const mobile = useMemo(() => isMobileDevice(), [open]);
   const deviceLabel = mobile ? "มือถือ / แท็บเล็ต" : "คอมพิวเตอร์";
 
-  if (!info?.active) return null;
+  if (!info || (!info.active && !showWhenInactive)) return null;
 
   async function openRegistration() {
     setBusy(true);
@@ -88,12 +88,13 @@ export function ExnessSignupCard({hasMt5Account=false}:{hasMt5Account?:boolean})
           <span>{hasMt5Account ? "มีบัญชี Exness อยู่แล้ว? เตรียมคำขอย้ายมาอยู่กับ SCENOVA ได้" : "สมัครใหม่ หรือใช้บัญชีเดิมและขอย้ายพาร์ตเนอร์มา SCENOVA"}</span>
         </div>
         <div className={styles.entryActions}>
-          {!hasMt5Account&&<button type="button" onClick={() => setOpen(true)}>สมัคร Exness</button>}
-          <button type="button" className={styles.transferEntryButton} onClick={()=>setTransferOpen(true)}>ย้ายพาร์ตเนอร์</button>
+          {!hasMt5Account&&<button type="button" disabled={!info.active} title={!info.active?"ยังไม่ได้เปิดใช้งานลิงก์พาร์ตเนอร์":undefined} onClick={() => setOpen(true)}>สมัคร Exness</button>}
+          <button type="button" disabled={!info.active} title={!info.active?"ยังไม่ได้เปิดใช้งานลิงก์พาร์ตเนอร์":undefined} className={styles.transferEntryButton} onClick={()=>setTransferOpen(true)}>ย้ายพาร์ตเนอร์</button>
+          {!info.active&&<span className={styles.transferHint}>ปิดใช้งานพาร์ตเนอร์อยู่ · Owner เห็นเมนูตัวอย่างได้ แต่ยังส่งคำขอไม่ได้</span>}
         </div>
       </section>
 
-      {transferOpen && <ExnessTransferModal onClose={()=>setTransferOpen(false)}/>}
+      {transferOpen && <ExnessTransferModal onClose={()=>{setTransferOpen(false);onTransferClosed?.();}}/>}
       {open && (
         <div className={styles.backdrop} role="presentation" onMouseDown={() => setOpen(false)}>
           <section

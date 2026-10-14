@@ -82,7 +82,7 @@ export const ownerNavItems: NavItem[] = [
   { section:"SYSTEM", key:"website", href:"/website", icon:"strategy", label:"Website", hint:"SCENOVA public website" }
 ];
 
-export const customerNavItems: NavItem[] = [...sharedTradingNavItems, packagesNavItem, myAccountNavItem, inviteEarnNavItem];
+export const customerNavItems: NavItem[] = [...sharedTradingNavItems, brokerNavItem, packagesNavItem, myAccountNavItem, inviteEarnNavItem];
 
 type SidebarNavigateHandler = (href:string)=>boolean | void;
 type PartnerSummary = {

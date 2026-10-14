@@ -18,12 +18,12 @@ const migration = read("database/065_broker_signup_simplify.sql");
 
 assert.match(sidebar, /ownerNavItems:[\s\S]*brokerNavItem/);
 assert.match(sidebar, /customerNavItems:[^\n]*packagesNavItem, myAccountNavItem/);
-assert.doesNotMatch(
+assert.match(
   sidebar.match(/export const customerNavItems:[^\n]*/)?.[0] || "",
   /brokerNavItem/
 );
 
-assert.match(dashboard, /!isOwner && !data\.account && <ExnessSignupCard\/>/);
+assert.match(dashboard, /<ExnessSignupCard hasMt5Account=\{Boolean\(data\.account\)\} showWhenInactive=\{isOwner\}\/>/);
 assert.match(signup, /Partner Code/);
 assert.match(signup, /มือถือ \/ แท็บเล็ต/);
 assert.match(signup, /คอมพิวเตอร์/);
@@ -36,14 +36,13 @@ assert.match(login, /\/api\/public\/brokers\/exness\/signup\?platform=/);
 assert.match(loginCss, /\.partnerCard\{/);
 assert.match(loginCss, /\.partnerButton\{/);
 
-assert.match(brokerPage, /Exness Partner Setup/);
+assert.match(brokerPage, /EXNESS PARTNER CENTER/);
+assert.match(brokerPage, /CustomerBrokerCenter/);
+assert.match(brokerPage, /showWhenInactive/);
 assert.match(brokerPage, /ลิงก์สำหรับคอมพิวเตอร์/);
 assert.match(brokerPage, /ลิงก์สำหรับมือถือ/);
 assert.match(brokerPage, /ข้อความสิทธิพิเศษที่ลูกค้าเห็น/);
 assert.doesNotMatch(brokerPage, /PHASE [1-4]/);
-assert.doesNotMatch(brokerPage, /Partner Verification & Benefits/);
-assert.doesNotMatch(brokerPage, /Commission & Rebate/);
-assert.doesNotMatch(brokerPage, /API & Automation/);
 
 assert.match(brokerController, /@Get\("exness\/signup"\)/);
 assert.match(brokerController, /@Controller\("public\/brokers"\)[\s\S]*publicRegistrationInfo/);

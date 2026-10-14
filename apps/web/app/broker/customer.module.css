@@ -1,0 +1,13 @@
+.main{min-height:100vh;background:radial-gradient(circle at 75% 0%,rgba(107,73,210,.16),transparent 35%),#09070e}
+.shell{width:min(1040px,calc(100% - 36px));margin:0 auto;padding:34px 0 75px;display:grid;gap:15px}
+.heading{display:flex;align-items:center;justify-content:space-between;gap:15px;margin-bottom:8px}
+.heading>div{display:grid;gap:5px}.heading span:not(.customerTag),.sectionHeading small{color:#b39bff;font-size:11px;letter-spacing:.08em;font-weight:800}
+.heading h1{font-size:35px;line-height:1.15;margin:0;color:#fff}.heading p{color:#b5a9c5;font-size:12px;margin:0;line-height:1.6}
+.customerTag{color:#dfd0ff;background:rgba(121,88,219,.12);border:1px solid rgba(149,113,247,.25);padding:8px 12px;border-radius:999px;font-size:11px;white-space:nowrap}
+.section{background:linear-gradient(135deg,rgba(27,21,43,.98),rgba(12,10,19,.99));border:1px solid rgba(150,120,228,.2);border-radius:17px;padding:21px;display:grid;gap:13px;align-content:start;min-width:0}
+.sectionHeading{display:flex;justify-content:space-between;align-items:center;gap:10px}.sectionHeading>div{display:grid;gap:5px}.sectionHeading h2{color:#f5efff;font-size:16px;margin:0}
+.section p{color:#b7acc7;font-size:12px;line-height:1.75;margin:0}.section .note{color:#9f95ac;font-size:11px}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:15px}.callout{border:1px solid rgba(224,173,93,.33);border-radius:11px;background:rgba(195,136,48,.08);padding:13px 14px;display:grid;gap:5px;color:#e7cfab;font-size:12px;line-height:1.65}.callout span{color:#c3b39f}
+.status{font-size:15px!important;font-weight:800;color:#e8dfff!important}.accountList{display:grid;gap:8px}.accountRow,.requestRow{display:flex;justify-content:space-between;align-items:center;gap:12px;border:1px solid rgba(154,129,203,.16);border-radius:10px;padding:11px 13px;background:#0c0a14;color:#d8cee6;font-size:11px}
+.accountRow>div,.requestRow>div{display:grid;gap:4px}.accountRow b,.requestRow b{font-size:12px;color:#ede4ff}.accountRow small,.requestRow small{font-size:11px;color:#ac9cbd;line-height:1.45}.textLink{width:fit-content;border:1px solid rgba(147,113,225,.3);background:rgba(115,82,211,.13);padding:10px 12px;border-radius:9px;color:#ded0ff;font-weight:750;font-size:11px;text-decoration:none}.warning{color:#ffc7bf!important}
+@media(max-width:790px){.cols{grid-template-columns:1fr}.heading h1{font-size:28px}.section{padding:16px}.shell{width:calc(100% - 22px);padding-top:18px}.customerTag{display:none}}

@@ -5,6 +5,8 @@ import { OwnerMobileNav, OwnerSidebar } from "../../components/OwnerSidebar";
 import { adminApi, api, getToken } from "../../lib/api";
 import styles from "./page.module.css";
 import { ExnessRebateControl } from "../../components/ExnessRebateControl";
+import { CustomerBrokerCenter } from "../../components/CustomerBrokerCenter";
+import { ExnessSignupCard } from "../../components/ExnessSignupCard";
 
 type Account = {
   user: {
@@ -266,7 +268,9 @@ export default function BrokerPage() {
     const role = String(accountData?.user?.role || "").toUpperCase();
 
     if (!["OWNER", "ADMIN"].includes(role)) {
-      window.location.replace("/dashboard?view=account");
+      // Customer broker page must not call or render any admin-only report.
+      setAccount(accountData);
+      setLoading(false);
       return;
     }
 
@@ -569,6 +573,10 @@ export default function BrokerPage() {
     );
   }
 
+  if (!["OWNER", "ADMIN"].includes(String(account.user.role || "").toUpperCase())) {
+    return <CustomerBrokerCenter userCode={account.user.userCode} />;
+  }
+
   return (
     <div className="app-wrap">
       <OwnerSidebar
@@ -605,6 +613,10 @@ export default function BrokerPage() {
             <a href="#exness-rebate">Exness Rebate Control</a>
             <a href="#exness-transfers">คำขอย้ายพาร์ตเนอร์</a>
           </nav>
+          <section className={styles.card} aria-label="Owner ดูปุ่มลูกค้าสำหรับ Exness">
+            <div className={styles.sectionHead}><div><small>OWNER PREVIEW · CUSTOMER ACTIONS</small><b>ปุ่มสมัคร / ย้ายพาร์ตเนอร์ที่ลูกค้าใช้งาน</b><span>เจ้าของระบบสามารถเปิดหน้าต่างทดสอบ UI ได้ที่นี่ · ใช้คำขอจริงต้องเป็นเจ้าของบัญชี Exness เอง</span></div></div>
+            <ExnessSignupCard showWhenInactive />
+          </section>
           <div className={styles.healthGrid} aria-label="สถานะ Exness API">
             <div className={styles.healthCard}><small>EXNESS API</small><strong className={apiConnected ? styles.healthGood : styles.healthWarn}>{apiConnected ? "✓ ผ่านการทดสอบล่าสุด" : "! ต้องตรวจสอบ"}</strong><span>{connection?.lastTestStatus || "ยังไม่ทดสอบ"} · ทดสอบ {dateTime(connection?.lastTestedAt || null)}</span></div>
             <div className={styles.healthCard}><small>SYNC AUTOMATION</small><strong className={connection?.enabled ? styles.healthGood : styles.healthWarn}>{connection?.enabled ? "● เปิดทำงาน" : "○ ปิดอยู่"}</strong><span>ทุก {connection?.syncIntervalMinutes || 15} นาที · รอบล่าสุด {dateTime(connection?.lastSyncAt || null)}</span></div>

@@ -5443,7 +5443,7 @@ export default function DashboardPage() {
 
         {activeView === "account" && (
           <div className="account-workspace account-workspace-compact">
-            {!isOwner && <ExnessSignupCard hasMt5Account={Boolean(data.account)}/>}
+            <ExnessSignupCard hasMt5Account={Boolean(data.account)} showWhenInactive={isOwner}/>
 
             <section className="panel account-card connection-mode-card">
               <div className="panel-head">
