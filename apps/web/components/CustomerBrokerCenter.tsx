@@ -26,7 +26,7 @@ const statusLabels:Record<string,string>={
 const requestLabels:Record<TransferSummary["status"],string>={
   PREPARED:"เตรียมข้อมูลแล้ว · ยังไม่ได้ยื่นที่ Exness",
   CUSTOMER_SUBMITTED:"คุณแจ้งว่ายื่นคำขอแล้ว · โปรดตรวจผลที่ Exness",
-  PARTNER_VISIBLE:"พบบัญชีเทรดใหม่ในรายงาน Partner API"
+  PARTNER_VISIBLE:"พบบัญชีเทรดใหม่ของคุณแล้ว"
 };
 
 function logout() {
@@ -75,10 +75,10 @@ export function CustomerBrokerCenter({userCode}:{userCode:string}) {
 
         <section className={styles.section} aria-label="สมัคร Exness และขอย้ายพาร์ตเนอร์">
           <div className={styles.sectionHeading}><div><small>เริ่มต้นใช้งาน</small><h2>สมัครหรือย้ายพาร์ตเนอร์ Exness</h2></div></div>
-          <p>ใช้ปุ่มด้านล่างเพื่อสมัคร Exness หรือเตรียมคำขอย้ายพาร์ตเนอร์กับ Exness โดยตรง SCENOVA จะไม่ขอรหัสผ่านหรือ OTP สำหรับย้ายพาร์ตเนอร์</p>
+          <p>เลือกสมัคร Exness หรือย้ายพาร์ตเนอร์ไปยัง SCENOVA ได้จากปุ่มด้านล่าง</p>
           <ExnessSignupCard hasMt5Account={connected.length>0} onTransferClosed={reloadRequests}/>
           {!summary?.provider?.active&&!loading&&<p className={styles.note}>ขณะนี้จุดสมัครหรือย้ายพาร์ตเนอร์ยังไม่เปิดใช้งาน กรุณาติดต่อฝ่ายสนับสนุน SCENOVA</p>}
-          <div className={styles.callout}><b>ลิงก์ย้ายพาร์ตเนอร์ออกโดย Exness เท่านั้น</b><span>ลิงก์เป็นของแต่ละบัญชีและมีอายุ 7 วัน ลูกค้าขอจาก Exness แล้วเปิดผ่านหน้า SCENOVA ได้ แต่ SCENOVA ยังไม่สามารถสร้างลิงก์ขอย้ายอัตโนมัติผ่าน Partner API</span></div>
+          <div className={styles.callout}><b>การย้ายพาร์ตเนอร์</b><span>หลังคลิกดำเนินการต่อที่ Exness ให้ติดต่อฝ่ายช่วยเหลือเพื่อรับลิงก์สำหรับบัญชีของคุณ แล้วส่งคำขอและยืนยันตัวตนกับ Exness</span></div>
         </section>
 
         <div className={styles.cols}>
@@ -87,8 +87,8 @@ export function CustomerBrokerCenter({userCode}:{userCode:string}) {
             {loading?<p>กำลังโหลดสถานะ...</p>:<>
               {error&&<p className={styles.warning}>{error}</p>}
               <p className={styles.status}>{statusLabels[partner?.status||"NOT_CHECKED"]||"ยังไม่ตรวจสอบ"}</p>
-              <p>สถานะนี้เป็นข้อมูลที่ SCENOVA บันทึกไว้ ไม่ใช่ผลอนุมัติคำขอย้ายพาร์ตเนอร์อย่างเป็นทางการจาก Exness</p>
-              {partner?.benefit&&<p className={styles.note}>สิทธิประโยชน์ SCENOVA: {partner.benefit.levelName} (ส่วนลดที่ระบบกำหนด {partner.benefit.discountPercent}%)</p>}
+              <p>หากยื่นคำขอย้ายแล้ว ให้ตรวจผลการพิจารณาที่ Exness</p>
+              {partner?.benefit&&<p className={styles.note}>สิทธิประโยชน์ SCENOVA: {partner.benefit.levelName} (ส่วนลด {partner.benefit.discountPercent}%)</p>}
             </>}
           </section>
           <section className={styles.section}>
@@ -97,7 +97,7 @@ export function CustomerBrokerCenter({userCode}:{userCode:string}) {
               {connected.map(a=><div className={styles.accountRow} key={a.id}><div><b>MT5 ••••{a.accountLast4}</b><small>{a.server||"Exness"} · {a.mode||"MT5"}</small></div><span>{a.status||"—"}</span></div>)}
             </div>:<p>ยังไม่พบบัญชี Exness ที่เชื่อมไว้ สามารถเชื่อมบัญชี MT5 ได้จากหน้า MT5 & EA</p>}
             <Link className={styles.textLink} href="/dashboard?view=account">ไปหน้าเชื่อม MT5 & EA ↗</Link>
-            <p className={styles.note}>บัญชีที่เชื่อมกับ SCENOVA ไม่ได้หมายความว่าอยู่ใต้ IB SCENOVA เสมอไป ต้องตรวจการเชื่อมกับพาร์ตเนอร์แยกต่างหาก</p>
+            <p className={styles.note}>หากต้องการยืนยันว่าอยู่กับ SCENOVA แล้ว กรุณาตรวจสถานะพาร์ตเนอร์ด้านบน</p>
           </section>
         </div>
 
@@ -105,13 +105,13 @@ export function CustomerBrokerCenter({userCode}:{userCode:string}) {
           <div className={styles.sectionHeading}><div><small>ติดตามการดำเนินการ</small><h2>คำขอย้ายพาร์ตเนอร์ของฉัน</h2></div></div>
           {requestError&&<p className={styles.warning}>{requestError}</p>}
           {loading?<p>กำลังโหลดคำขอ...</p>:requests.length?<div className={styles.accountList}>{requests.map((r,i)=><div className={styles.requestRow} key={i}><div><b>บัญชีเดิม ••••{r.accountLast4}</b><small>{requestLabels[r.status]}{r.newAccountLast4?" · บัญชีใหม่ ••••"+r.newAccountLast4:""}</small></div><small>{new Date(r.createdAt).toLocaleDateString("th-TH")}</small></div>)}</div>:<p>ยังไม่มีประวัติเตรียมคำขอย้ายพาร์ตเนอร์ เมื่อเริ่มย้ายจากปุ่มด้านบน รายการจะปรากฏที่นี่</p>}
-          <p className={styles.note}>Exness ใช้เวลาพิจารณาประมาณ 3 วันทำการ ตรวจสถานะ Ticket จริงผ่านลิงก์ Exness เฉพาะบัญชีของคุณ</p>
+          <p className={styles.note}>Exness พิจารณาคำขอประมาณ 3 วันทำการ ตรวจผลผ่านลิงก์ที่ได้รับจาก Exness</p>
         </section>
 
         <section className={styles.section}>
           <div className={styles.sectionHeading}><div><small>สิทธิประโยชน์</small><h2>Exness Rebate (เงินคืน)</h2></div></div>
-          <p>เงินคืนและสถานะการจ่ายเป็นข้อมูลของ Exness โดยตรง SCENOVA ไม่มี Rebate Wallet ไม่ถือเงินคืนและไม่จ่ายเงินคืนให้ลูกค้า</p>
-          <p className={styles.note}>ขณะนี้หน้านี้ยังไม่แสดงยอดเงินคืนรายบัญชีแบบยืนยันแล้ว โปรดตรวจยอดจริงจากระบบ Exness ของคุณ</p>
+          <p>เงินคืนคำนวณและจ่ายเข้าบัญชี Exness ของคุณโดย Exness โดยตรง</p>
+          <p className={styles.note}>ตรวจรายละเอียดเงินคืนได้จาก Exness</p>
           <a className={styles.textLink} href="https://my.exness.com/" target="_blank" rel="noopener noreferrer">เปิดพื้นที่ส่วนบุคคล Exness ↗</a>
         </section>
       </div>
