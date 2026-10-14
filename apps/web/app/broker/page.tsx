@@ -899,7 +899,7 @@ export default function BrokerPage() {
             <div className={styles.transferAdminHelp}>สถานะ “แจ้งว่าส่งแล้ว” เป็นข้อมูลที่ลูกค้าระบุ ไม่ใช่คำยืนยันจาก Exness · สถานะ “พบบัญชีใหม่ใน Partner API” หมายถึงบัญชีเทรดใหม่อยู่ในรายงาน ไม่ใช่เอกสารรับรองอนุมัติคำขอจาก Exness</div>
             {transfers ? <div className={styles.transferAdminList}>
               {transfers.requests.length ? transfers.requests.map(r=><div key={r.id} className={styles.transferAdminRow}>
-                <div><b>{r.userCode}</b><span>บัญชีเดิม ••••{r.accountLast4}{r.newAccountLast4?" · บัญชีใหม่ ••••"+r.newAccountLast4:" · ยังไม่ระบุบัญชีใหม่"}</span></div>
+                <div><b>{r.userCode}</b><span>{r.accountLast4?"คำขอเก่า · MT5 ••••"+r.accountLast4:"บัญชี Exness (Personal Area)"}{r.newAccountLast4?" · บัญชีเทรดใหม่ ••••"+r.newAccountLast4:" · ยังไม่ระบุบัญชีเทรดใหม่"}</span></div>
                 <div><b>{r.status==="PARTNER_VISIBLE"?"พบบัญชีใหม่ใน Partner API":r.status==="CUSTOMER_SUBMITTED"?"ลูกค้าแจ้งว่าส่งแล้ว":"เตรียมคำขอ"}</b><span>Partner: {r.partnerCode}</span></div>
                 <div><b>{dateTime(r.submittedAt||r.createdAt)}</b><span>ตรวจล่าสุด: {dateTime(r.checkedAt)}</span></div>
               </div>) : <p>ยังไม่มีคำขอย้ายพาร์ตเนอร์จากลูกค้า</p>}

@@ -37,7 +37,7 @@ export class BrokerController {
   async transfer(@Req() req:any) { return this.transfers.customer(String(req.user.sub || "")); }
 
   @Post("exness/transfer")
-  async prepareTransfer(@Req() req:any, @Body() body:{accountId?:string;accountNumber?:string;consent?:boolean}) {
+  async prepareTransfer(@Req() req:any, @Body() body:{consent?:boolean}) {
     return this.transfers.prepare(String(req.user.sub || ""),body || {});
   }
 
@@ -47,8 +47,8 @@ export class BrokerController {
   }
 
   @Post("exness/transfer/:id/new-account")
-  async transferNewAccount(@Req() req:any, @Param("id") id:string, @Body() body:{accountId?:string}) {
-    return this.transfers.setNewAccount(String(req.user.sub || ""),id,String(body?.accountId || ""));
+  async transferNewAccount(@Req() req:any, @Param("id") id:string, @Body() body:{accountId?:string;confirmedApproved?:boolean}) {
+    return this.transfers.setNewAccount(String(req.user.sub || ""),id,String(body?.accountId || ""),body?.confirmedApproved === true);
   }
 
   @Post("exness/transfer/:id/check")

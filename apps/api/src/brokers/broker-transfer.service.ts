@@ -20,7 +20,7 @@ export class BrokerTransferService {
         id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         broker_code varchar(32) NOT NULL DEFAULT 'EXNESS',
-        trading_account varchar(32) NOT NULL,
+        trading_account varchar(32),
         partner_code varchar(120) NOT NULL,
         status varchar(32) NOT NULL DEFAULT 'PREPARED'
           CHECK (status IN ('PREPARED','CUSTOMER_SUBMITTED','PARTNER_VISIBLE')),
@@ -34,6 +34,9 @@ export class BrokerTransferService {
       );
       ALTER TABLE broker_partner_transfer_requests
         ADD COLUMN IF NOT EXISTS new_trading_account varchar(32);
+      ALTER TABLE broker_partner_transfer_requests ALTER COLUMN trading_account DROP NOT NULL;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_broker_transfer_personal_area
+        ON broker_partner_transfer_requests(user_id,broker_code) WHERE trading_account IS NULL;
       CREATE INDEX IF NOT EXISTS idx_broker_transfer_status
         ON broker_partner_transfer_requests (broker_code,status,updated_at DESC);
     `);
@@ -42,7 +45,7 @@ export class BrokerTransferService {
 
   private async accountOptions(userId: string) {
     const result = await this.db.query(
-      `SELECT id, account_number, broker_server
+      `SELECT id, account_number, broker_server, created_at
        FROM mt5_accounts
        WHERE user_id=$1 AND (
          upper(trim(COALESCE(broker,''))) LIKE 'EXNESS%'
@@ -52,7 +55,8 @@ export class BrokerTransferService {
     return result.rows.map(row => ({
       id: String(row.id),
       accountNumber: String(row.account_number),
-      server: String(row.broker_server || "")
+      server: String(row.broker_server || ""),
+      linkedAt: row.created_at ? new Date(row.created_at).toISOString() : null
     }));
   }
 
@@ -69,8 +73,8 @@ export class BrokerTransferService {
   private view(row: any) {
     return {
       id: String(row.id),
-      accountNumber: String(row.trading_account),
-      accountLast4: String(row.trading_account).slice(-4),
+      accountNumber: row.trading_account ? String(row.trading_account) : null,
+      accountLast4: row.trading_account ? String(row.trading_account).slice(-4) : null,
       partnerCode: String(row.partner_code),
       newAccountNumber: row.new_trading_account ? String(row.new_trading_account) : null,
       newAccountLast4: row.new_trading_account ? String(row.new_trading_account).slice(-4) : null,
@@ -87,7 +91,7 @@ export class BrokerTransferService {
     const [partner, accounts, list, user] = await Promise.all([
       this.brokers.registrationInfo(),
       this.accountOptions(userId),
-      this.db.query(`SELECT * FROM broker_partner_transfer_requests WHERE user_id=$1 AND broker_code='EXNESS' ORDER BY created_at DESC LIMIT 15`,[userId]),
+      this.db.query(`SELECT * FROM broker_partner_transfer_requests WHERE user_id=$1 AND broker_code='EXNESS' ORDER BY (trading_account IS NULL) DESC, created_at DESC LIMIT 15`,[userId]),
       this.db.one(`SELECT email FROM users WHERE id=$1`,[userId])
     ]);
     return {
@@ -101,23 +105,19 @@ export class BrokerTransferService {
     };
   }
 
-  async prepare(userId: string, input: { accountId?: string; accountNumber?: string; consent?: boolean }) {
+  // Partner changes concern the customer's Exness Personal Area, not a selected MT5 account.
+  // Legacy trading-account-specific requests remain in the database for historical reference.
+  async prepare(userId: string, input: { consent?: boolean }) {
     await this.ensureSchema();
-    if (input?.consent !== true) throw new BadRequestException("กรุณายืนยันว่าต้องการให้ SCENOVA เตรียมคำขอและตรวจบัญชีจาก Exness");
+    if (input?.consent !== true) throw new BadRequestException("กรุณายืนยันว่าคุณเป็นเจ้าของบัญชี Exness และยินยอมให้ SCENOVA บันทึกคำขอ");
     const partner = await this.brokers.registrationInfo();
     if (!partner.active || !partner.partnerCode) throw new ConflictException("ยังไม่เปิดรับคำขอย้ายพาร์ตเนอร์ใน SCENOVA");
-    const options = await this.accountOptions(userId);
-    const accountId = String(input.accountId || "");
-    const option = accountId ? options.find(a => a.id === accountId) : null;
-    if (accountId && !option) throw new BadRequestException("บัญชี MT5 นี้ไม่ใช่บัญชี Exness ของผู้ใช้");
-    const accountNumber = option ? option.accountNumber : String(input.accountNumber || "").trim();
-    if (!/^[0-9]{5,20}$/.test(accountNumber)) throw new BadRequestException("เลขบัญชี Exness ต้องเป็นตัวเลข 5-20 หลัก");
     const row = await this.db.one(
       `INSERT INTO broker_partner_transfer_requests(user_id,trading_account,partner_code)
-       VALUES($1,$2,$3)
-       ON CONFLICT(user_id,broker_code,trading_account) DO UPDATE
-       SET updated_at=now()
-       RETURNING *`,[userId,accountNumber,partner.partnerCode]
+       VALUES($1,NULL,$2)
+       ON CONFLICT (user_id,broker_code) WHERE trading_account IS NULL
+       DO UPDATE SET updated_at=now()
+       RETURNING *`,[userId,partner.partnerCode]
     );
     return this.view(row);
   }
@@ -136,16 +136,20 @@ export class BrokerTransferService {
 
   // Exness requires a NEW trading account after partner change approval.
   // The original trading account remains with the original partner.
-  async setNewAccount(userId: string, id: string, accountId: string) {
+  async setNewAccount(userId: string, id: string, accountId: string, confirmedApproved: boolean) {
     await this.ensureSchema();
     const current = await this.own(userId,id);
     if (current.status === "PREPARED") {
       throw new ConflictException("กรุณายื่นคำขอกับ Exness และยืนยันว่าได้ส่งคำขอแล้วก่อน");
     }
+    if (!confirmedApproved) throw new BadRequestException("กรุณายืนยันว่า Exness อนุมัติการเปลี่ยนพาร์ตเนอร์แล้ว และคุณสร้างบัญชีเทรดใหม่นี้หลังอนุมัติ");
     const options = await this.accountOptions(userId);
     const option = options.find(a => a.id === String(accountId || ""));
     if (!option) throw new BadRequestException("กรุณาเชื่อมบัญชีเทรด Exness ใหม่กับ SCENOVA ก่อน");
-    if (option.accountNumber === String(current.trading_account)) {
+    if (current.customer_submitted_at && (!option.linkedAt || new Date(option.linkedAt).getTime() <= new Date(current.customer_submitted_at).getTime())) {
+      throw new BadRequestException("บัญชีที่เลือกเชื่อมกับ SCENOVA ก่อนส่งคำขอย้าย กรุณาเชื่อมบัญชีเทรดที่สร้างใหม่หลัง Exness อนุมัติ");
+    }
+    if (current.trading_account && option.accountNumber === String(current.trading_account)) {
       throw new BadRequestException("Exness ระบุว่าบัญชีเก่าไม่เปลี่ยนพาร์ตเนอร์ ต้องเลือกบัญชีเทรดใหม่เท่านั้น");
     }
     const row = await this.db.one(

@@ -14,7 +14,7 @@ type CustomerBrokerSummary = {
 };
 type TransferSummary = {
   status:"PREPARED"|"CUSTOMER_SUBMITTED"|"PARTNER_VISIBLE";
-  accountLast4:string;newAccountLast4:string|null;createdAt:string;
+  accountLast4:string|null;newAccountLast4:string|null;createdAt:string;
 };
 const statusLabels:Record<string,string>={
   VERIFIED:"ยืนยันการเชื่อมกับ SCENOVA แล้ว",
@@ -104,7 +104,7 @@ export function CustomerBrokerCenter({userCode}:{userCode:string}) {
         <section className={styles.section}>
           <div className={styles.sectionHeading}><div><small>ติดตามการดำเนินการ</small><h2>คำขอย้ายพาร์ตเนอร์ของฉัน</h2></div></div>
           {requestError&&<p className={styles.warning}>{requestError}</p>}
-          {loading?<p>กำลังโหลดคำขอ...</p>:requests.length?<div className={styles.accountList}>{requests.map((r,i)=><div className={styles.requestRow} key={i}><div><b>บัญชีเดิม ••••{r.accountLast4}</b><small>{requestLabels[r.status]}{r.newAccountLast4?" · บัญชีใหม่ ••••"+r.newAccountLast4:""}</small></div><small>{new Date(r.createdAt).toLocaleDateString("th-TH")}</small></div>)}</div>:<p>ยังไม่มีประวัติเตรียมคำขอย้ายพาร์ตเนอร์ เมื่อเริ่มย้ายจากปุ่มด้านบน รายการจะปรากฏที่นี่</p>}
+          {loading?<p>กำลังโหลดคำขอ...</p>:requests.length?<div className={styles.accountList}>{requests.map((r,i)=><div className={styles.requestRow} key={i}><div><b>{r.accountLast4?"คำขอเก่า · MT5 ••••"+r.accountLast4:"ขอเปลี่ยนพาร์ตเนอร์บัญชี Exness"}</b><small>{requestLabels[r.status]}{r.newAccountLast4?" · บัญชีใหม่ ••••"+r.newAccountLast4:""}</small></div><small>{new Date(r.createdAt).toLocaleDateString("th-TH")}</small></div>)}</div>:<p>ยังไม่มีประวัติเตรียมคำขอย้ายพาร์ตเนอร์ เมื่อเริ่มย้ายจากปุ่มด้านบน รายการจะปรากฏที่นี่</p>}
           <p className={styles.note}>Exness พิจารณาคำขอประมาณ 3 วันทำการ ตรวจผลผ่านลิงก์ที่ได้รับจาก Exness</p>
         </section>
 
