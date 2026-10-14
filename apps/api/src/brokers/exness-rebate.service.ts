@@ -72,10 +72,16 @@ export class ExnessRebateService {
     const query=new URLSearchParams({limit:String(limit),offset:String(offset)});
     const body=await this.exness.request(READS[name]+"?"+query.toString(),jwt);
     const rows=this.exness.arrayFromPayload(body);
+    const shapeValid=Array.isArray(body) || ["results","items","rows","data"].some(key =>
+      Array.isArray(body?.[key]) || Array.isArray(body?.data?.[key])
+    );
+    const rawTotal=body?.count ?? body?.total ?? body?.pagination?.total ?? body?.meta?.total;
+    const total=rawTotal !== null && rawTotal !== undefined && rawTotal !== "" &&
+      Number.isSafeInteger(Number(rawTotal)) && Number(rawTotal)>=0 ? Number(rawTotal) : null;
+    const next=body?.next ?? body?.pagination?.next ?? body?.meta?.next;
     return {
       source:"EXNESS_PARTNERS",kind:name,limit,offset,
-      count:rows.length,
-      total: Number.isFinite(Number(body?.count)) ? Math.max(0,Number(body.count)) : null,
+      count:rows.length,total,shapeValid,hasNext:Boolean(next),
       rows:rows.slice(0,100).map(row=>this.mapRow(row,name))
     };
   }

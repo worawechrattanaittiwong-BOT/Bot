@@ -58,7 +58,7 @@ const rebate={
  read:async(name,limit,offset)=>{
   assert.equal(name,"clients");
   rebateReads++;
-  return {count:2,total:2,rows:offset===0?[
+  return {count:2,total:2,shapeValid:true,hasNext:false,rows:offset===0?[
    {client_account:"266078974",destination_client_account:"266078974",rebate_percent:20,rebate_group_title:"Standard",processed_rebate_usd:2.5},
    {client_account:"263625345",destination_client_account:"266078974",rebate_percent:30,rebate_group_title:"Standard",processed_rebate_usd:4}
   ]:[]};
@@ -82,6 +82,37 @@ const rebate={
  assert.equal(paths.length,2,"must paginate client report to avoid false not-found");
  assert.equal(rebateReads,1);
  assert(!JSON.stringify(out).includes("266078974"),"never expose full MT5 login");
+ // Existing partial findings should remain FOUND even if Exness fails on a later page.
+ let partialPages=0;
+ const partialExness={...exness,
+  request:async(_path)=>{
+    partialPages++;
+    if (partialPages===1) return {count:75,data:[...raw.slice(0,39),{client_account:"266078974"}]};
+    throw Error("Rate limit while fetching page 2");
+  }
+ };
+ const partial=await new Service(db,partialExness,rebate).forClient(USER);
+ assert.equal(partial.partnerReport.complete,false);
+ assert.equal(partial.accounts[0].partnerMatch,"FOUND");
+ assert.equal(partial.accounts[1].partnerMatch,"UNAVAILABLE");
+ // Explicit next-page must be honored even when an upstream count looks complete.
+ const nextExness={...exness,request:async path=>{
+    const offset=Number(new URL("https://mock.invalid"+path).searchParams.get("offset"));
+    return offset===0
+      ? {count:3,next:"NEXT",data:[{client_account:"263625345"},{client_account:"12345678"}]}
+      : {count:3,next:null,data:[{client_account:"266078974"}]};
+ }};
+ const paged=await new Service(db,nextExness,rebate).forClient(USER);
+ assert.equal(paged.partnerReport.complete,true);
+ assert.equal(paged.accounts[0].partnerMatch,"FOUND");
+ // API schema drift must not masquerade as a definitive absence.
+ const unexpected=new Service(db,{...exness,request:async()=>({message:"unknown"}) ,arrayFromPayload:p=>p?.data||[]},
+   {read:async()=>({total:null,shapeValid:false,hasNext:false,rows:[]})});
+ const unknown=await unexpected.forClient(USER);
+ assert.equal(unknown.partnerReport.complete,false);
+ assert.equal(unknown.rebateReport.complete,false);
+ assert.equal(unknown.accounts[0].partnerMatch,"UNAVAILABLE");
+ assert.equal(unknown.accounts[0].rebate.state,"UNAVAILABLE");
  const broken=new Service(db,{...exness,authenticate:async()=>{throw Error("HTTP 401")}},{
   read:async()=>{throw Error("HTTP 429")}
  });

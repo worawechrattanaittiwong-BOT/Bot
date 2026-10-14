@@ -24,7 +24,7 @@ const Service=scope.exports.ExnessRebateService;
 let mutateCalls=[];
 const exness={
  authenticate:async()=>"FAKE_TOKEN",
- request:async(path)=>({data:[{client_account:'12345678',rebate_percent:30,private_email:'PRIVATE_VALUE',destination_client_account:'12345678'}]}),
+ request:async(path)=>({count:null,data:[{client_account:'12345678',rebate_percent:30,private_email:'PRIVATE_VALUE',destination_client_account:'12345678'}]}),
  arrayFromPayload:(value)=>value.data,
  mutateRebate:async(method,path,body)=>{mutateCalls.push({method,path,body});return {verification_payload:{operation_type:'approving',requested_at:'2026-10-14T00:00:00Z'}};}
 };
@@ -42,6 +42,8 @@ const db={
  const report=await svc.read('clients');
  assert.equal(report.source,'EXNESS_PARTNERS');
  assert.equal(report.count,1);
+ assert.equal(report.total,null,"null count must mean unknown total, not zero");
+ assert.equal(report.shapeValid,true);
  assert.equal(report.rows[0].rebate_percent,30);
  assert(!JSON.stringify(report).includes('PRIVATE_VALUE'));
  await assert.rejects(()=>svc.read('payments',300),/แบ่งหน้า/);

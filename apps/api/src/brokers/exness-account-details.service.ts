@@ -23,8 +23,8 @@ export class ExnessAccountDetailsService {
   private async readPartnerAccounts(jwt: string): Promise<ReportRead<any>> {
     const config = await this.exness.state();
     if (!config.clientReportPath) return { rows: [], complete: false, error: "ยังไม่ได้ตั้งค่า Client Report API" };
+    const rows: any[] = [];
     try {
-      const rows: any[] = [];
       let offset = 0;
       let previousPage = "";
       for (let page = 0; page < MAX_PAGES; page++) {
@@ -32,11 +32,16 @@ export class ExnessAccountDetailsService {
           + new URLSearchParams({limit: String(PAGE_SIZE), offset: String(offset)}).toString();
         const payload = await this.exness.request(url, jwt);
         const slice = this.exness.arrayFromPayload(payload);
-        const totalRaw = payload?.count ?? payload?.total;
+        const shapeValid=Array.isArray(payload) || ["results","items","rows","data"].some(key =>
+          Array.isArray(payload?.[key]) || Array.isArray(payload?.data?.[key])
+        );
+        if (!shapeValid) return {rows,complete:false,error:"ไม่รู้จักรูปแบบรายงานบัญชี Exness กรุณาตรวจสอบ API"};
+        const hasNext=Boolean(payload?.next ?? payload?.pagination?.next ?? payload?.meta?.next);
+        const totalRaw = payload?.count ?? payload?.total ?? payload?.pagination?.total ?? payload?.meta?.total;
         const total = totalRaw !== null && totalRaw !== undefined && Number.isFinite(Number(totalRaw))
           ? Number(totalRaw) : null;
         if (slice.length === 0) {
-          const complete = total === null || rows.length >= total;
+          const complete = !hasNext && (total === null || rows.length >= total);
           return {rows, complete, error:complete ? null : "รายงานลูกค้าไม่ครบ"};
         }
         // Never mark a report complete if the server ignores offset/pagination.
@@ -45,14 +50,14 @@ export class ExnessAccountDetailsService {
         previousPage = signature;
         rows.push(...slice);
         offset += slice.length;
-        if (total !== null && rows.length >= total && slice.length < PAGE_SIZE) {
+        if (total !== null && rows.length >= total && !hasNext) {
           return {rows,complete:true,error:null};
         }
         // Unknown total: probe the next offset instead of assuming a short page is final.
       }
       return {rows, complete:false, error:"รายงาน Exness มีหลายหน้าเกินขอบเขตตรวจสอบ กรุณาตรวจใน Exness Partners เพิ่มเติม"};
     } catch {
-      return {rows:[], complete:false, error:"อ่านรายงาน IB จาก Exness ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง"};
+      return {rows, complete:false, error:"อ่านรายงาน IB จาก Exness ได้ไม่ครบ กรุณาลองใหม่อีกครั้ง"};
     }
   }
 
@@ -63,8 +68,9 @@ export class ExnessAccountDetailsService {
     try {
       for (let page = 0; page < MAX_PAGES; page++) {
         const payload = await this.rebates.read("clients", PAGE_SIZE, offset, jwt);
+        if (!payload.shapeValid) return {rows,complete:false,error:"ไม่รู้จักรูปแบบรายงาน Rebate กรุณาตรวจสอบ API"};
         if (payload.rows.length === 0) {
-          const complete = payload.total===null || rows.length >= payload.total;
+          const complete = !payload.hasNext && (payload.total===null || rows.length >= payload.total);
           return {rows,complete,error:complete ? null : "รายงาน Rebate ไม่ครบ"};
         }
         const signature = JSON.stringify([payload.rows.length,payload.rows[0],payload.rows[payload.rows.length-1]]);
@@ -72,13 +78,13 @@ export class ExnessAccountDetailsService {
         previousPage = signature;
         rows.push(...payload.rows);
         offset += payload.rows.length;
-        if (payload.total !== null && rows.length >= payload.total && payload.rows.length < PAGE_SIZE) {
+        if (payload.total !== null && rows.length >= payload.total && !payload.hasNext) {
           return {rows,complete:true,error:null};
         }
       }
       return {rows, complete:false, error:"รายงาน Rebate มีหลายหน้าเกินขอบเขตตรวจสอบ"};
     } catch {
-      return {rows:[], complete:false, error:"อ่านข้อมูล Rebate จาก Exness ไม่สำเร็จ"};
+      return {rows, complete:false, error:"อ่านข้อมูล Rebate จาก Exness ได้ไม่ครบ"};
     }
   }
 
