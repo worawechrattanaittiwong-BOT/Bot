@@ -1,0 +1,62 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const vm=require('node:vm');
+const ts=require('typescript');
+const apiSrc=fs.readFileSync('apps/api/src/brokers/exness-partnership-api.service.ts','utf8');
+const autoSrc=fs.readFileSync('apps/api/src/brokers/broker-automation.service.ts','utf8');
+const ctlSrc=fs.readFileSync('apps/api/src/brokers/broker-automation.controller.ts','utf8');
+const ui=fs.readFileSync('apps/web/app/broker/page.tsx','utf8');
+assert(ui.includes('<b>Exness IB Performance · 30 วันล่าสุด</b>'));
+assert(ui.includes('/admin/brokers/exness/automation/performance-preview'));
+assert(ui.includes('clientReportPath: String(connection?.clientReportPath || "/api/v3/reports/clients/shared/")'));
+assert(ui.includes('enabled: connection.enabled'));
+assert(ctlSrc.includes('@Get("performance-preview")'));
+assert(ctlSrc.includes('@UseGuards(AdminGuard)'));
+assert(autoSrc.includes('await this.api.request("/api/partner/default_link/", token)'));
+assert(/const clients = row\?\.client_report_path/.test(apiSrc));
+assert(/if \(state\.autoVerifyClients && state\.clientReportPath\)/.test(autoSrc));
+assert(/if \(state\.autoImportCommissions && state\.commissionReportPath\)/.test(autoSrc));
+assert(/if \(state\.autoReleaseRebates && result\.rebateEntryId\)/.test(autoSrc));
+const compiled=ts.transpileModule(apiSrc,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2021,experimentalDecorators:true}}).outputText;
+const calls=[];
+const sample={data:[{group_fields:[{day:'2026-10-14'}],click_count:5,registration_count:2,kyc_passed:1,first_deposit_count:1,volume_lots:0.2,reward_usd:0.91}],totals:{count:1,click_count:5,registration_count:2,kyc_passed:1,first_deposit_count:1,volume_lots:0.2,reward_usd:0.91}};
+const ctx={exports:{},require:(id)=>{
+  if(id==='@nestjs/common')return {Injectable:()=>x=>x,BadRequestException:class extends Error {},ConflictException:class extends Error {}};
+  if(id==='../db.service'||id==='../runtime-secrets.service')return {};
+  throw new Error('unexpected dependency '+id)
+},process:{env:{EXNESS_PARTNER_EMAIL:'fake@example.test',EXNESS_PARTNER_PASSWORD:'fake-test-password'}},Date,URLSearchParams,AbortSignal,
+ fetch:async(url,opts)=>{
+  calls.push({url,opts});
+  if(url==='https://my.exnessaffiliates.com/api/v2/auth/')return {ok:true,status:200,text:async()=>JSON.stringify({token:'test-token-do-not-use'})};
+  if(url==='https://my.exnessaffiliates.com/api/partner/default_link/')return {ok:true,status:200,text:async()=>JSON.stringify({url:'https://example.test/ref'})};
+  if(url.startsWith('https://my.exnessaffiliates.com/api/reports/ib/performance/?'))return {ok:true,status:200,text:async()=>JSON.stringify(sample)};
+  throw new Error('unexpected network path: '+url);
+ }};
+vm.runInNewContext(compiled,ctx);
+const Service=ctx.exports.ExnessPartnershipApiService;
+const queries=[];
+const db={query:async(sql,args)=>{queries.push(sql);return {rows:[]}},one:async(sql)=>({last_test_status:'NOT_TESTED'})};
+const secrets={save:()=>{throw Error('unexpected credential save')}};
+(async()=>{
+ const svc=new Service(db,secrets);
+ const test=await svc.testConnection('ADMIN:test');
+ assert.equal(test.status,'PASS');
+ assert.equal(calls.length,2);
+ assert.equal(calls[0].opts.method,'POST');
+ assert.equal(JSON.parse(calls[0].opts.body).login,'fake@example.test');
+ assert(!('email' in JSON.parse(calls[0].opts.body)));
+ assert.equal(calls[1].opts.headers.authorization,'JWT test-token-do-not-use');
+ assert.equal(calls[1].url,'https://my.exnessaffiliates.com/api/partner/default_link/');
+ const perf=await svc.performancePreview();
+ assert.equal(perf.totals.clickCount,5);assert.equal(perf.totals.registrationCount,2);
+ assert.equal(perf.totals.rewardUsd,.91);
+ assert.equal(perf.days[0].day,'2026-10-14');
+ assert.equal(perf.days.length,1);
+ assert(!('token' in perf)); assert(!('url' in perf));
+ assert(!JSON.stringify(perf).includes('test-token-do-not-use'));
+ const reportCall=calls.find(x=>x.url.includes('/api/reports/ib/performance/'));
+ assert(reportCall && reportCall.url.includes('group_by=day') && reportCall.url.includes('link_clicked_from='));
+ assert.equal(reportCall.opts.headers.authorization,'JWT test-token-do-not-use');
+ assert.equal(queries.filter(q=>/last_test_status='PASS'/.test(q)).length,1,'test state updated once');
+ console.log('Exness Partner v2 mocked auth/default_link/IB totals/read-only redaction PASS');
+})().catch(e=>{console.error(e.message);process.exitCode=1});

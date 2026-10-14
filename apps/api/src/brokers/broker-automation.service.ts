@@ -270,7 +270,7 @@ export class BrokerAutomationService
 
     try {
       const token = await this.api.authenticate();
-      await this.api.request("/api/partner/summary/", token);
+      await this.api.request("/api/partner/default_link/", token);
       const reports = await this.api.rawReports(token);
       counts.clientsSeen = reports.clients.length;
       counts.commissionsSeen = reports.commissions.length;

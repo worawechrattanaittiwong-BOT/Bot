@@ -653,3 +653,14 @@
     width: 100%;
   }
 }
+
+/* Read-only Exness IB overview inside the existing Broker / Partner Verification card. */
+.apiHelp{margin:12px 0 0;color:#b5a9cb;font-size:11px;line-height:1.7}
+.ibPanel{margin-top:15px;padding:13px;border-radius:12px;border:1px solid rgba(151,115,243,.23);background:rgba(99,60,163,.06)}
+.ibTitle{display:flex;gap:12px;justify-content:space-between;align-items:center;flex-wrap:wrap}
+.ibTitle>div{display:grid;gap:5px}.ibTitle b{font-size:13px;color:#e8ddfb}.ibTitle span{font-size:11px;color:#998eae}
+.ibMetrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:12px}
+.ibMetrics>div{display:grid;gap:5px;min-width:0;padding:10px;border:1px solid rgba(255,255,255,.07);border-radius:9px;background:rgba(0,0,0,.17)}
+.ibMetrics small{font-size:11px;color:#a99cbd}.ibMetrics b{font-size:17px;color:#e4d8fa;overflow-wrap:anywhere}
+.ibPanel p{margin:10px 0 0;font-size:11px;color:#998eae;line-height:1.7}
+@media(max-width:640px){.ibMetrics{grid-template-columns:repeat(2,minmax(0,1fr))}}

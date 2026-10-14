@@ -36,9 +36,9 @@ export class ExnessPartnershipApiService {
       CREATE TABLE IF NOT EXISTS broker_api_connections (
         broker_code varchar(32) PRIMARY KEY,
         base_url text NOT NULL,
-        auth_path text NOT NULL DEFAULT '/api/auth',
-        summary_path text NOT NULL DEFAULT '/api/partner/summary/',
-        auth_identity_field varchar(16) NOT NULL DEFAULT 'email'
+        auth_path text NOT NULL DEFAULT '/api/v2/auth/',
+        summary_path text NOT NULL DEFAULT '/api/partner/default_link/',
+        auth_identity_field varchar(16) NOT NULL DEFAULT 'login'
           CHECK (auth_identity_field IN ('email','login')),
         client_report_path text NOT NULL DEFAULT '',
         commission_report_path text NOT NULL DEFAULT '',
@@ -65,7 +65,7 @@ export class ExnessPartnershipApiService {
       ALTER TABLE broker_api_connections
         ADD COLUMN IF NOT EXISTS commission_amount_scale integer NOT NULL DEFAULT 100;
       ALTER TABLE broker_api_connections
-        ADD COLUMN IF NOT EXISTS auth_identity_field varchar(16) NOT NULL DEFAULT 'email';
+        ADD COLUMN IF NOT EXISTS auth_identity_field varchar(16) NOT NULL DEFAULT 'login';
       ALTER TABLE broker_api_connections
         ADD COLUMN IF NOT EXISTS sync_lock_token uuid;
       ALTER TABLE broker_api_connections
@@ -95,9 +95,15 @@ export class ExnessPartnershipApiService {
       INSERT INTO broker_api_connections(
         broker_code,base_url,auth_path,summary_path
       ) VALUES(
-        'EXNESS','https://my.exnessaffiliates.com','/api/auth','/api/partner/summary/'
+        'EXNESS','https://my.exnessaffiliates.com','/api/v2/auth/','/api/partner/default_link/'
       )
       ON CONFLICT(broker_code) DO NOTHING;
+
+      -- Correct legacy defaults without modifying customized configurations.
+      UPDATE broker_api_connections SET auth_path='/api/v2/auth/',
+        summary_path='/api/partner/default_link/',auth_identity_field='login',updated_at=now()
+      WHERE broker_code='EXNESS' AND auth_path='/api/auth'
+        AND summary_path='/api/partner/summary/' AND auth_identity_field='email';
     `);
     this.schemaReady = true;
   }
@@ -122,7 +128,7 @@ export class ExnessPartnershipApiService {
       active: true,
       updatedBy: actor,
       provider: "Exness Partnership API",
-      testUrl: this.baseUrl + "/api/partner/summary/",
+      testUrl: this.baseUrl + "/api/partner/default_link/",
       authMode: "CUSTOM"
     });
   }
@@ -139,9 +145,9 @@ export class ExnessPartnershipApiService {
       ),
       enabled: Boolean(row?.enabled),
       baseUrl: this.baseUrl,
-      authPath: String(row?.auth_path || "/api/auth"),
-      summaryPath: String(row?.summary_path || "/api/partner/summary/"),
-      authIdentityField: String(row?.auth_identity_field || "email"),
+      authPath: "/api/v2/auth/",
+      summaryPath: "/api/partner/default_link/",
+      authIdentityField: "login",
       clientReportPath: String(row?.client_report_path || ""),
       commissionReportPath: String(row?.commission_report_path || ""),
       autoVerifyClients: Boolean(row?.auto_verify_clients),
@@ -301,23 +307,17 @@ export class ExnessPartnershipApiService {
     await this.ensureSchema();
     const email = String(process.env.EXNESS_PARTNER_EMAIL || "").trim();
     const password = String(process.env.EXNESS_PARTNER_PASSWORD || "");
-    const config = await this.db.one(
-      "SELECT auth_identity_field FROM broker_api_connections WHERE broker_code='EXNESS'"
-    );
-    const identityField = String(config?.auth_identity_field || "email") === "login"
-      ? "login"
-      : "email";
     if (!email || !password) {
       throw new ConflictException("ยังไม่ได้ตั้งค่า Exness Partnership API credentials");
     }
 
-    const response = await fetch(this.baseUrl + "/api/auth", {
+    const response = await fetch(this.baseUrl + "/api/v2/auth/", {
       method: "POST",
       headers: {
         "content-type": "application/json",
         "accept": "application/json"
       },
-      body: JSON.stringify({ [identityField]: email, password }),
+      body: JSON.stringify({ login: email, password }),
       signal: AbortSignal.timeout(12000)
     });
 
@@ -326,10 +326,8 @@ export class ExnessPartnershipApiService {
     try { body = JSON.parse(text); } catch {}
 
     if (!response.ok) {
-      throw new ConflictException(
-        "Exness auth failed HTTP " + response.status + ": " +
-        String(body?.detail || body?.message || text || "Unknown error").slice(0,300)
-      );
+      // Never echo upstream payloads containing credentials or tokens.
+      throw new ConflictException("Exness auth failed HTTP " + response.status);
     }
 
     const token = this.tokenFromBody(body);
@@ -352,10 +350,8 @@ export class ExnessPartnershipApiService {
     let body: any = text;
     try { body = JSON.parse(text); } catch {}
     if (!response.ok) {
-      throw new ConflictException(
-        "Exness API HTTP " + response.status + ": " +
-        String(body?.detail || body?.message || text || "Unknown error").slice(0,300)
-      );
+      // Never echo raw partner/client payloads in errors.
+      throw new ConflictException("Exness API HTTP " + response.status);
     }
     return body;
   }
@@ -364,8 +360,8 @@ export class ExnessPartnershipApiService {
     await this.ensureSchema();
     try {
       const token = await this.authenticate();
-      const summary = await this.request("/api/partner/summary/", token);
-      const detail = "Connected · /api/auth + /api/partner/summary/ OK";
+      const summary = await this.request("/api/partner/default_link/", token);
+      const detail = "Connected · /api/v2/auth/ + /api/partner/default_link/ OK";
       await this.db.query(
         `UPDATE broker_api_connections SET
            last_test_status='PASS',last_test_detail=$2,last_tested_at=now(),
@@ -393,6 +389,42 @@ export class ExnessPartnershipApiService {
     }
   }
 
+  // Owner-only, read-only IB preview. Never return raw client rows or JWT.
+  async performancePreview() {
+    const token = await this.authenticate();
+    const now = new Date();
+    const from = new Date(now.getTime() - 29 * 86400000);
+    const fromDate = from.toISOString().slice(0,10);
+    const toDate = now.toISOString().slice(0,10);
+    const query = new URLSearchParams({
+      limit: "40", offset: "0", group_by: "day",
+      link_clicked_from: fromDate, link_clicked_to: toDate
+    });
+    const payload = await this.request("/api/reports/ib/performance/?" + query.toString(), token);
+    const safeNum = (x: unknown) => {
+      const n = Number(x);
+      return Number.isFinite(n) && n >= 0 ? n : 0;
+    };
+    const measure = (row: any) => ({
+      clickCount: safeNum(row?.click_count),
+      registrationCount: safeNum(row?.registration_count),
+      kycPassed: safeNum(row?.kyc_passed),
+      firstDepositCount: safeNum(row?.first_deposit_count),
+      tradeStartingRealCount: safeNum(row?.trade_starting_real_count),
+      volumeLots: safeNum(row?.volume_lots),
+      rewardUsd: safeNum(row?.reward_usd)
+    });
+    const days = this.arrayFromPayload(payload).map(item => ({
+      day: String((item?.group_fields || []).find((field: any) => field?.day)?.day || "").slice(0,10),
+      ...measure(item)
+    })).filter(item => /^\d{4}-\d{2}-\d{2}$/.test(item.day))
+      .sort((a,b)=>b.day.localeCompare(a.day));
+    // Server totals may span more records than a paginated page.
+    return {fromDate,toDate,totals:measure(payload?.totals || {}),
+      groupCount:safeNum(payload?.totals?.count),days,
+      note:"กรองตามวันที่คลิกลิงก์ ไม่ใช่วันที่จ่ายค่าคอมมิชชัน"};
+  }
+
   arrayFromPayload(payload: any): any[] {
     if (Array.isArray(payload)) return payload;
     for (const key of ["results","items","data","rows"]) {
@@ -407,7 +439,9 @@ export class ExnessPartnershipApiService {
     const row = await this.db.one(
       "SELECT client_report_path,commission_report_path,commission_amount_scale,auto_verify_clients,auto_import_commissions FROM broker_api_connections WHERE broker_code='EXNESS'"
     );
-    const clients = row?.auto_verify_clients && row?.client_report_path
+    // Fetch client report for read-only counts even when Auto Verify is off.
+    // The automation service still gates all customer mutations on auto_verify_clients.
+    const clients = row?.client_report_path
       ? this.arrayFromPayload(await this.request(String(row.client_report_path), token))
       : [];
     const commissions = row?.auto_import_commissions && row?.commission_report_path

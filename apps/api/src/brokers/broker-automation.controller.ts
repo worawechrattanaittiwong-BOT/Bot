@@ -54,6 +54,11 @@ export class AdminBrokerAutomationController {
     return this.api.saveConnection(body || {}, actor(req));
   }
 
+  @Get("performance-preview")
+  async performancePreview() {
+    return this.api.performancePreview();
+  }
+
   @Post("test")
   async test(@Req() req: any) {
     return this.api.testConnection(actor(req));

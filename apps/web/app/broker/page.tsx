@@ -70,6 +70,22 @@ type AutomationState = {
   runs: SyncRun[];
 };
 
+type IbPerformancePreview = {
+  fromDate: string;
+  toDate: string;
+  groupCount: number;
+  totals: {
+    clickCount: number;
+    registrationCount: number;
+    kycPassed: number;
+    firstDepositCount: number;
+    tradeStartingRealCount: number;
+    volumeLots: number;
+    rewardUsd: number;
+  };
+  note: string;
+};
+
 type ApiForm = {
   email: string;
   password: string;
@@ -138,7 +154,7 @@ function connectionForm(connection?: AutomationConnection | null): ApiForm {
   return {
     email: "",
     password: "",
-    clientReportPath: String(connection?.clientReportPath || ""),
+    clientReportPath: String(connection?.clientReportPath || "/api/v3/reports/clients/shared/"),
     autoVerifyClients: Boolean(connection?.autoVerifyClients),
     syncIntervalMinutes: Number(connection?.syncIntervalMinutes || 15)
   };
@@ -161,6 +177,7 @@ export default function BrokerPage() {
   const [automation, setAutomation] = useState<AutomationState | null>(null);
   const [clients, setClients] = useState<ClientState>({ levels: [], clients: [] });
   const [apiForm, setApiForm] = useState<ApiForm>(connectionForm());
+  const [ibPreview, setIbPreview] = useState<IbPerformancePreview | null>(null);
   const [clientQuery, setClientQuery] = useState("");
   const [clientLevels, setClientLevels] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
@@ -182,7 +199,7 @@ export default function BrokerPage() {
 
   const connection = automation?.connection || null;
   const apiConnected = connection?.lastTestStatus === "PASS";
-  const reportReady = Boolean(apiForm.clientReportPath.trim());
+  const reportReady = Boolean(connection?.clientReportPath?.trim());
   const autoReady = Boolean(apiConnected && reportReady && apiForm.autoVerifyClients);
   const lastRun = automation?.runs?.[0] || null;
 
@@ -312,7 +329,8 @@ export default function BrokerPage() {
         body: JSON.stringify({
           email: apiForm.email.trim(),
           password: apiForm.password,
-          enabled: apiForm.autoVerifyClients ? true : connection.enabled,
+          // Do not implicitly switch on automation when saving credentials or path.
+          enabled: connection.enabled,
           syncIntervalMinutes: apiForm.syncIntervalMinutes,
           clientReportPath: apiForm.clientReportPath.trim(),
           commissionReportPath: connection.commissionReportPath,
@@ -353,6 +371,20 @@ export default function BrokerPage() {
       }
     } catch (err: unknown) {
       setPartnerError(errorText(err, "ทดสอบ Exness API ไม่สำเร็จ"));
+    } finally {
+      setActionBusy("");
+    }
+  }
+
+  async function previewIbPerformance() {
+    setActionBusy("preview-ib");
+    setPartnerError("");
+    try {
+      const result = await adminApi("/admin/brokers/exness/automation/performance-preview");
+      setIbPreview(result);
+    } catch (err: unknown) {
+      setIbPreview(null);
+      setPartnerError(errorText(err, "ดึง IB Performance จาก Exness ไม่สำเร็จ"));
     } finally {
       setActionBusy("");
     }
@@ -656,6 +688,11 @@ export default function BrokerPage() {
                   </label>
                 </div>
 
+                <p className={styles.apiHelp}>
+                  ใช้ Exness Partnership API v2 (POST /api/v2/auth/)
+                  และรายงานลูกค้า v3 · กรุณาใส่รหัสผ่านใหม่ที่ยังไม่เคยเผยแพร่ แล้วกดบันทึก API → Test Connection
+                  การทดสอบและสรุป IB เป็นแบบอ่านอย่างเดียว ไม่ยืนยันลูกค้าหรือจ่าย Rebate ให้โดยอัตโนมัติ
+                </p>
                 <div className={styles.apiActions}>
                   <label className={styles.toggle}>
                     <input
@@ -666,7 +703,7 @@ export default function BrokerPage() {
                         autoVerifyClients: event.target.checked
                       }))}
                     />
-                    <span>ตรวจและยืนยันลูกค้าอัตโนมัติ</span>
+                    <span>ตรวจและยืนยันลูกค้าอัตโนมัติ (เปิดหลังตรวจการจับคู่ MT5 แล้วเท่านั้น)</span>
                   </label>
 
                   <div className={styles.buttonRow}>
@@ -705,6 +742,31 @@ export default function BrokerPage() {
                       {actionBusy === "sync" ? "กำลัง Sync..." : "Sync ตอนนี้"}
                     </button>
                   </div>
+                </div>
+
+                <div className={styles.ibPanel}>
+                  <div className={styles.ibTitle}>
+                    <div>
+                      <b>Exness IB Performance · 30 วันล่าสุด</b>
+                      <span>รายงานจาก GET /api/reports/ib/performance/ · ไม่เปลี่ยนสิทธิ์ลูกค้าหรือยอดเงิน</span>
+                    </div>
+                    <button
+                      type="button" className={styles.secondaryButton}
+                      onClick={previewIbPerformance}
+                      disabled={Boolean(actionBusy) || !apiConnected}
+                    >{actionBusy === "preview-ib" ? "กำลังดึงข้อมูล..." : "ดึงรายงาน IB"}</button>
+                  </div>
+                  {ibPreview ? <>
+                    <div className={styles.ibMetrics}>
+                      <div><small>คลิกลิงก์</small><b>{ibPreview.totals.clickCount.toLocaleString()}</b></div>
+                      <div><small>สมัคร</small><b>{ibPreview.totals.registrationCount.toLocaleString()}</b></div>
+                      <div><small>ผ่าน KYC</small><b>{ibPreview.totals.kycPassed.toLocaleString()}</b></div>
+                      <div><small>ฝากครั้งแรก</small><b>{ibPreview.totals.firstDepositCount.toLocaleString()}</b></div>
+                      <div><small>ปริมาณ Lots</small><b>{ibPreview.totals.volumeLots.toLocaleString("en-US", {maximumFractionDigits:4})}</b></div>
+                      <div><small>Rewards (USD)</small><b>${ibPreview.totals.rewardUsd.toLocaleString("en-US", {minimumFractionDigits:2,maximumFractionDigits:2})}</b></div>
+                    </div>
+                    <p>{ibPreview.fromDate} ถึง {ibPreview.toDate} · {ibPreview.note} · {ibPreview.groupCount} กลุ่มข้อมูล</p>
+                  </> : <p>กด “ดึงรายงาน IB” หลัง Test Connection ผ่าน เพื่อดูยอดรวม 30 วันล่าสุดจาก Exness</p>}
                 </div>
 
                 <div className={styles.syncLine}>
