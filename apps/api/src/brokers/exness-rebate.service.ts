@@ -63,12 +63,12 @@ export class ExnessRebateService {
     return out;
   }
 
-  async read(name: ReadName, limit=40, offset=0) {
+  async read(name: ReadName, limit=40, offset=0, existingJwt?: string) {
     if (!Object.prototype.hasOwnProperty.call(READS,name)) throw new BadRequestException("รายงานไม่ถูกต้อง");
     if (!Number.isInteger(limit)||limit<1||limit>100||!Number.isInteger(offset)||offset<0||offset>100000) {
       throw new BadRequestException("การแบ่งหน้ารายงานไม่ถูกต้อง");
     }
-    const jwt=await this.exness.authenticate();
+    const jwt=existingJwt || await this.exness.authenticate();
     const query=new URLSearchParams({limit:String(limit),offset:String(offset)});
     const body=await this.exness.request(READS[name]+"?"+query.toString(),jwt);
     const rows=this.exness.arrayFromPayload(body);

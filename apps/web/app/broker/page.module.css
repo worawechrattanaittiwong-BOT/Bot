@@ -729,3 +729,30 @@
 .transferAdminRow {display:grid;grid-template-columns:1fr 1fr 1fr;gap:13px;align-items:center;padding:12px 14px;border:1px solid rgba(150,125,215,.15);border-radius:10px;background:rgba(137,105,214,.035)}
 .transferAdminRow > div {display:grid;gap:5px;min-width:0}.transferAdminRow b {color:#e9e0f8;font-size:12px;overflow-wrap:anywhere}.transferAdminRow span {color:#9a8fac;font-size:11px}
 @media(max-width:700px){.transferAdminRow{grid-template-columns:1fr;gap:8px}}
+
+/* Exness Client Matching: owner-only, account-by-account details. */
+.clientEntry{min-width:0;border-bottom:1px solid rgba(160,132,220,.10)}
+.clientEntry .clientRow{border-bottom:0}
+.detailsButton{border:1px solid rgba(163,129,241,.36);background:rgba(120,83,210,.14);color:#e6d8ff;border-radius:9px;padding:9px 12px;font-size:11px;font-weight:750;cursor:pointer}
+.detailsButton:disabled{opacity:.55;cursor:wait}
+.accountDetails{margin:0 0 16px;padding:15px;border-radius:14px;border:1px solid rgba(158,126,237,.3);background:linear-gradient(145deg,rgba(51,35,88,.32),rgba(17,12,27,.83));min-width:0}
+.accountDetailsHead{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.accountDetailsHead>div{display:grid;gap:5px}
+.accountDetailsHead b{font-size:13px;color:#f0e7ff}
+.accountDetailsHead small,.detailNote{font-size:11px;color:#b6a9c9;line-height:1.65}
+.accountDetailsHead button{border:1px solid rgba(167,137,227,.35);color:#ddc8ff;background:rgba(133,90,212,.12);padding:9px 12px;border-radius:9px;font-size:11px;cursor:pointer}
+.accountDetailsHead button:disabled{opacity:.5}
+.detailAccounts{display:grid;grid-template-columns:repeat(auto-fit,minmax(245px,1fr));gap:11px;margin-top:14px}
+.detailAccount{min-width:0;background:rgba(11,8,22,.72);border:1px solid rgba(152,123,202,.22);border-radius:13px;padding:14px;display:grid;gap:11px}
+.detailAccountHead{display:flex;align-items:flex-start;gap:12px;justify-content:space-between;flex-wrap:wrap}
+.detailAccountHead>div{display:grid;gap:4px;min-width:0}
+.detailAccountHead b{font-size:13px;color:#f6eeff}
+.detailAccountHead small{font-size:10px;color:#a69ab8;overflow-wrap:anywhere}
+.detailFound,.detailNotFound,.detailUnknown{padding:5px 8px;border-radius:8px;border:1px solid rgba(99,224,154,.3);background:rgba(70,165,112,.1);color:#9ae8bf;font-size:10px;font-weight:700}
+.detailNotFound{border-color:rgba(246,182,98,.3);background:rgba(196,119,32,.08);color:#f0cf8c}
+.detailUnknown{border-color:rgba(156,146,180,.3);background:rgba(137,124,166,.08);color:#b8adc9}
+.detailRebate{display:grid;gap:7px;padding-top:11px;border-top:1px solid rgba(164,132,215,.16);font-size:11px;color:#c8badc;overflow-wrap:anywhere}
+.detailRebate>b{color:#e2d4f7;font-size:12px}
+.detailRebate strong{color:#f5edff;font-weight:750}
+.detailWarning{margin:10px 0 0;padding:9px 11px;border:1px solid rgba(239,178,101,.25);background:rgba(220,134,56,.07);border-radius:9px;color:#e6c59f;font-size:11px;line-height:1.55}
+@media(max-width:720px){.detailAccounts{grid-template-columns:1fr}.accountDetails{padding:12px;margin:4px 0 14px}.accountDetailsHead button{width:100%}.detailsButton{width:auto;min-width:130px}}

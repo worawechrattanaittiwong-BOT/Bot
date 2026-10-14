@@ -132,6 +132,30 @@ type PartnerClient = {
   exnessAccounts: Array<{ id: string; accountLast4: string; server: string; status: string }>;
 };
 
+type AccountDetail = {
+  id: string;
+  accountLast4: string;
+  server: string;
+  mt5Status: string;
+  partnerMatch: "FOUND" | "NOT_FOUND" | "UNAVAILABLE";
+  rebate: {
+    state: "CONFIGURED" | "NOT_FOUND" | "UNAVAILABLE";
+    percent: number | null;
+    destinationLast4: string | null;
+    destinationIsSource: boolean | null;
+    group: string | null;
+    status: string | null;
+    processedUsd: number | null;
+  };
+};
+type ClientAccountDetails = {
+  userCode: string;
+  checkedAt: string;
+  partnerReport: { complete: boolean; error: string | null };
+  rebateReport: { complete: boolean; error: string | null };
+  accounts: AccountDetail[];
+};
+
 type ClientState = {
   levels: BenefitLevel[];
   clients: PartnerClient[];
@@ -208,6 +232,11 @@ export default function BrokerPage() {
   const [matchError, setMatchError] = useState("");
   const [clientQuery, setClientQuery] = useState("");
   const [clientLevels, setClientLevels] = useState<Record<string, string>>({});
+  const [detailOpenUser, setDetailOpenUser] = useState<string | null>(null);
+  const [detailData, setDetailData] = useState<ClientAccountDetails | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState("");
+
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [actionBusy, setActionBusy] = useState("");
@@ -385,6 +414,29 @@ export default function BrokerPage() {
     setAutomation(result);
     setApiForm(connectionForm(result?.connection));
     return result;
+  }
+
+  async function openClientAccountDetails(userId: string, force = false) {
+    if (!force && detailOpenUser === userId) {
+      setDetailOpenUser(null);
+      setDetailData(null);
+      setDetailError("");
+      return;
+    }
+    setDetailOpenUser(userId);
+    setDetailData(null);
+    setDetailError("");
+    setDetailLoading(true);
+    try {
+      const result = await adminApi(
+        "/admin/brokers/exness/automation/client-account-details/" + encodeURIComponent(userId)
+      ) as ClientAccountDetails;
+      setDetailData(result);
+    } catch (err: unknown) {
+      setDetailError(errorText(err, "ไม่สามารถโหลดรายละเอียดบัญชีจาก Exness ได้"));
+    } finally {
+      setDetailLoading(false);
+    }
   }
 
   async function refreshClients(query = clientQuery) {
@@ -946,7 +998,8 @@ export default function BrokerPage() {
                 const clientBusy = actionBusy === "client:" + client.userId;
 
                 return (
-                  <div className={styles.clientRow} key={client.userId}>
+                  <div className={styles.clientEntry} key={client.userId}>
+                  <div className={styles.clientRow}>
                     <div className={styles.clientIdentity}>
                       <b>{client.userCode || "—"}</b>
                       <span>{client.email || "—"}</span>
@@ -978,6 +1031,7 @@ export default function BrokerPage() {
                           ? "ตรวจโดย " + client.verificationSource
                           : "ยังไม่มีแหล่งยืนยัน"}
                       </small>
+                      <small>สถานะนี้เป็นระดับลูกค้า ไม่ใช่การยืนยันทุกบัญชี MT5</small>
                       {matchPreview && client.status !== "VERIFIED" && (
                         <small className={
                           matchPreview.matched.some(match => match.userId === client.userId)
@@ -996,6 +1050,15 @@ export default function BrokerPage() {
                     </div>
 
                     <div className={styles.clientAction}>
+                      <button
+                        className={styles.detailsButton}
+                        type="button"
+                        disabled={detailLoading}
+                        aria-expanded={detailOpenUser === client.userId}
+                        onClick={() => void openClientAccountDetails(client.userId)}
+                      >
+                        {detailOpenUser === client.userId ? "ซ่อนรายละเอียด" : "ดูบัญชีเทรด"}
+                      </button>
                       {canManualVerify ? (
                         <>
                           <select
@@ -1029,6 +1092,54 @@ export default function BrokerPage() {
                       )}
                     </div>
                   </div>
+                  {detailOpenUser === client.userId && (
+                    <section className={styles.accountDetails} aria-label={"รายละเอียดบัญชีเทรด " + client.userCode}>
+                      <div className={styles.accountDetailsHead}>
+                        <div>
+                          <b>ตรวจสอบ IB และ Rebate แยกตามบัญชี MT5</b>
+                          <small>อ่านข้อมูล Exness เท่านั้น · ไม่เปลี่ยนเปอร์เซ็นต์หรือจ่ายเงิน</small>
+                        </div>
+                        <button type="button" disabled={detailLoading} onClick={() => void openClientAccountDetails(client.userId, true)}>
+                          {detailLoading ? "กำลังตรวจ..." : "ตรวจสอบใหม่"}
+                        </button>
+                      </div>
+                      {detailLoading && <p className={styles.detailNote}>กำลังตรวจเลขบัญชีที่เชื่อมไว้กับรายงาน Exness...</p>}
+                      {detailError && <p className={styles.detailWarning}>{detailError}</p>}
+                      {detailData && <>
+                        <p className={styles.detailNote}>
+                          ตรวจล่าสุด {dateTime(detailData.checkedAt)} · พบ MT5 ที่เชื่อมไว้ {detailData.accounts.length} บัญชี
+                        </p>
+                        {detailData.partnerReport.error && <p className={styles.detailWarning}>รายงาน IB: {detailData.partnerReport.error}</p>}
+                        {detailData.rebateReport.error && <p className={styles.detailWarning}>รายงาน Rebate: {detailData.rebateReport.error}</p>}
+                        {detailData.accounts.length ? <div className={styles.detailAccounts}>
+                          {detailData.accounts.map(item => <div className={styles.detailAccount} key={item.id}>
+                            <div className={styles.detailAccountHead}>
+                              <div>
+                                <b>MT5 ••••{item.accountLast4}</b>
+                                <small>{item.server || "Exness"}{item.mt5Status ? " · " + item.mt5Status : ""}</small>
+                              </div>
+                              <span className={item.partnerMatch === "FOUND" ? styles.detailFound : item.partnerMatch === "NOT_FOUND" ? styles.detailNotFound : styles.detailUnknown}>
+                                {item.partnerMatch === "FOUND" ? "✓ พบใต้ IB ของเรา" :
+                                 item.partnerMatch === "NOT_FOUND" ? "ไม่พบในรายงาน IB เรา" : "ยังตรวจ IB ไม่ครบ"}
+                              </span>
+                            </div>
+                            <div className={styles.detailRebate}>
+                              <b>Rebate ของบัญชีนี้</b>
+                              {item.rebate.state === "CONFIGURED" ? <>
+                                <span>เปอร์เซ็นต์: <strong>{item.rebate.percent === null ? "Exness ไม่ระบุ" : item.rebate.percent + "%"}</strong></span>
+                                <span>บัญชีรับเงิน: <strong>{item.rebate.destinationLast4 ? "••••" + item.rebate.destinationLast4 + (item.rebate.destinationIsSource ? " (บัญชีเดียวกัน)" : "") : "Exness ไม่ระบุ"}</strong></span>
+                                {item.rebate.group && <span>กลุ่ม: {item.rebate.group}</span>}
+                                {item.rebate.status && <span>สถานะจาก Exness: {item.rebate.status}</span>}
+                                {item.rebate.processedUsd !== null && <span>ประมวลผลแล้ว: USD {item.rebate.processedUsd.toLocaleString("en-US",{maximumFractionDigits:2})}</span>}
+                              </> : <span>{item.rebate.state === "UNAVAILABLE" ? "ยังตรวจข้อมูล Rebate ไม่ครบ" : "ไม่พบกฎ Rebate ของบัญชีนี้ในรายงาน"}</span>}
+                            </div>
+                          </div>)}
+                        </div> : <p className={styles.detailNote}>ลูกค้ายังไม่เชื่อม MT5 Exness กับ SCENOVA</p>}
+                        <p className={styles.detailNote}>การไม่พบในรายงานไม่ได้ยืนยันว่าบัญชีอยู่กับ IB อื่น ข้อมูลจาก Exness อาจอัปเดตล่าช้า · การเป็น IB กับการตั้งค่าเงินคืนเป็นคนละสถานะ</p>
+                      </>}
+                    </section>
+                  )}
+                </div>
                 );
               })}
             </div>

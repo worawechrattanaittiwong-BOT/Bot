@@ -52,9 +52,10 @@ export function ExnessRebateControl() {
   const report=reports[section];
   const pickClient=(row:Entry)=>{
     setAccount(String(row.client_account||""));
-    setDestination(String(row.destination_client_account||row.client_account||""));
+    setDestination(String(row.destination_client_account||""));
     setPercent(String(row.rebate_percent??30));
-    setMessage("เลือกบัญชีแล้ว กรุณาตรวจสอบเปอร์เซ็นต์และบัญชีปลายทางก่อนบันทึกไป Exness");
+    setMessage("เลือกบัญชีเทรดต้นทางแล้ว กรุณาตรวจเปอร์เซ็นต์และกรอกบัญชีปลายทางที่ Exness อนุญาตก่อนบันทึก");
+    document.getElementById("exness-rebate-edit")?.scrollIntoView({behavior:"smooth",block:"start"});
   };
   async function changePercent() {
     const value=Number(percent);
@@ -94,16 +95,16 @@ export function ExnessRebateControl() {
   }
   return <section className={css.wrap} aria-label="ศูนย์ควบคุม Rebate จาก Exness">
     <div className={css.heading}><div><small>EXNESS PARTNERS · REBATE CONTROL</small><h2>ควบคุมเงินคืนผ่าน Exness</h2><p>SCENOVA เป็นเพียงแผงควบคุม · Exness เป็นผู้กำหนดยอดและจ่ายเงินเข้าบัญชีลูกค้า</p></div><a href="https://my.exnessaffiliates.com/" target="_blank" rel="noopener noreferrer">เปิด Exness Partners ↗</a></div>
-    <div className={css.notice}>ไม่มี Rebate Wallet หรือการจ่ายเงินผ่าน SCENOVA · ตัวเลขและสถานะทั้งหมดอ่านจาก Exness API · การเปลี่ยนเปอร์เซ็นต์หรือเริ่มอนุมัติต้องยืนยันโดยผู้ดูแล</div>
+    <div className={css.notice}>การตั้งค่าเงินคืนแยกตาม MT5 ต้นทาง (บัญชีลูกค้า) ไม่ใช่ยอดรวมของลูกค้าทั้งคน · แต่ละบัญชีอาจระบุบัญชีปลายทางรับเงินเดียวกันได้ถ้า Exness ยอมรับ · ไม่มี Rebate Wallet หรือการจ่ายเงินผ่าน SCENOVA · ตัวเลขและสถานะทั้งหมดอ่านจาก Exness API · การเปลี่ยนเปอร์เซ็นต์หรือเริ่มอนุมัติต้องยืนยันโดยผู้ดูแล</div>
     <nav className={css.tabs} aria-label="เมนู Rebate">
       {sections.map(item=><button key={item.name} type="button" aria-current={section===item.name?"page":undefined} className={section===item.name?css.active:""} onClick={()=>{setSection(item.name);setError("");setMessage("");}}>{item.label}</button>)}
     </nav>
     <div className={css.toolbar}><div><b>{sections.find(x=>x.name===section)?.label}</b><span>{sections.find(x=>x.name===section)?.hint}</span></div><button type="button" disabled={Boolean(busy)} onClick={()=>void load(section,offsets[section])}>{busy.startsWith("load:")?"กำลังโหลด...":"↻ อ่านข้อมูลจาก Exness"}</button></div>
     {error&&<p className={css.error} role="alert">{error}</p>}
     {message&&<p className={css.success} role="status">{message}</p>}
-    {section==="clients"&&<div className={css.editor}>
-      <h3>ตั้งค่าเปอร์เซ็นต์และบัญชีรับ Rebate</h3>
-      <p>เลือกบัญชีจากรายการด้านล่าง หรือกรอกเลขบัญชี Exness ที่ตรวจสอบแล้วด้วยตนเอง เปอร์เซ็นต์นี้เป็นกฎของ Exness ไม่ใช่การคำนวณยอดจ่ายโดย SCENOVA</p>
+    {section==="clients"&&<div id="exness-rebate-edit" className={css.editor}>
+      <h3>ตั้งค่าเงินคืนแยกตามบัญชีเทรดต้นทาง</h3>
+      <p>เลือกเลข MT5 ต้นทางแต่ละบัญชีจากรายการด้านล่าง แล้วกำหนดเปอร์เซ็นต์และบัญชีรับเงินปลายทางตามที่ Exness รองรับ การกำหนดปลายทางเดียวกันหลายบัญชีไม่ได้รวมกฎ Rebate เป็นรายการเดียว</p>
       <div className={css.fields}><label>เลขบัญชี Exness<input inputMode="numeric" value={account} onChange={e=>setAccount(e.target.value)} placeholder="เลขบัญชีลูกค้า" /></label><label>บัญชีปลายทางรับเงิน<input inputMode="numeric" value={destination} onChange={e=>setDestination(e.target.value)} placeholder="เลขบัญชีปลายทาง" /></label><label>Rebate (%)<input type="number" step="0.01" min="0" max="100" value={percent} onChange={e=>setPercent(e.target.value)}/></label></div>
       <button type="button" className={css.primary} disabled={Boolean(busy)||!account||!destination} onClick={()=>void changePercent()}>ตรวจสอบและบันทึกไป Exness</button>
     </div>}
@@ -113,7 +114,26 @@ export function ExnessRebateControl() {
       <div className={css.actions}><button className={css.primary} disabled={Boolean(busy)||selectedIds.length===0||Boolean(attemptId)} type="button" onClick={()=>void startApproval()}>เริ่มอนุมัติที่ Exness ({selectedIds.length})</button></div>
       {attemptId&&<div className={css.verification}><b>รอการยืนยันจาก Exness</b><span>อย่าเผยแพร่โทเคนหรือรหัสยืนยันให้บุคคลอื่น · การยืนยันรายการเดิมมีเวลา 15 นาที</span><input type="password" autoComplete="off" placeholder="verification_token จาก Exness" value={token} onChange={e=>setToken(e.target.value)}/><button className={css.primary} type="button" disabled={Boolean(busy)||token.trim().length<6} onClick={()=>void finishApproval()}>ส่งการยืนยันให้ Exness</button></div>}
     </div>}
-    <div className={css.tableScroll}><table className={css.table}><thead><tr>{section==="clients"&&<th>เลือก</th>}{section==="rebates"&&<th>เลือก</th>}{(report?.rows?.length?Array.from(new Set(report.rows.flatMap(row=>Object.keys(row)))).slice(0,11):["ข้อมูลจาก Exness"]).map(k=><th key={k}>{names[k]||k}</th>)}</tr></thead><tbody>
+    {section==="clients" && <div className={css.mobileClientCards} aria-label="รายบัญชีเทรดต้นทางและบัญชีรับเงินคืน">
+      {(report?.rows||[]).map((row,index)=>{
+        const source=String(row.client_account||"");
+        const dest=String(row.destination_client_account||"");
+        const percent=row.rebate_percent;
+        return <article key={source+"-"+index} className={css.mobileClientCard}>
+          <div className={css.mobileCardHead}><span>MT5 ต้นทาง</span><b>{source||"Exness ไม่ระบุ"}</b></div>
+          <div className={css.mobileCardArrow}>↓ เงินคืนส่งเข้า</div>
+          <div className={css.mobileCardDest}>{dest||"ยังไม่มีข้อมูลบัญชีปลายทางจาก Exness"}</div>
+          <div className={css.mobileCardStats}>
+            <span>Rebate <b>{percent===null||percent===undefined?"ไม่ระบุ":String(percent)+"%"}</b></span>
+            <span>กลุ่ม <b>{String(row.rebate_group_title||"—")}</b></span>
+            {row.status!==null&&row.status!==undefined&&<span>สถานะ <b>{String(row.status)}</b></span>}
+          </div>
+          <button type="button" className={css.selectButton} onClick={()=>pickClient(row)}>ตรวจและตั้งค่าบัญชีนี้</button>
+        </article>;
+      })}
+      {report && !report.rows.length && <p className={css.mobileEmpty}>ยังไม่พบรายการบัญชีในรายงาน Exness</p>}
+    </div>}
+    <div className={section==="clients"?css.clientsTable:css.tableScroll}><table className={css.table}><thead><tr>{section==="clients"&&<th>เลือก</th>}{section==="rebates"&&<th>เลือก</th>}{(report?.rows?.length?Array.from(new Set(report.rows.flatMap(row=>Object.keys(row)))).slice(0,11):["ข้อมูลจาก Exness"]).map(k=><th key={k}>{names[k]||k}</th>)}</tr></thead><tbody>
       {report?.rows?.length ? report.rows.map((row,index)=>{const keys=Array.from(new Set(report.rows.flatMap(r=>Object.keys(r)))).slice(0,11);const id=String(row.rebate_id??row.id??"");return <tr key={index}>{section==="clients"&&<td><button className={css.selectButton} type="button" onClick={()=>pickClient(row)}>ตั้งค่า</button></td>}{section==="rebates"&&<td><input aria-label={"เลือก Rebate "+id} type="checkbox" disabled={!/^\d{1,18}$/.test(id)||Boolean(attemptId)} checked={selectedIds.includes(id)} onChange={()=>toggleId(id)}/></td>}{keys.map(key=><td key={key}>{safeCell(row[key])}</td>)}</tr>;}) : <tr><td colSpan={12}>{busy.startsWith("load:")?"กำลังอ่านข้อมูลจาก Exness...":"ยังไม่พบข้อมูลในรายงาน หรือกดอ่านข้อมูลจาก Exness"}</td></tr>}
     </tbody></table></div>
     <div className={css.pager}><span>แสดง {report?.count??0} รายการ · แหล่งข้อมูล Exness Partners</span><div><button type="button" disabled={Boolean(busy)||offsets[section]===0} onClick={()=>void load(section,Math.max(0,offsets[section]-40))}>ก่อนหน้า</button><span>หน้า {Math.floor(offsets[section]/40)+1}</span><button type="button" disabled={Boolean(busy)||!report||report.count<40} onClick={()=>void load(section,offsets[section]+40)}>ถัดไป</button></div></div>

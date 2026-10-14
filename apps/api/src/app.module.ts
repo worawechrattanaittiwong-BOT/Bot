@@ -84,6 +84,7 @@ import { AdminBrokerAutomationController } from "./brokers/broker-automation.con
 import { BrokerAutomationService } from "./brokers/broker-automation.service";
 import { ExnessPartnershipApiService } from "./brokers/exness-partnership-api.service";
 import { ExnessRebateService } from "./brokers/exness-rebate.service";
+import { ExnessAccountDetailsService } from "./brokers/exness-account-details.service";
 import { ExnessRebateController } from "./brokers/exness-rebate.controller";
 
 @Module({
@@ -104,6 +105,7 @@ import { ExnessRebateController } from "./brokers/exness-rebate.controller";
     BrokerAutomationService,
     ExnessPartnershipApiService,
     ExnessRebateService,
+    ExnessAccountDetailsService,
     BrokerBenefitService,
     BrokerService,
     BrokerTransferService,

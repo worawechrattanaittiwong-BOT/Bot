@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Param,
   Post,
   Put,
   Req,
@@ -10,6 +11,7 @@ import {
 import { AdminGuard } from "../security";
 import { BrokerAutomationService } from "./broker-automation.service";
 import { ExnessPartnershipApiService } from "./exness-partnership-api.service";
+import { ExnessAccountDetailsService } from "./exness-account-details.service";
 
 function actor(req: any) {
   return req.user?.sub
@@ -22,7 +24,8 @@ function actor(req: any) {
 export class AdminBrokerAutomationController {
   constructor(
     private readonly api: ExnessPartnershipApiService,
-    private readonly automation: BrokerAutomationService
+    private readonly automation: BrokerAutomationService,
+    private readonly accountDetails: ExnessAccountDetailsService
   ) {}
 
   @Get()
@@ -62,6 +65,12 @@ export class AdminBrokerAutomationController {
   @Get("client-match-preview")
   async clientMatchPreview() {
     return this.automation.previewClientMatches();
+  }
+
+  // Admin only; per-MT5 partner membership and rebate configuration are read independently.
+  @Get("client-account-details/:userId")
+  async clientAccountDetails(@Param("userId") userId: string) {
+    return this.accountDetails.forClient(userId);
   }
 
   @Post("connect")
