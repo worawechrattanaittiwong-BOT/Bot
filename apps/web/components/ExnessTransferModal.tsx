@@ -30,6 +30,7 @@ export function ExnessTransferModal({onClose}:{onClose:()=>void}) {
   const [error,setError]=useState("");
   const [notice,setNotice]=useState("");
   const [codeCopied,setCodeCopied]=useState(false);
+  const [chatCopied,setChatCopied]=useState(false);
 
   useEffect(()=>{
     let mounted=true;
@@ -117,8 +118,20 @@ export function ExnessTransferModal({onClose}:{onClose:()=>void}) {
     }
   }
 
+  async function copyChatMessage() {
+    if(!chatMessage)return;
+    try {
+      await navigator.clipboard.writeText(chatMessage);
+      setChatCopied(true);
+      setError("");
+    } catch {
+      setChatCopied(false);
+      setError("คัดลอกไม่สำเร็จ กรุณาเลือกข้อความในช่องแล้วคัดลอกด้วยตนเอง");
+    }
+  }
+
   function selectAccount(accountId:string){
-    setSelected(accountId);setNewAccountId("");setNotice("");
+    setSelected(accountId);setNewAccountId("");setNotice("");setChatCopied(false);
     const account=info?.accounts.find(a=>a.id===accountId);
     if(account)setManual("");
     setCurrent(info?.requests.find(r=>r.accountNumber===(account?.accountNumber||manual.trim()))||null);
@@ -126,6 +139,15 @@ export function ExnessTransferModal({onClose}:{onClose:()=>void}) {
   const newAccounts=(info?.accounts||[]).filter(a=>a.accountNumber!==current?.accountNumber);
   const validAccount=Boolean(selected||/^[0-9]{5,20}$/.test(manual.trim()));
   const status=current?.status==="PARTNER_VISIBLE"?"พบบัญชีใหม่แล้ว":current?.status==="CUSTOMER_SUBMITTED"?"รอผลจาก Exness":"ยังไม่ได้ยื่นคำขอที่ Exness";
+  const oldAccountNumber=current?.accountNumber||info?.accounts.find(a=>a.id===selected)?.accountNumber||manual.trim();
+  const chatMessage=info?.partnerCode&&/^[0-9]{5,20}$/.test(oldAccountNumber)?[
+    "สวัสดีทีมงาน Exness",
+    "ฉันต้องการขอเปลี่ยนพาร์ตเนอร์สำหรับบัญชีเทรด Exness หมายเลข " + oldAccountNumber,
+    "พาร์ตเนอร์ใหม่: SCENOVA",
+    "รหัสพาร์ตเนอร์ใหม่: " + info.partnerCode,
+    "รบกวนส่งลิงก์คำขอเปลี่ยนพาร์ตเนอร์เฉพาะบัญชีของฉัน และแจ้งขั้นตอนยืนยันตัวตนให้ด้วย",
+    "ขอบคุณครับ/ค่ะ"
+  ].join("\n"):"";
 
   return <div className={styles.backdrop} role="presentation" onMouseDown={onClose}>
     <section className={`${styles.modal} ${styles.transferModal} ${styles.transferSimple}`} role="dialog" aria-modal="true" aria-labelledby="exness-transfer-title" onMouseDown={event=>event.stopPropagation()}>
@@ -154,12 +176,26 @@ export function ExnessTransferModal({onClose}:{onClose:()=>void}) {
             {info.accounts.map(a=><option key={a.id} value={a.id}>{a.accountNumber} · {a.server||"Exness"}</option>)}
             <option value="">กรอกเลขบัญชีเอง</option>
           </select>:<span className={styles.transferHint}>กรอกเลขบัญชี Exness ที่ต้องการย้าย</span>}
-          {!selected&&<input inputMode="numeric" placeholder="เลขบัญชี Exness" value={manual} maxLength={20} onChange={e=>{setManual(e.target.value);setCurrent(info.requests.find(r=>r.accountNumber===e.target.value.trim())||null);}}/>}
+          {!selected&&<input inputMode="numeric" placeholder="เลขบัญชี Exness" value={manual} maxLength={20} onChange={e=>{setManual(e.target.value);setChatCopied(false);setCurrent(info.requests.find(r=>r.accountNumber===e.target.value.trim())||null);}}/>}
         </label>
         {current&&<div className={styles.transferStatus}><b>{status}</b><span>บัญชีเดิม ••••{current.accountLast4}</span></div>}
+        <section className={styles.transferGuide} aria-label="ขั้นตอนการย้ายพาร์ตเนอร์">
+          <h3>ขั้นตอนการย้ายพาร์ตเนอร์</h3>
+          <ol>
+            <li><b>เลือกบัญชี Exness เดิม</b><span>ตรวจเลขบัญชีด้านบนและรหัสพาร์ตเนอร์ SCENOVA</span></li>
+            <li><b>ส่งข้อความหา Exness</b><span>กดคัดลอกข้อความด้านล่าง แล้วนำไปส่งในแชตฝ่ายช่วยเหลือ Exness</span></li>
+            <li><b>ยืนยันคำขอบน Exness</b><span>รับลิงก์เฉพาะบัญชี (ใช้ได้ 7 วัน) กรอกส่วนที่ 1–2 แล้วกดส่ง ยืนยันรหัสความปลอดภัย และกดดำเนินการต่อ</span></li>
+            <li><b>รอ Exness พิจารณา</b><span>ประมาณ 3 วันทำการ ตรวจผลผ่านลิงก์เดิม เมื่ออนุมัติแล้วจึงสร้างบัญชีเทรดใหม่</span></li>
+          </ol>
+        </section>
+        <section className={styles.transferChatCard} aria-label="ข้อความสำหรับส่งในแชต Exness">
+          <div className={styles.transferChatHeading}><b>ข้อความส่งให้เจ้าหน้าที่ Exness</b><span>เตรียมจากบัญชีที่เลือก</span></div>
+          <textarea className={styles.transferChatMessage} readOnly rows={6} value={chatMessage} placeholder="กรุณาเลือกหรือกรอกเลขบัญชี Exness ก่อน" aria-label="ข้อความขอย้ายพาร์ตเนอร์สำหรับส่งในแชต Exness" />
+          <button type="button" className={styles.transferChatCopyButton} disabled={!chatMessage} onClick={()=>void copyChatMessage()}>{chatCopied?"คัดลอกข้อความแล้ว ✓":"คัดลอกข้อความส่งแชต Exness"}</button>
+        </section>
         {!current&&<label className={styles.transferConsent}><input type="checkbox" checked={consent} onChange={e=>setConsent(e.target.checked)}/><span>ฉันเป็นเจ้าของบัญชีนี้และยินยอมให้บันทึกข้อมูลคำขอ</span></label>}
         <button className={styles.primary} type="button" disabled={!info.partnerActive||Boolean(busy)||!validAccount||(!current&&!consent)} onClick={()=>void continueToExness()}>{busy==="continue"?"กำลังดำเนินการ...":"ดำเนินการต่อที่ Exness ↗"}</button>
-        <p className={styles.transferMicrocopy}>เข้าสู่ระบบ Exness แล้วขอลิงก์ย้ายพาร์ตเนอร์เฉพาะบัญชีจากฝ่ายช่วยเหลือ จากนั้นยืนยันคำขอบน Exness</p>
+        <p className={styles.transferMicrocopy}>หลังคัดลอกข้อความ ให้กดเปิด Exness แล้วส่งข้อความในแชตฝ่ายช่วยเหลือด้วยตนเอง</p>
         {current?.status==="PREPARED"&&<button type="button" className={styles.transferQuietButton} disabled={Boolean(busy)} onClick={()=>void act("submitted")}>ฉันส่งคำขอที่ Exness แล้ว</button>}
         {current?.status!==undefined&&current.status!=="PREPARED"&&<div className={styles.transferFollowup}>
           <b>หลัง Exness อนุมัติ</b>

@@ -18,14 +18,25 @@ assert(page.includes('ฉันเป็นเจ้าของบัญชี�
 assert(page.includes('รหัสพาร์ตเนอร์'));
 assert(page.includes('aria-label="คัดลอกรหัสพาร์ตเนอร์"'));
 assert(page.includes('navigator.clipboard.writeText(partnerCode)'));
+assert(page.includes('ขั้นตอนการย้ายพาร์ตเนอร์'));
+assert(page.includes('ข้อความส่งให้เจ้าหน้าที่ Exness'));
+assert(page.includes('คัดลอกข้อความส่งแชต Exness'));
+assert(page.includes('navigator.clipboard.writeText(chatMessage)'));
+assert(page.includes('current?.accountNumber||info?.accounts.find'));
+assert(page.includes('"รหัสพาร์ตเนอร์ใหม่: " + info.partnerCode'));
+assert(page.includes('"ฉันต้องการขอเปลี่ยนพาร์ตเนอร์สำหรับบัญชีเทรด Exness หมายเลข " + oldAccountNumber'));
+assert(page.includes('ใช้ได้ 7 วัน'));
+assert(page.includes('3 วันทำการ'));
+assert(page.includes('ยืนยันรหัสความปลอดภัย'));
+
 assert(page.includes('{info.partnerCode||"ยังไม่ได้กำหนด"}'));
 assert(!page.includes('Dear Exness Support'));
 assert(!page.includes('New partner code:'));
 
 assert(page.includes('บัญชีเดิมจะยังอยู่กับพาร์ตเนอร์เดิม'));
-assert(page.includes('ขอลิงก์ย้ายพาร์ตเนอร์เฉพาะบัญชี'));
+assert(page.includes('รับลิงก์เฉพาะบัญชี'));
 assert(!page.includes('cp_redirect?token='));
-assert(!page.includes('คัดลอกข้อความ'));
+assert(page.includes('คัดลอกข้อความส่งแชต Exness'));
 assert(!page.includes('ลิงก์ส่วนตัวที่ Exness'));
 assert(text.includes('const found = await this.exness.hasPartnerAccount(String(current.new_trading_account));'));
 assert(!text.includes('hasPartnerAccount(String(current.trading_account))'));
