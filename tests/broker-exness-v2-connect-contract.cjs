@@ -10,6 +10,7 @@ assert(ui.includes('<b>Exness IB Performance · 30 วันล่าสุด</
 assert(ui.includes('/admin/brokers/exness/automation/performance-preview'));
 assert(ui.includes('clientReportPath: String(connection?.clientReportPath || "/api/v3/reports/clients/shared/")'));
 assert(ui.includes('enabled: connection.enabled'));
+assert(ui.includes('if (typedEmail && typedPassword) await persistApiForm();'));
 assert(ctlSrc.includes('@Get("performance-preview")'));
 assert(ctlSrc.includes('@UseGuards(AdminGuard)'));
 assert(autoSrc.includes('await this.api.request("/api/partner/default_link/", token)'));
@@ -19,6 +20,7 @@ assert(/if \(state\.autoImportCommissions && state\.commissionReportPath\)/.test
 assert(/if \(state\.autoReleaseRebates && result\.rebateEntryId\)/.test(autoSrc));
 const compiled=ts.transpileModule(apiSrc,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2021,experimentalDecorators:true}}).outputText;
 const calls=[];
+let rejectAuth=false;
 const sample={data:[{group_fields:[{day:'2026-10-14'}],click_count:5,registration_count:2,kyc_passed:1,first_deposit_count:1,volume_lots:0.2,reward_usd:0.91}],totals:{count:1,click_count:5,registration_count:2,kyc_passed:1,first_deposit_count:1,volume_lots:0.2,reward_usd:0.91}};
 const ctx={exports:{},require:(id)=>{
   if(id==='@nestjs/common')return {Injectable:()=>x=>x,BadRequestException:class extends Error {},ConflictException:class extends Error {}};
@@ -27,6 +29,7 @@ const ctx={exports:{},require:(id)=>{
 },process:{env:{EXNESS_PARTNER_EMAIL:'fake@example.test',EXNESS_PARTNER_PASSWORD:'fake-test-password'}},Date,URLSearchParams,AbortSignal,
  fetch:async(url,opts)=>{
   calls.push({url,opts});
+  if(url==='https://my.exnessaffiliates.com/api/v2/auth/' && rejectAuth)return {ok:false,status:401,text:async()=>JSON.stringify({code:'AuthenticationFailed',message:'Unsafe upstream details'})};
   if(url==='https://my.exnessaffiliates.com/api/v2/auth/')return {ok:true,status:200,text:async()=>JSON.stringify({token:'test-token-do-not-use'})};
   if(url==='https://my.exnessaffiliates.com/api/partner/default_link/')return {ok:true,status:200,text:async()=>JSON.stringify({url:'https://example.test/ref'})};
   if(url.startsWith('https://my.exnessaffiliates.com/api/reports/ib/performance/?'))return {ok:true,status:200,text:async()=>JSON.stringify(sample)};
@@ -58,5 +61,10 @@ const secrets={save:()=>{throw Error('unexpected credential save')}};
  assert(reportCall && reportCall.url.includes('group_by=day') && reportCall.url.includes('link_clicked_from='));
  assert.equal(reportCall.opts.headers.authorization,'JWT test-token-do-not-use');
  assert.equal(queries.filter(q=>/last_test_status='PASS'/.test(q)).length,1,'test state updated once');
- console.log('Exness Partner v2 mocked auth/default_link/IB totals/read-only redaction PASS');
+ rejectAuth=true;
+ const denied=await svc.testConnection('ADMIN:test');
+ assert.equal(denied.status,'FAIL');
+ assert.match(denied.detail,/AuthenticationFailed/);
+ assert.doesNotMatch(denied.detail,/Unsafe upstream details/);
+ console.log('Exness mock auth/IB and safe 401 diagnostics PASS');
 })().catch(e=>{console.error(e.message);process.exitCode=1});

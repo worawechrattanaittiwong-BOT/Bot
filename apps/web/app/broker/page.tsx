@@ -317,6 +317,32 @@ export default function BrokerPage() {
     return result;
   }
 
+  // Share the exact save payload between Save API and Test Connection.
+  // The latter saves fresh credentials first, so it cannot accidentally test stale values.
+  async function persistApiForm() {
+    if (!connection) throw new Error("ยังโหลดการตั้งค่า Exness ไม่สำเร็จ");
+    const result = await adminApi("/admin/brokers/exness/automation/connection", {
+      method: "PUT",
+      body: JSON.stringify({
+        email: apiForm.email.trim(),
+        password: apiForm.password,
+        enabled: connection.enabled,
+        syncIntervalMinutes: apiForm.syncIntervalMinutes,
+        clientReportPath: apiForm.clientReportPath.trim(),
+        commissionReportPath: connection.commissionReportPath,
+        autoVerifyClients: apiForm.autoVerifyClients,
+        autoImportCommissions: connection.autoImportCommissions,
+        autoReleaseRebates: connection.autoReleaseRebates,
+        commissionAmountScale: connection.commissionAmountScale,
+        authIdentityField: connection.authIdentityField
+      })
+    });
+    setAutomation(current => ({ connection: result, runs: current?.runs || [] }));
+    // Clear the password and email after saving; never hold secrets in display state.
+    setApiForm(connectionForm(result));
+    return result;
+  }
+
   async function saveApi() {
     if (!connection) return;
     setActionBusy("save-api");
@@ -324,28 +350,7 @@ export default function BrokerPage() {
     setMessage("");
 
     try {
-      const result = await adminApi("/admin/brokers/exness/automation/connection", {
-        method: "PUT",
-        body: JSON.stringify({
-          email: apiForm.email.trim(),
-          password: apiForm.password,
-          // Do not implicitly switch on automation when saving credentials or path.
-          enabled: connection.enabled,
-          syncIntervalMinutes: apiForm.syncIntervalMinutes,
-          clientReportPath: apiForm.clientReportPath.trim(),
-          commissionReportPath: connection.commissionReportPath,
-          autoVerifyClients: apiForm.autoVerifyClients,
-          autoImportCommissions: connection.autoImportCommissions,
-          autoReleaseRebates: connection.autoReleaseRebates,
-          commissionAmountScale: connection.commissionAmountScale,
-          authIdentityField: connection.authIdentityField
-        })
-      });
-      setAutomation(current => ({
-        connection: result,
-        runs: current?.runs || []
-      }));
-      setApiForm(connectionForm(result));
+      await persistApiForm();
       setMessage("บันทึกการเชื่อมต่อ Exness API เรียบร้อย");
     } catch (err: unknown) {
       setPartnerError(errorText(err, "บันทึกการเชื่อมต่อไม่สำเร็จ"));
@@ -355,11 +360,20 @@ export default function BrokerPage() {
   }
 
   async function testApi() {
+    if (!connection) return;
+    const typedEmail = Boolean(apiForm.email.trim());
+    const typedPassword = Boolean(apiForm.password);
+    if (typedEmail !== typedPassword) {
+      setPartnerError("หากทดสอบข้อมูลล็อกอินใหม่ กรุณากรอก Partner Email และ Password ให้ครบทั้งสองช่อง หรือกดบันทึก API เพื่อเปลี่ยนเฉพาะช่องเดียว");
+      return;
+    }
     setActionBusy("test-api");
     setPartnerError("");
     setMessage("");
 
     try {
+      // If credentials were typed, save them securely before trying Exness.
+      if (typedEmail && typedPassword) await persistApiForm();
       const result = await adminApi("/admin/brokers/exness/automation/test", {
         method: "POST"
       });
@@ -690,8 +704,10 @@ export default function BrokerPage() {
 
                 <p className={styles.apiHelp}>
                   ใช้ Exness Partnership API v2 (POST /api/v2/auth/)
-                  และรายงานลูกค้า v3 · กรุณาใส่รหัสผ่านใหม่ที่ยังไม่เคยเผยแพร่ แล้วกดบันทึก API → Test Connection
-                  การทดสอบและสรุป IB เป็นแบบอ่านอย่างเดียว ไม่ยืนยันลูกค้าหรือจ่าย Rebate ให้โดยอัตโนมัติ
+                  · หากต้องการแก้ปัญหา 401 ให้กรอก Email และรหัสผ่าน Exness Partners ปัจจุบันให้ครบทั้งสองช่อง
+                  แล้วกด Test Connection ได้เลย ระบบจะบันทึกชุดใหม่เข้าคลังเข้ารหัสก่อนทดสอบ
+                  · หากเว้นว่างทั้งสองช่อง ระบบจะทดสอบด้วยชุดที่บันทึกไว้
+                  · การทดสอบและสรุป IB เป็นแบบอ่านอย่างเดียว ไม่ยืนยันลูกค้าหรือจ่าย Rebate ให้อัตโนมัติ
                 </p>
                 <div className={styles.apiActions}>
                   <label className={styles.toggle}>
@@ -729,7 +745,7 @@ export default function BrokerPage() {
                       type="button"
                       className={styles.secondaryButton}
                       onClick={testApi}
-                      disabled={Boolean(actionBusy) || !connection.configured}
+                      disabled={Boolean(actionBusy) || (!connection.configured && !(apiForm.email.trim() && apiForm.password))}
                     >
                       {actionBusy === "test-api" ? "กำลังทดสอบ..." : "Test Connection"}
                     </button>

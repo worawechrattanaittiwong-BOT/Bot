@@ -326,8 +326,19 @@ export class ExnessPartnershipApiService {
     try { body = JSON.parse(text); } catch {}
 
     if (!response.ok) {
-      // Never echo upstream payloads containing credentials or tokens.
-      throw new ConflictException("Exness auth failed HTTP " + response.status);
+      // Only map known safe error codes. Never return upstream text, email, password or JWT.
+      const safeCodes = new Set([
+        "AuthenticationFailed", "NotAuthenticated", "TokenExpired",
+        "PermissionDenied", "Throttled", "ValidationError", "ParseError"
+      ]);
+      const code = typeof body?.code === "string" && safeCodes.has(body.code)
+        ? body.code : "";
+      const detail = response.status === 401
+        ? "Exness ปฏิเสธการเข้าสู่ระบบ HTTP 401" +
+          (code ? " (" + code + ")" : "") +
+          " · โปรดตรวจ Email/Password ที่บันทึกใน SCENOVA ถ้า Swagger ใช้ข้อมูลเดียวกันผ่าน แต่ยังพบ 401 อาจต้องให้ Exness ตรวจข้อจำกัดการเข้าสู่ระบบจากเซิร์ฟเวอร์"
+        : "Exness auth failed HTTP " + response.status + (code ? " (" + code + ")" : "");
+      throw new ConflictException(detail);
     }
 
     const token = this.tokenFromBody(body);
