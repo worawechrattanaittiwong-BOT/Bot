@@ -46,6 +46,11 @@ export class BrokerController {
     return this.transfers.markSubmitted(String(req.user.sub || ""),id);
   }
 
+  @Post("exness/transfer/:id/new-account")
+  async transferNewAccount(@Req() req:any, @Param("id") id:string, @Body() body:{accountId?:string}) {
+    return this.transfers.setNewAccount(String(req.user.sub || ""),id,String(body?.accountId || ""));
+  }
+
   @Post("exness/transfer/:id/check")
   async checkTransfer(@Req() req:any, @Param("id") id:string) {
     return this.transfers.checkExness(String(req.user.sub || ""),id);

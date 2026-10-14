@@ -6,11 +6,18 @@ const text=fs.readFileSync('apps/api/src/brokers/broker-transfer.service.ts','ut
 const controller=fs.readFileSync('apps/api/src/brokers/broker.controller.ts','utf8');
 const page=fs.readFileSync('apps/web/components/ExnessTransferModal.tsx','utf8');
 assert(controller.includes('@Post("exness/transfer/:id/check")'));
+assert(controller.includes('@Post("exness/transfer/:id/new-account")'));
 assert(controller.includes('@UseGuards(JwtGuard)'));
 assert(controller.includes('@Get("exness/transfers")'));
-assert(page.includes('ยังไม่ได้ส่งไป Exness'));
+assert(page.includes('ยังไม่ได้ส่งคำขอไป Exness'));
 assert(page.includes('Exness เป็นผู้รับคำขอ'));
 assert(page.includes('คัดลอกข้อความ'));
+assert(page.includes('อายุ 7 วัน'));
+assert(page.includes('บัญชีเก่าจะยังอยู่กับพาร์ตเนอร์เดิม'));
+assert(page.includes('ลิงก์ส่วนตัว'));
+assert(!page.includes('cp_redirect?token=ZXl'));
+assert(text.includes('const found = await this.exness.hasPartnerAccount(String(current.new_trading_account));'));
+assert(!text.includes('hasPartnerAccount(String(current.trading_account))'));
 assert(!/api\/partner\/.*transfer/i.test(text));
 const js=ts.transpileModule(text,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2021,experimentalDecorators:true}}).outputText;
 class Validation extends Error{};
@@ -23,7 +30,10 @@ const data=[];
 const db={
   async query(sql,args){
     if(sql.includes('CREATE TABLE IF NOT EXISTS broker_partner_transfer_requests'))return {rows:[]};
-    if(sql.includes('FROM mt5_accounts'))return {rows:[{id:'11111111-1111-4111-8111-111111111111',account_number:'123456789',broker_server:'Exness-MT5Real'}]};
+    if(sql.includes('FROM mt5_accounts'))return {rows:[
+      {id:'11111111-1111-4111-8111-111111111111',account_number:'123456789',broker_server:'Exness-MT5Real'},
+      {id:'33333333-3333-4333-8333-333333333333',account_number:'999999999',broker_server:'Exness-MT5Real'}
+    ]};
     if(sql.includes('FROM broker_partner_transfer_requests'))return {rows:data};
     if(sql.includes('UPDATE broker_partner_transfer_requests SET last_checked_at'))return {rows:[]};
     throw Error('Unexpected database query');
@@ -34,6 +44,17 @@ const db={
       const row={id:'22222222-2222-4222-8222-222222222222',user_id:args[0],trading_account:args[1],partner_code:args[2],status:'PREPARED',created_at:'2026-10-14T00:00:00Z'};
       data.push(row);return row;
     }
+    if(sql.includes('UPDATE broker_partner_transfer_requests')&&sql.includes("SET status='CUSTOMER_SUBMITTED'")) {
+      const row=data.find(r=>r.id===args[0]);row.status='CUSTOMER_SUBMITTED';return row;
+    }
+    if(sql.includes('UPDATE broker_partner_transfer_requests')&&sql.includes('SET new_trading_account')) {
+      const row=data.find(r=>r.id===args[0]);
+      row.new_trading_account=args[2];row.status='CUSTOMER_SUBMITTED';
+      return row;
+    }
+    if(sql.includes('UPDATE broker_partner_transfer_requests')&&sql.includes("status='PARTNER_VISIBLE'")) {
+      const row=data.find(r=>r.id===args[0]);row.status='PARTNER_VISIBLE';return row;
+    }
     if(sql.includes('WHERE id=$1 AND user_id=$2')){
       return args[1]==='OWN_USER'? data.find(r=>r.id===args[0])||null:null;
     }
@@ -41,7 +62,7 @@ const db={
   }
 };
 let exnessCalls=0;
-const service=new Service(db,{registrationInfo:async()=>({active:true,partnerCode:'MYCODE'})},{hasPartnerAccount:async n=>{exnessCalls++;return n==='123456789'}});
+const service=new Service(db,{registrationInfo:async()=>({active:true,partnerCode:'MYCODE'})},{hasPartnerAccount:async n=>{exnessCalls++;return n==='999999999'}});
 (async()=>{
   await assert.rejects(()=>service.prepare('OWN_USER',{accountId:'11111111-1111-4111-8111-111111111111',consent:false}),/ยืนยัน/);
   await assert.rejects(()=>service.prepare('OWN_USER',{accountId:'99999999-9999-4999-8999-999999999999',consent:true}),/ไม่ใช่บัญชี/);
@@ -50,9 +71,20 @@ const service=new Service(db,{registrationInfo:async()=>({active:true,partnerCod
   assert.equal(prepared.accountNumber,'123456789');
   await assert.rejects(()=>service.checkExness('OTHER_USER',prepared.id),/ไม่พบคำขอ/);
   assert.equal(exnessCalls,0,'cannot inspect other user account');
+  await assert.rejects(()=>service.checkExness('OWN_USER',prepared.id),/บัญชีเทรดใหม่/);
+  await assert.rejects(()=>service.setNewAccount('OWN_USER',prepared.id,'11111111-1111-4111-8111-111111111111'),/คำขอกับ Exness/);
+  await assert.rejects(()=>service.setNewAccount('OTHER_USER',prepared.id,'33333333-3333-4333-8333-333333333333'),/ไม่พบคำขอ/);
+  const submitted=await service.markSubmitted('OWN_USER',prepared.id);
+  assert.equal(submitted.status,'CUSTOMER_SUBMITTED');
+  await assert.rejects(()=>service.setNewAccount('OWN_USER',prepared.id,'11111111-1111-4111-8111-111111111111'),/บัญชีเก่า/);
+  const newLinked=await service.setNewAccount('OWN_USER',prepared.id,'33333333-3333-4333-8333-333333333333');
+  assert.equal(newLinked.newAccountNumber,'999999999');
+  const verified=await service.checkExness('OWN_USER',prepared.id);
+  assert.equal(verified.matched,true);
+  assert.equal(exnessCalls,1,'only linked new account can be inspected');
   const info=await service.customer('OWN_USER');
   assert.equal(info.exnessSubmissionSupported,false);
   assert.equal(info.partnerCode,'MYCODE');
-  assert.equal(info.accounts.length,1);
+  assert.equal(info.accounts.length,2);
   console.log('Broker Transfer: consent, ownership, prefill and no assumed Exness submission PASS');
 })().catch(error=>{console.error(error);process.exitCode=1});

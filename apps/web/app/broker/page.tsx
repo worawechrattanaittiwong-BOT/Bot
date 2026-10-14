@@ -95,7 +95,7 @@ type ClientMatchPreview = {
 };
 
 type TransferAdminResponse = {requests:Array<{
-  id:string;userCode:string;accountLast4:string;partnerCode:string;status:string;
+  id:string;userCode:string;accountLast4:string;newAccountLast4?:string|null;partnerCode:string;status:string;
   submittedAt:string|null;checkedAt:string|null;visibleAt:string|null;createdAt:string;
 }>};
 
@@ -880,15 +880,15 @@ export default function BrokerPage() {
 
           <section id="exness-transfers" className={styles.card}>
             <div className={styles.sectionHead}>
-              <div><small>PARTNER TRANSFER CENTER</small><b>คำขอย้ายพาร์ตเนอร์ของลูกค้า</b><span>ลูกค้าส่งคำขอต่อ Exness ด้วยตนเอง · SCENOVA ตรวจเฉพาะการปรากฏในรายงาน Partner API</span></div>
+              <div><small>PARTNER TRANSFER CENTER</small><b>คำขอย้ายพาร์ตเนอร์ของลูกค้า</b><span>ลูกค้าส่งคำขอผ่านลิงก์เฉพาะบัญชี Exness และสร้างบัญชีเทรดใหม่หลังอนุมัติ · SCENOVA ตรวจบัญชีใหม่ผ่าน Partner API</span></div>
               <button className={styles.secondaryButton} type="button" onClick={()=>void refreshTransfers()}>อัปเดตรายการ</button>
             </div>
             {transferError&&<p className={styles.dashboardError}>{transferError}</p>}
-            <div className={styles.transferAdminHelp}>สถานะ “แจ้งว่าส่งแล้ว” เป็นข้อมูลที่ลูกค้าระบุ ไม่ใช่คำยืนยันจาก Exness · สถานะ “พบใน Partner API” หมายถึงเลขบัญชีอยู่ในรายงาน ไม่ใช่การอนุมัติการย้ายอย่างเป็นทางการ</div>
+            <div className={styles.transferAdminHelp}>สถานะ “แจ้งว่าส่งแล้ว” เป็นข้อมูลที่ลูกค้าระบุ ไม่ใช่คำยืนยันจาก Exness · สถานะ “พบบัญชีใหม่ใน Partner API” หมายถึงบัญชีเทรดใหม่อยู่ในรายงาน ไม่ใช่เอกสารรับรองอนุมัติคำขอจาก Exness</div>
             {transfers ? <div className={styles.transferAdminList}>
               {transfers.requests.length ? transfers.requests.map(r=><div key={r.id} className={styles.transferAdminRow}>
-                <div><b>{r.userCode}</b><span>บัญชี ••••{r.accountLast4}</span></div>
-                <div><b>{r.status==="PARTNER_VISIBLE"?"พบใน Partner API":r.status==="CUSTOMER_SUBMITTED"?"ลูกค้าแจ้งว่าส่งแล้ว":"เตรียมคำขอ"}</b><span>Partner: {r.partnerCode}</span></div>
+                <div><b>{r.userCode}</b><span>บัญชีเดิม ••••{r.accountLast4}{r.newAccountLast4?" · บัญชีใหม่ ••••"+r.newAccountLast4:" · ยังไม่ระบุบัญชีใหม่"}</span></div>
+                <div><b>{r.status==="PARTNER_VISIBLE"?"พบบัญชีใหม่ใน Partner API":r.status==="CUSTOMER_SUBMITTED"?"ลูกค้าแจ้งว่าส่งแล้ว":"เตรียมคำขอ"}</b><span>Partner: {r.partnerCode}</span></div>
                 <div><b>{dateTime(r.submittedAt||r.createdAt)}</b><span>ตรวจล่าสุด: {dateTime(r.checkedAt)}</span></div>
               </div>) : <p>ยังไม่มีคำขอย้ายพาร์ตเนอร์จากลูกค้า</p>}
             </div> : <p>กดอัปเดตรายการเพื่อดูคำขอ</p>}

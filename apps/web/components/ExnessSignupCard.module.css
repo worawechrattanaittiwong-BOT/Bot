@@ -238,3 +238,10 @@
 .transferHistory b {flex:0 0 100%;font-size:12px;color:#cabdd9}
 .transferHistory button {background:rgba(134,100,208,.1);color:#c4b4e2;border:1px solid rgba(159,134,224,.2);border-radius:8px;padding:8px 12px;cursor:pointer;font-size:11px}
 @media(max-width:560px){.entryActions{grid-column:1/-1;width:100%}.entryActions button{flex:1}.transferModal{max-height:94vh}}
+/* Official, per-account Exness partner-change flow */
+.transferWarning{border:1px solid rgba(228,172,93,.37);border-radius:11px;padding:12px 14px;color:#ebcca0;background:rgba(173,115,39,.11);font-size:12px;line-height:1.65;margin:10px 0}
+.transferStep{border:1px solid rgba(139,111,213,.26);border-radius:12px;background:rgba(129,92,216,.055);padding:15px;margin-top:15px;display:grid;gap:10px}
+.transferStep>b{font-size:13px;color:#ece3ff}.transferStep p{font-size:12px;color:#b5a9c9;line-height:1.65;margin:0}
+.transferStep .transferField{margin-top:2px}.transferOfficialButton{display:block;border:1px solid rgba(150,130,231,.55);border-radius:10px;padding:12px 14px;background:#7250d0;color:#fff;text-align:center;text-decoration:none;font-size:12px;font-weight:850}
+.transferHelp{margin:14px 0;padding:12px;border:1px solid rgba(153,125,210,.25);border-radius:11px;color:#c3b6d4;font-size:12px;line-height:1.5}
+.transferHelp summary{cursor:pointer;font-weight:750}.transferHelpText{display:block;width:100%;background:#0b0914;color:#dfd1f2;border:1px solid rgba(153,125,210,.3);border-radius:9px;margin-top:12px;padding:12px;font-size:12px;line-height:1.55}

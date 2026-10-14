@@ -26,11 +26,14 @@ export class BrokerTransferService {
           CHECK (status IN ('PREPARED','CUSTOMER_SUBMITTED','PARTNER_VISIBLE')),
         customer_submitted_at timestamptz,
         partner_visible_at timestamptz,
+        new_trading_account varchar(32),
         last_checked_at timestamptz,
         created_at timestamptz NOT NULL DEFAULT now(),
         updated_at timestamptz NOT NULL DEFAULT now(),
         UNIQUE (user_id, broker_code, trading_account)
       );
+      ALTER TABLE broker_partner_transfer_requests
+        ADD COLUMN IF NOT EXISTS new_trading_account varchar(32);
       CREATE INDEX IF NOT EXISTS idx_broker_transfer_status
         ON broker_partner_transfer_requests (broker_code,status,updated_at DESC);
     `);
@@ -69,6 +72,8 @@ export class BrokerTransferService {
       accountNumber: String(row.trading_account),
       accountLast4: String(row.trading_account).slice(-4),
       partnerCode: String(row.partner_code),
+      newAccountNumber: row.new_trading_account ? String(row.new_trading_account) : null,
+      newAccountLast4: row.new_trading_account ? String(row.new_trading_account).slice(-4) : null,
       status: String(row.status),
       customerSubmittedAt: row.customer_submitted_at || null,
       partnerVisibleAt: row.partner_visible_at || null,
@@ -92,7 +97,7 @@ export class BrokerTransferService {
       accounts,
       requests: list.rows.map(row => this.view(row)),
       exnessSubmissionSupported: false,
-      note: "SCENOVA เตรียมคำขอและตรวจรายงานเท่านั้น ลูกค้าต้องส่งคำขอและยืนยันตัวตนกับ Exness เอง"
+      note: "Exness ออกลิงก์ส่วนตัวรายบัญชี อายุ 7 วัน ตรวจผลโดยใช้บัญชีเทรดใหม่หลัง Exness อนุมัติเท่านั้น ไม่ส่งรหัสหรือโทเคนผ่าน SCENOVA"
     };
   }
 
@@ -129,16 +134,46 @@ export class BrokerTransferService {
     return this.view(row);
   }
 
+  // Exness requires a NEW trading account after partner change approval.
+  // The original trading account remains with the original partner.
+  async setNewAccount(userId: string, id: string, accountId: string) {
+    await this.ensureSchema();
+    const current = await this.own(userId,id);
+    if (current.status === "PREPARED") {
+      throw new ConflictException("กรุณายื่นคำขอกับ Exness และยืนยันว่าได้ส่งคำขอแล้วก่อน");
+    }
+    const options = await this.accountOptions(userId);
+    const option = options.find(a => a.id === String(accountId || ""));
+    if (!option) throw new BadRequestException("กรุณาเชื่อมบัญชีเทรด Exness ใหม่กับ SCENOVA ก่อน");
+    if (option.accountNumber === String(current.trading_account)) {
+      throw new BadRequestException("Exness ระบุว่าบัญชีเก่าไม่เปลี่ยนพาร์ตเนอร์ ต้องเลือกบัญชีเทรดใหม่เท่านั้น");
+    }
+    const row = await this.db.one(
+      `UPDATE broker_partner_transfer_requests
+       SET new_trading_account=$3,status='CUSTOMER_SUBMITTED',
+           partner_visible_at=NULL,last_checked_at=NULL,updated_at=now()
+       WHERE id=$1 AND user_id=$2 RETURNING *`,
+      [id,userId,option.accountNumber]
+    );
+    return this.view(row);
+  }
+
   async checkExness(userId: string, id: string) {
     await this.ensureSchema();
     const current = await this.own(userId,id);
+    if (!current.new_trading_account) {
+      throw new ConflictException("Exness กำหนดให้สร้างบัญชีเทรดใหม่หลังอนุมัติ กรุณาเชื่อมบัญชีใหม่ใน SCENOVA ก่อนตรวจ");
+    }
+    if (current.status === "PREPARED") {
+      throw new ConflictException("คำขอยังไม่ได้ยื่นกับ Exness");
+    }
     if (current.status === "PARTNER_VISIBLE") return { ...this.view(current), checked: true, matched: true };
     if (current.last_checked_at && Date.now()-new Date(current.last_checked_at).getTime()<60000) {
       throw new ConflictException("กรุณารออย่างน้อย 1 นาที ก่อนตรวจสอบกับ Exness อีกครั้ง");
     }
     // Record attempts before upstream requests to bound repeated calls even after upstream errors.
     await this.db.query(`UPDATE broker_partner_transfer_requests SET last_checked_at=now(),updated_at=now() WHERE id=$1 AND user_id=$2`,[id,userId]);
-    const found = await this.exness.hasPartnerAccount(String(current.trading_account));
+    const found = await this.exness.hasPartnerAccount(String(current.new_trading_account));
     const row = found
       ? await this.db.one(`UPDATE broker_partner_transfer_requests
           SET status='PARTNER_VISIBLE',partner_visible_at=now(),updated_at=now()
@@ -152,6 +187,7 @@ export class BrokerTransferService {
     const result = await this.db.query(
       `SELECT t.id,t.status,t.partner_code,t.customer_submitted_at,t.partner_visible_at,t.last_checked_at,
               t.created_at,t.updated_at,right(t.trading_account,4) AS account_last4,
+              right(COALESCE(t.new_trading_account,''),4) AS new_account_last4,
               u.user_code
        FROM broker_partner_transfer_requests t JOIN users u ON u.id=t.user_id
        WHERE t.broker_code='EXNESS' ORDER BY t.updated_at DESC LIMIT 100`
@@ -159,6 +195,7 @@ export class BrokerTransferService {
     return { requests: result.rows.map(row => ({
       id: row.id, userCode: row.user_code, accountLast4: row.account_last4,
       status: row.status, partnerCode: row.partner_code,
+      newAccountLast4: row.new_account_last4 || null,
       submittedAt: row.customer_submitted_at, checkedAt: row.last_checked_at,
       visibleAt: row.partner_visible_at, createdAt: row.created_at
     })) };
