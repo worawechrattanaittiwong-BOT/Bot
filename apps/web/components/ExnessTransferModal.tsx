@@ -29,6 +29,7 @@ export function ExnessTransferModal({onClose}:{onClose:()=>void}) {
   const [busy,setBusy]=useState("");
   const [error,setError]=useState("");
   const [notice,setNotice]=useState("");
+  const [codeCopied,setCodeCopied]=useState(false);
 
   useEffect(()=>{
     let mounted=true;
@@ -103,6 +104,19 @@ export function ExnessTransferModal({onClose}:{onClose:()=>void}) {
     finally{setBusy("");}
   }
 
+  async function copyPartnerCode() {
+    const partnerCode=info?.partnerCode?.trim();
+    if(!partnerCode)return;
+    try {
+      await navigator.clipboard.writeText(partnerCode);
+      setCodeCopied(true);
+      setError("");
+    } catch {
+      setCodeCopied(false);
+      setError("ไม่สามารถคัดลอกรหัสได้ กรุณาเลือกข้อความแล้วคัดลอกด้วยตนเอง");
+    }
+  }
+
   function selectAccount(accountId:string){
     setSelected(accountId);setNewAccountId("");setNotice("");
     const account=info?.accounts.find(a=>a.id===accountId);
@@ -121,7 +135,19 @@ export function ExnessTransferModal({onClose}:{onClose:()=>void}) {
       {error&&<p className={styles.error} role="alert">{error}</p>}
       {notice&&<p className={styles.transferNotice} role="status">{notice}</p>}
       {!info?<p className={styles.transferExplanation}>กำลังโหลดบัญชี...</p>:<>
-        <div className={styles.transferDestination}><span>ย้ายไปยัง</span><b>SCENOVA</b><small>{info.partnerCode||""}</small></div>
+        <div className={styles.transferDestination}>
+          <div className={styles.transferDestinationName}>
+            <span>ย้ายไปยัง</span>
+            <strong>SCENOVA</strong>
+          </div>
+          <div className={styles.transferCodeCard}>
+            <span>รหัสพาร์ตเนอร์</span>
+            <div className={styles.transferCodeRow}>
+              <strong className={styles.transferCodeText}>{info.partnerCode||"ยังไม่ได้กำหนด"}</strong>
+              <button className={styles.transferCopyButton} type="button" disabled={!info.partnerCode} onClick={()=>void copyPartnerCode()} aria-label="คัดลอกรหัสพาร์ตเนอร์">{codeCopied?"คัดลอกแล้ว ✓":"คัดลอก"}</button>
+            </div>
+          </div>
+        </div>
         {!info.partnerActive&&<p className={styles.error}>ขณะนี้ยังไม่เปิดให้ย้ายพาร์ตเนอร์ กรุณาติดต่อ SCENOVA</p>}
         <label className={styles.transferField}><span>เลือกบัญชี Exness เดิม</span>
           {info.accounts.length>0?<select value={selected} onChange={e=>selectAccount(e.target.value)}>

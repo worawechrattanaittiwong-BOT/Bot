@@ -250,8 +250,16 @@
 .transferSimple .transferExplanation{margin:9px 0 14px}
 .transferSimple .transferField{margin-top:12px}
 .transferSimple .primary{width:100%;margin-top:16px;min-height:44px}
-.transferDestination{display:flex;align-items:center;gap:10px;padding:12px 14px;border:1px solid rgba(153,125,210,.19);border-radius:11px;background:#151020;color:#c5b9d4;font-size:12px}
-.transferDestination b{margin-left:auto;color:#f0e7ff;font-size:14px}.transferDestination small{color:#a58cd9;font-size:11px}
+.transferDestination{display:grid;grid-template-columns:minmax(125px,1fr) minmax(0,1.65fr);align-items:stretch;gap:14px;padding:14px;border:1px solid rgba(153,125,210,.44);border-radius:14px;background:linear-gradient(140deg,rgba(89,60,155,.20),rgba(26,17,48,.95));color:#c5b9d4}
+.transferDestinationName{display:flex;flex-direction:column;justify-content:center;gap:6px;padding:8px 4px;font-size:12px}
+.transferDestinationName strong{font-size:19px;letter-spacing:.035em;font-weight:900;color:#f5efff}
+.transferCodeCard{border:1px solid rgba(157,91,255,.85);box-shadow:inset 0 0 25px rgba(113,57,238,.12),0 0 18px rgba(117,68,236,.14);border-radius:12px;padding:11px 13px;background:linear-gradient(125deg,#2b1555,#1b103c);display:grid;gap:5px;min-width:0}
+.transferCodeCard>span{font-size:12px;color:#d2baff;font-weight:800}
+.transferCodeRow{display:flex;align-items:center;gap:8px;min-width:0;flex-wrap:wrap;justify-content:space-between}
+.transferCodeText{font-size:clamp(20px,3.8vw,27px);line-height:1.15;letter-spacing:.025em;color:#ffdc61;font-weight:950;overflow-wrap:anywhere;min-width:0;user-select:text}
+.transferCopyButton{border:1px solid rgba(189,151,255,.50);border-radius:9px;min-height:35px;padding:6px 9px;background:rgba(132,93,218,.24);color:#f2e9ff;font-size:11px;font-weight:800;cursor:pointer;white-space:nowrap}
+.transferCopyButton:hover:not(:disabled){background:rgba(155,115,242,.38)}.transferCopyButton:disabled{opacity:.5;cursor:not-allowed}
+@media(max-width:560px){.transferDestination{grid-template-columns:1fr;gap:9px;padding:11px}.transferDestinationName{padding:2px;gap:2px}.transferDestinationName strong{font-size:16px}.transferCodeCard{padding:11px}.transferCodeText{font-size:clamp(19px,6vw,26px)}}
 .transferSimple .transferStatus{margin-top:13px;padding:10px 12px}
 .transferMicrocopy{color:#a99dbb;font-size:11px;line-height:1.65;margin:12px 0 4px}
 .transferQuietButton{border:1px solid rgba(153,127,224,.3);background:rgba(124,93,207,.1);color:#e2d3f7;border-radius:9px;padding:11px 13px;font-size:12px;font-weight:700;cursor:pointer;margin-top:10px;width:100%}

@@ -15,6 +15,13 @@ assert(page.includes('api("/brokers/exness/transfer"'));
 assert(page.includes('ดำเนินการต่อที่ Exness'));
 assert(page.includes('ฉันส่งคำขอที่ Exness แล้ว'));
 assert(page.includes('ฉันเป็นเจ้าของบัญชีนี้'));
+assert(page.includes('รหัสพาร์ตเนอร์'));
+assert(page.includes('aria-label="คัดลอกรหัสพาร์ตเนอร์"'));
+assert(page.includes('navigator.clipboard.writeText(partnerCode)'));
+assert(page.includes('{info.partnerCode||"ยังไม่ได้กำหนด"}'));
+assert(!page.includes('Dear Exness Support'));
+assert(!page.includes('New partner code:'));
+
 assert(page.includes('บัญชีเดิมจะยังอยู่กับพาร์ตเนอร์เดิม'));
 assert(page.includes('ขอลิงก์ย้ายพาร์ตเนอร์เฉพาะบัญชี'));
 assert(!page.includes('cp_redirect?token='));
