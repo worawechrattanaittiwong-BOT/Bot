@@ -33,6 +33,10 @@ const fleetMonitorNavItem: NavItem = {
   label:"Trading Fleet Monitor", hint:"All MT5 slots, live performance & risk monitoring"
 };
 
+const botInspectionNavItem: NavItem = {
+  section:"TRADING", key:"bot-inspection", href:"/bot-inspection", icon:"overview",
+  label:"Bot Logs", hint:"ตรวจบัญชีและรอบเทรดย้อนหลัง · เวลาไทย"
+};
 const performanceNavItem: NavItem = {
   section:"TRADING", key:"trading-backtest", href:"/performance", icon:"strategy",
   label:"Backtest & Performance", hint:"Real performance, backtests & reports"
@@ -59,7 +63,8 @@ export const sharedTradingNavItems: NavItem[] = [
   mt5EaNavItem,
   followMasterNavItem,
   fleetMonitorNavItem,
-  performanceNavItem
+  performanceNavItem,
+  botInspectionNavItem
 ];
 
 export const ownerNavItems: NavItem[] = [
@@ -68,6 +73,7 @@ export const ownerNavItems: NavItem[] = [
   followMasterNavItem,
   fleetMonitorNavItem,
   performanceNavItem,
+  botInspectionNavItem,
   brokerNavItem,
   myAccountNavItem,
   inviteEarnNavItem,
