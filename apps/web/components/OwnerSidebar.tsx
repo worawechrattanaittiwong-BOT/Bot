@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ScenovaIcon } from "./ScenovaIcon";
 import {useCustomerLanguage} from "../lib/i18n/provider";
@@ -132,6 +133,8 @@ function UnifiedSidebar({
   partner?:PartnerSummary;
 }) {
   const {t}=useCustomerLanguage();
+  const pathname = usePathname();
+  const showLanguageControl = !(pathname === "/admin" || pathname.startsWith("/admin/"));
   const navText=(key:string,label:string)=>elevated?label:t(key,label);
   const items = sidebarItems(elevated, partner);
   const sections = (["TRADING","MANAGEMENT","SYSTEM"] as const)
@@ -149,7 +152,14 @@ function UnifiedSidebar({
 
       {sections.map(section=>(
         <div key={section}>
-          <div className={"owner-nav-label " + (section!=="TRADING" ? "owner-nav-label-secondary" : "")}>{navText(section,section)}</div>
+          {section === "TRADING" ? (
+            <div className="owner-nav-section-head">
+              <div className="owner-nav-label">{navText(section,section)}</div>
+              {showLanguageControl && <LanguageSwitcher compact />}
+            </div>
+          ) : (
+            <div className="owner-nav-label owner-nav-label-secondary">{navText(section,section)}</div>
+          )}
           <nav className="side-nav owner-nav">
             {items.filter(item=>item.section===section).map(item=>(
               <Link
@@ -171,7 +181,7 @@ function UnifiedSidebar({
         </div>
       ))}
 
-      {!elevated&&<div style={{padding:"8px 16px"}}><LanguageSwitcher/></div>}
+
       <div className="owner-profile">
         <div className="owner-avatar">{avatar}</div>
         <div><small>{elevated?profileTitle:t("userId")}</small><b>{profileValue}</b></div>
@@ -198,6 +208,7 @@ function UnifiedMobileNav({
   partner?:PartnerSummary;
 }) {
   const {t}=useCustomerLanguage();
+  const pathname = usePathname();
   const navText=(key:string,label:string)=>elevated?label:t(key,label);
   const items = sidebarItems(elevated, partner);
   const sections = (["TRADING","MANAGEMENT","SYSTEM"] as const)
@@ -310,7 +321,7 @@ function UnifiedMobileNav({
               <button type="button" className="owner-mobile-drawer-close" aria-label="ปิดเมนู" onClick={()=>setOpen(false)}>×</button>
             </header>
 
-            {!elevated&&<div style={{padding:"8px 16px"}}><LanguageSwitcher/></div>}
+            {!pathname.startsWith("/admin") && <div className="owner-mobile-language-slot"><LanguageSwitcher compact /></div>}
             <div className="owner-mobile-drawer-body">
               {sections.map(section=>(
                 <section key={section} className="owner-mobile-drawer-section">

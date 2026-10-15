@@ -5,7 +5,6 @@ import { API_URL, api, getToken } from "../../lib/api";
 import { CustomerMobileNav, CustomerSidebar, OwnerMobileNav, OwnerSidebar } from "../../components/OwnerSidebar";
 import { ScenovaIcon } from "../../components/ScenovaIcon";
 import { ScenovaBrand } from "../../components/ScenovaBrand";
-import { LanguageSwitcher } from "../../components/i18n/LanguageSwitcher";
 import { Mt5ConnectionExperience, VpsMigrationProgressCard } from "../../components/Mt5ConnectionExperience";
 import { Mt5ConnectChecklist, isCloudMt5ConnectionComplete } from "../../components/Mt5ConnectChecklist";
 import { SymbolSwitchChecklist, getSymbolSwitchProgress } from "../../components/SymbolSwitchProgress";
@@ -4598,7 +4597,6 @@ export default function DashboardPage() {
             </div>
           </div>
           <div className="cc-v3-head-actions">
-            {activeView !== "overview" && <div data-scenova-language-dock className="cc-inline-language"><LanguageSwitcher/></div>}
             <span className={"cc-head-chip " + (isMt5ConnectionOnline ? "good" : isCloudRuntime && isCloudWorkerOnline ? "warn" : "bad")}><i/><span><b>{isMt5ConnectionOnline ? "เชื่อมต่อแล้ว" : isCloudRuntime && isCloudWorkerOnline ? "กำลังเชื่อม MT5" : "ยังไม่เชื่อมต่อ"}</b><small>{isCloudRuntime ? (isMt5ConnectionOnline ? "VPS Server Online · MT5 Online" : isCloudWorkerOnline ? "VPS Server Online · รอ MT5" : "VPS Server Offline") : isMt5Online ? (data.account?.broker || "MT5")+" · EA Online" : isHeartbeatDelayed ? "Windows Agent Online · Heartbeat "+connectionAgeLabel : isAgentOnline ? "Windows Agent Online · รอ EA" : (data.account?.broker || "MT5")+" · LOCAL"}</small></span></span>
             <span className={"cc-head-chip bot " + (desired==="RUNNING" ? "active" : "")}><ScenovaIcon name="bot" size={18}/><span><b>{controlStateLabel}</b><small>{settings.entryMode || "AUTO MOMENTUM"}</small></span></span>
             <span className="cc-head-icon-button" aria-label="การแจ้งเตือน"><ScenovaIcon name="bell" size={18}/></span>
@@ -4614,7 +4612,6 @@ export default function DashboardPage() {
             </div>
 
             <div className="cc-slot-switcher-actions">
-              <div data-scenova-language-dock className="cc-inline-language" aria-label="Language selection"><LanguageSwitcher/></div>
               <button
                 type="button"
                 className="cc-slot-rename"

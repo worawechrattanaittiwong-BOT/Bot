@@ -6,7 +6,6 @@ import { ScenovaBrand } from "../../components/ScenovaBrand";
 import { ScenovaIcon } from "../../components/ScenovaIcon";
 import styles from "./login.module.css";
 import {useCustomerLanguage} from "../../lib/i18n/provider";
-import {LanguageSwitcher} from "../../components/i18n/LanguageSwitcher";
 
 const LOGIN_EMAIL_KEY = "scenova_login_email";
 const LOGIN_BACKGROUND_DESKTOP_URL = "/assets/scenova-login-globe-desktop-v1.webp";
@@ -318,7 +317,7 @@ export default function LoginPage() {
             <div className={styles.formCard} id="access-form" aria-labelledby="access-title">
               <a className={styles.formBrand} href="/website" aria-label="SCENOVA website"><ScenovaBrand className={styles.formLogo} /></a>
 
-              <div style={{display:"flex",justifyContent:"flex-end",marginBottom:12}}><LanguageSwitcher/></div>
+
               <div className={styles.formHeading}>
                 <div className={styles.cardEyebrow}>{register ? "CREATE ACCOUNT" : "SECURE ACCESS"}</div>
                 <h2 id="access-title">{register ? "Create Your Account" : "Welcome Back"}</h2>

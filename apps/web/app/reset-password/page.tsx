@@ -6,7 +6,6 @@ import { api } from "../../lib/api";
 import { ScenovaBrand } from "../../components/ScenovaBrand";
 import styles from "./reset-password.module.css";
 import {useCustomerLanguage} from "../../lib/i18n/provider";
-import {LanguageSwitcher} from "../../components/i18n/LanguageSwitcher";
 
 export default function ResetPasswordPage() {
   const {lang}=useCustomerLanguage();
@@ -44,7 +43,7 @@ export default function ResetPasswordPage() {
   return (
     <main className={styles.page}>
       <section className={styles.card}>
-        <ScenovaBrand className={styles.brand}/><LanguageSwitcher/>
+        <ScenovaBrand className={styles.brand}/>
         {done ? (
           <div className={styles.success}>
             <span>✓</span>

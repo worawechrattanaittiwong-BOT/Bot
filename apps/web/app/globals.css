@@ -10473,9 +10473,86 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
 
 .vps-slot-slip-error{margin:10px 0;padding:10px 12px;border:1px solid #a84c68;background:#321722;color:#ffd6df;border-radius:10px;font-size:12px;line-height:1.55;overflow-wrap:anywhere}
 
-/* SCENOVA locale switcher lives in the VPS toolbar, never above its controls. */
-.cc-inline-language { display: flex; align-items: center; flex: 0 0 auto; padding: 3px 5px; border: 1px solid rgba(148,120,241,.3); border-radius: 10px; background: rgba(12,13,29,.78); }
-.cc-inline-language button { color: #e9e6ff; background: transparent; border: 1px solid transparent; border-radius: 7px; padding: 6px 8px; cursor: pointer; white-space: nowrap; }
-.cc-inline-language button[aria-pressed="true"] { background: rgba(112,88,220,.28); border-color: rgba(167,141,255,.38); }
-.cc-slot-switcher-actions { flex-wrap: wrap; }
-@media (max-width: 760px) { .cc-inline-language { margin-left: auto; } }
+
+/* Locale lives beside the Sidebar trading label, not in the Bot Instance card. */
+.owner-sidebar .owner-nav-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 3px;
+  padding-right: 5px;
+}
+.owner-sidebar .owner-nav-section-head .owner-nav-label {
+  min-width: 0;
+  margin: 0;
+  padding-right: 0;
+}
+.scenova-lang-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+  width: max-content;
+  padding: 2px 3px;
+  min-height: 30px;
+  border: 1px solid rgba(142, 120, 208, .28);
+  border-radius: 9px;
+  color: #9ca9c9;
+  background: rgba(12, 17, 34, .83);
+}
+.scenova-lang-globe { width: 13px; height: 13px; flex: 0 0 13px; margin: 0 3px 0 2px; }
+.scenova-lang-switch button {
+  height: 25px;
+  min-width: 27px;
+  padding: 0 4px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #9ba5c2;
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1;
+  cursor: pointer;
+}
+.scenova-lang-switch button:hover { color: #fff; background: rgba(130, 108, 224, .13); }
+.scenova-lang-switch button[aria-pressed="true"] {
+  color: #f2edff;
+  background: rgba(125, 95, 217, .29);
+  border-color: rgba(170, 147, 245, .27);
+}
+.scenova-lang-switch button:focus-visible {
+  outline: 2px solid #ab90ff;
+  outline-offset: 2px;
+}
+.scenova-lang-switch--compact { min-height: 25px; padding: 1px 2px; }
+.scenova-lang-switch--compact button { min-width: 23px; height: 21px; padding: 0 2px; }
+.scenova-lang-switch--compact .scenova-lang-globe { width: 12px; height: 12px; flex-basis: 12px; margin: 0 2px; }
+
+/* Shared, non-floating customer language utility on pages without a sidebar. */
+.scenova-language-utility-strip {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-height: 33px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 3px clamp(12px, 2vw, 22px);
+  background: #0b1020;
+  border-bottom: 1px solid rgba(142, 120, 208, .13);
+}
+.owner-mobile-language-slot {
+  display: flex;
+  justify-content: flex-end;
+  padding: 6px 14px;
+  border-bottom: 1px solid rgba(150, 126, 224, .12);
+}
+@media (max-width: 760px) {
+  .scenova-language-utility-strip { min-height: 32px; padding: 3px 12px; }
+}
+
+.scenova-language-utility-strip--mobile-only { display: none; }
+@media (max-width: 760px) {
+  .scenova-language-utility-strip--mobile-only { display: flex; }
+}

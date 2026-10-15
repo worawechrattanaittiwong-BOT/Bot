@@ -6,7 +6,6 @@ import { ScenovaBrand } from "../../components/ScenovaBrand";
 import { ScenovaIcon } from "../../components/ScenovaIcon";
 import styles from "./verify-2fa.module.css";
 import {useCustomerLanguage} from "../../lib/i18n/provider";
-import {LanguageSwitcher} from "../../components/i18n/LanguageSwitcher";
 
 function maskEmail(email: string) {
   const [local, domain] = email.split("@");
@@ -78,7 +77,7 @@ export default function VerifyTwoFactorPage() {
 
       <section className={styles.shell}>
         <div className={styles.card}>
-          <div className={styles.icon}><ScenovaIcon name="shield" size={28}/></div><LanguageSwitcher/>
+          <div className={styles.icon}><ScenovaIcon name="shield" size={28}/></div>
           <div className={styles.eyebrow}>{tx("เข้าสู่ระบบอย่างปลอดภัย","SECURE SIGN IN")}</div>
           <h1>{tx("ยืนยันตัวตนของคุณ","Verify it&apos;s you")}</h1>
           <p className={styles.lead}>Enter the 6-digit code from your authenticator app for <b>{maskedEmail || "your SCENOVA account"}</b>. You can also use one recovery code.</p>
