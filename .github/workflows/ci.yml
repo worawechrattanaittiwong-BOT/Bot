@@ -120,6 +120,8 @@ jobs:
         run: node ./tests/system-typography-contract.mjs
       - name: System popup contract
         run: node ./tests/system-popup-contract.mjs
+      - name: Customer Thai English translation coverage
+        run: node ./tests/customer-language-coverage.mjs
       - name: Trading Mode Guide vertical video contract
         shell: pwsh
         run: ./tests/mode-guide-video-contract.ps1
