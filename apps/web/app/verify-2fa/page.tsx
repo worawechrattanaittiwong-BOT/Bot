@@ -5,6 +5,8 @@ import { API_URL } from "../../lib/api";
 import { ScenovaBrand } from "../../components/ScenovaBrand";
 import { ScenovaIcon } from "../../components/ScenovaIcon";
 import styles from "./verify-2fa.module.css";
+import {useCustomerLanguage} from "../../lib/i18n/provider";
+import {LanguageSwitcher} from "../../components/i18n/LanguageSwitcher";
 
 function maskEmail(email: string) {
   const [local, domain] = email.split("@");
@@ -13,6 +15,8 @@ function maskEmail(email: string) {
 }
 
 export default function VerifyTwoFactorPage() {
+  const {lang}=useCustomerLanguage();
+  const tx=(th:string,en:string)=>lang==="th"?th:en;
   const [challenge, setChallenge] = useState("");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
@@ -74,13 +78,13 @@ export default function VerifyTwoFactorPage() {
 
       <section className={styles.shell}>
         <div className={styles.card}>
-          <div className={styles.icon}><ScenovaIcon name="shield" size={28}/></div>
-          <div className={styles.eyebrow}>SECURE SIGN IN</div>
-          <h1>Verify it&apos;s you</h1>
+          <div className={styles.icon}><ScenovaIcon name="shield" size={28}/></div><LanguageSwitcher/>
+          <div className={styles.eyebrow}>{tx("เข้าสู่ระบบอย่างปลอดภัย","SECURE SIGN IN")}</div>
+          <h1>{tx("ยืนยันตัวตนของคุณ","Verify it&apos;s you")}</h1>
           <p className={styles.lead}>Enter the 6-digit code from your authenticator app for <b>{maskedEmail || "your SCENOVA account"}</b>. You can also use one recovery code.</p>
 
           <form className={styles.form} onSubmit={verify}>
-            <label htmlFor="two-factor-code">Authenticator or Recovery Code</label>
+            <label htmlFor="two-factor-code">{tx("รหัสยืนยันหรือรหัสกู้คืน","Authenticator or Recovery Code")}</label>
             <input
               id="two-factor-code"
               type="text"
@@ -94,11 +98,11 @@ export default function VerifyTwoFactorPage() {
               disabled={busy}
             />
             {message && <div className={styles.error} role="alert">{message}</div>}
-            <button type="submit" className={styles.primary} disabled={!codeReady || busy}>{busy ? "Verifying..." : "Verify & Sign In"}<span>→</span></button>
+            <button type="submit" className={styles.primary} disabled={!codeReady || busy}>{busy ? tx("กำลังตรวจสอบ...","Verifying...") : tx("ยืนยันและเข้าสู่ระบบ","Verify & Sign In")}<span>→</span></button>
           </form>
 
-          <div className={styles.help}><ScenovaIcon name="info" size={16}/><span>Lost access to your authenticator? Use one of the recovery codes saved when you enabled 2FA.</span></div>
-          <button type="button" className={styles.cancel} onClick={cancel} disabled={busy}>← Back to Sign In</button>
+          <div className={styles.help}><ScenovaIcon name="info" size={16}/><span>{tx("ไม่สามารถใช้แอปยืนยันตัวตนได้? ใช้รหัสกู้คืนที่บันทึกไว้ตอนเปิดใช้งาน 2FA","Lost access to your authenticator? Use one of the recovery codes saved when you enabled 2FA.")}</span></div>
+          <button type="button" className={styles.cancel} onClick={cancel} disabled={busy}>{tx("← กลับหน้าเข้าสู่ระบบ","← Back to Sign In")}</button>
         </div>
       </section>
     </main>
