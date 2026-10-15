@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ScenovaIcon } from "./ScenovaIcon";
+import {useCustomerLanguage} from "../lib/i18n/provider";
+import {LanguageSwitcher} from "./i18n/LanguageSwitcher";
 import { ScenovaBrand } from "./ScenovaBrand";
 import { InAppCampaignHost } from "./InAppCampaignHost";
 
@@ -129,6 +131,8 @@ function UnifiedSidebar({
   userCode?:string|null;
   partner?:PartnerSummary;
 }) {
+  const {t}=useCustomerLanguage();
+  const navText=(key:string,label:string)=>elevated?label:t(key,label);
   const items = sidebarItems(elevated, partner);
   const sections = (["TRADING","MANAGEMENT","SYSTEM"] as const)
     .filter(section=>items.some(item=>item.section===section));
@@ -145,7 +149,7 @@ function UnifiedSidebar({
 
       {sections.map(section=>(
         <div key={section}>
-          <div className={"owner-nav-label " + (section!=="TRADING" ? "owner-nav-label-secondary" : "")}>{section}</div>
+          <div className={"owner-nav-label " + (section!=="TRADING" ? "owner-nav-label-secondary" : "")}>{navText(section,section)}</div>
           <nav className="side-nav owner-nav">
             {items.filter(item=>item.section===section).map(item=>(
               <Link
@@ -159,7 +163,7 @@ function UnifiedSidebar({
                 }}
               >
                 <span className="owner-nav-icon"><ScenovaIcon name={item.icon} size={18}/></span>
-                <span className="owner-nav-copy" title={item.hint}><b>{item.label}</b></span>
+                <span className="owner-nav-copy" title={item.hint}><b>{navText(item.key,item.label)}</b></span>
                 <span className="owner-nav-caret" aria-hidden="true">›</span>
               </Link>
             ))}
@@ -167,12 +171,13 @@ function UnifiedSidebar({
         </div>
       ))}
 
+      {!elevated&&<div style={{padding:"8px 16px"}}><LanguageSwitcher/></div>}
       <div className="owner-profile">
         <div className="owner-avatar">{avatar}</div>
-        <div><small>{profileTitle}</small><b>{profileValue}</b></div>
+        <div><small>{elevated?profileTitle:t("userId")}</small><b>{profileValue}</b></div>
         <span className="dot green"/>
       </div>
-      <button type="button" className="btn ghost full owner-logout" onClick={onLogout}><ScenovaIcon name="logout" size={18}/>Sign Out</button>
+      <button type="button" className="btn ghost full owner-logout" onClick={onLogout}><ScenovaIcon name="logout" size={18}/>{navText("logout","Sign Out")}</button>
     </aside>
     <InAppCampaignHost />
     </>
@@ -192,6 +197,8 @@ function UnifiedMobileNav({
   elevated:boolean;
   partner?:PartnerSummary;
 }) {
+  const {t}=useCustomerLanguage();
+  const navText=(key:string,label:string)=>elevated?label:t(key,label);
   const items = sidebarItems(elevated, partner);
   const sections = (["TRADING","MANAGEMENT","SYSTEM"] as const)
     .filter(section=>items.some(item=>item.section===section));
@@ -276,7 +283,7 @@ function UnifiedMobileNav({
             onClick={()=>setOpen(value=>!value)}
           >
             <ScenovaIcon name="overview" size={19}/>
-            <span>เมนู</span>
+            <span>{navText("menu","เมนู")}</span>
           </button>
         </div>
       </div>
@@ -303,10 +310,11 @@ function UnifiedMobileNav({
               <button type="button" className="owner-mobile-drawer-close" aria-label="ปิดเมนู" onClick={()=>setOpen(false)}>×</button>
             </header>
 
+            {!elevated&&<div style={{padding:"8px 16px"}}><LanguageSwitcher/></div>}
             <div className="owner-mobile-drawer-body">
               {sections.map(section=>(
                 <section key={section} className="owner-mobile-drawer-section">
-                  <div className="owner-mobile-drawer-label">{section}</div>
+                  <div className="owner-mobile-drawer-label">{navText(section,section)}</div>
                   <div className="owner-mobile-drawer-grid">
                     {items.filter(item=>item.section===section).map(item=>(
                       <Link
@@ -322,7 +330,7 @@ function UnifiedMobileNav({
                       >
                         <span className="owner-mobile-drawer-icon"><ScenovaIcon name={item.icon} size={20}/></span>
                         <span className="owner-mobile-drawer-copy">
-                          <b>{item.label}</b>
+                          <b>{navText(item.key,item.label)}</b>
                         </span>
                         <span className="owner-mobile-drawer-caret" aria-hidden="true">›</span>
                       </Link>
@@ -342,7 +350,7 @@ function UnifiedMobileNav({
               }}
             >
               <ScenovaIcon name="logout" size={19}/>
-              <span>ออกจากระบบ</span>
+              <span>{navText("logout","ออกจากระบบ")}</span>
             </button>
           </aside>
         </div>
