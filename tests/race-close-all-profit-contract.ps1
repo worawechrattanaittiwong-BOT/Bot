@@ -74,7 +74,8 @@ Need $api 'body.raceProfitTargetMode' 'API must validate RACE target mode'
 Need $api '["BASKET", "POSITION", "OFF"]' 'API RACE target mode choices missing'
 Need $api 'clean.raceCloseAllProfitEnabled = raceMode === "BASKET"' 'Legacy RACE switch must mirror Basket mode only'
 
-Need $web 'raceProfitTargetMode: "POSITION"' 'Dashboard default RACE target mode must be per-position'
+# New database accounts default to POSITION; Dashboard unsaved draft defaults to BASKET for lot-target preview.
+Need $web 'raceProfitTargetMode: "BASKET"' 'Dashboard draft target mode must match the current UI'
 Need $web 'racePerPositionProfitMoney: 1' 'Dashboard default RACE per-position target must be 1'
 Need $web 'settingHelpLabel("profit-kind","รูปแบบกำไร"' 'RACE profit selector must be visible with tap help'
 Need $web 'เป้ากำไรต่อไม้' 'RACE per-position target input missing'
