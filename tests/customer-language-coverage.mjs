@@ -15,7 +15,8 @@ const routes=walk(path.join(root,"app")).filter(p=>p.endsWith("/page.tsx")&&!p.i
 const components=walk(path.join(root,"components")).filter(p=>p.endsWith(".tsx")&&!p.toLowerCase().includes("admin"));
 assert.ok(routes.length>=24,"Expected at least 24 non-admin customer/public routes");
 assert.match(fs.readFileSync(path.join(root,"app/layout.tsx"),"utf8"),/CustomerVisibleTextTranslator/);
-assert.match(fs.readFileSync(path.join(root,"components/i18n/CustomerLanguageDock.tsx"),"utf8"),/if\(admin\)return null/);
+assert.match(fs.readFileSync(path.join(root,"components/i18n/CustomerLanguageDock.tsx"),"utf8"),/if\(admin \|\| path==="\/dashboard"\)return null/);
+assert.match(fs.readFileSync(path.join(root,"app/dashboard/page.tsx"),"utf8"),/data-scenova-language-dock/);
 const missing=new Set();
 let plain=0,quoted=0;
 for(const file of [...routes,...components]){

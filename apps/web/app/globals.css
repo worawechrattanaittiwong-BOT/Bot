@@ -10472,3 +10472,10 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
 }
 
 .vps-slot-slip-error{margin:10px 0;padding:10px 12px;border:1px solid #a84c68;background:#321722;color:#ffd6df;border-radius:10px;font-size:12px;line-height:1.55;overflow-wrap:anywhere}
+
+/* SCENOVA locale switcher lives in the VPS toolbar, never above its controls. */
+.cc-inline-language { display: flex; align-items: center; flex: 0 0 auto; padding: 3px 5px; border: 1px solid rgba(148,120,241,.3); border-radius: 10px; background: rgba(12,13,29,.78); }
+.cc-inline-language button { color: #e9e6ff; background: transparent; border: 1px solid transparent; border-radius: 7px; padding: 6px 8px; cursor: pointer; white-space: nowrap; }
+.cc-inline-language button[aria-pressed="true"] { background: rgba(112,88,220,.28); border-color: rgba(167,141,255,.38); }
+.cc-slot-switcher-actions { flex-wrap: wrap; }
+@media (max-width: 760px) { .cc-inline-language { margin-left: auto; } }
