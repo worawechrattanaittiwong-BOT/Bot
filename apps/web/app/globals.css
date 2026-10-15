@@ -10470,3 +10470,5 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
   }
   .vps-slot-manager .vps-slot-card footer .btn{min-width:90px}
 }
+
+.vps-slot-slip-error{margin:10px 0;padding:10px 12px;border:1px solid #a84c68;background:#321722;color:#ffd6df;border-radius:10px;font-size:12px;line-height:1.55;overflow-wrap:anywhere}

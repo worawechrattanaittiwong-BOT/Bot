@@ -351,6 +351,7 @@ export default function DashboardPage() {
   const [vpsRenewSlotId, setVpsRenewSlotId] = useState("");
   const [vpsPaymentOrderId, setVpsPaymentOrderId] = useState("");
   const [vpsPurchaseBusy, setVpsPurchaseBusy] = useState(false);
+  const [vpsPaymentError, setVpsPaymentError] = useState("");
   const [ownerAddonPriceEditorOpen, setOwnerAddonPriceEditorOpen] = useState(false);
   const [ownerAddonPrices, setOwnerAddonPrices] = useState<Record<number,{priceUsd:string;enabled:boolean}>>({
     1:{priceUsd:"",enabled:false},
@@ -2793,10 +2794,16 @@ export default function DashboardPage() {
       .sort((a,b)=>Number(a.months)-Number(b.months));
     setVpsPurchaseMonths(Number(enabledPackages[0]?.months || 1));
     setVpsSlipFile(null);
+    setVpsPaymentError("");
     setOwnerAddonPriceEditorOpen(false);
 
     setVpsRenewSlotId(slotId);
-    setVpsPaymentOrderId("");
+    const pending = cloudOrders.find(order=>
+      ["PENDING","REVIEW"].includes(String(order.status || "").toUpperCase()) &&
+      String(order.purchase_type || "").toUpperCase()==="ADDON" &&
+      String(order.slot_id || "")===String(slotId || "")
+    );
+    setVpsPaymentOrderId(pending?.id || "");
     vpsSlotDialogRef.current?.showModal();
   }
 
@@ -2856,7 +2863,19 @@ export default function DashboardPage() {
 
   async function createVpsSlotOrder() {
     if (vpsPurchaseBusy) return;
+    // The existing payment must remain available until verified or explicitly cancelled.
+    const pending = cloudOrders.find(order=>
+      ["PENDING","REVIEW"].includes(String(order.status || "").toUpperCase()) &&
+      String(order.purchase_type || "").toUpperCase()==="ADDON" &&
+      String(order.slot_id || "")===String(vpsRenewSlotId || "")
+    );
+    if(pending){
+      setVpsPaymentOrderId(pending.id);
+      setVpsPaymentError("มีรายการชำระเดิมอยู่แล้ว · หากโอนแล้วให้แนบสลิปของรายการนี้ ห้ามโอนซ้ำ");
+      return;
+    }
     setVpsPurchaseBusy(true);
+    setVpsPaymentError("");
     setError("");
     setNotice("");
     try {
@@ -2881,6 +2900,7 @@ export default function DashboardPage() {
       setVpsPaymentOrderId(String(result?.id || ""));
       await loadVpsCommerce();
     } catch (e:any) {
+      setVpsPaymentError(String(e?.message || "สร้างรายการ VPS Slot ไม่สำเร็จ"));
       setError(String(e?.message || "สร้างรายการ VPS Slot ไม่สำเร็จ"));
       await loadVpsCommerce().catch(()=>{});
     } finally {
@@ -2891,16 +2911,17 @@ export default function DashboardPage() {
   async function verifyVpsSlotSlip() {
     if (vpsPurchaseBusy || !vpsPaymentOrderId || !vpsSlipFile) return;
     if (!["image/jpeg","image/png","image/gif","image/webp"].includes(vpsSlipFile.type)) {
-      setError("รองรับสลิป JPG, PNG, GIF หรือ WebP เท่านั้น");
+      setVpsPaymentError("รองรับสลิป JPG, PNG, GIF หรือ WebP เท่านั้น");
       return;
     }
     if (vpsSlipFile.size <= 0 || vpsSlipFile.size > 4 * 1024 * 1024) {
-      setError("รูปสลิปต้องมีขนาดไม่เกิน 4 MB");
+      setVpsPaymentError("รูปสลิปต้องมีขนาดไม่เกิน 4 MB");
       return;
     }
 
+    const checkingId = vpsPaymentOrderId;
     setVpsPurchaseBusy(true);
-    setError("");
+    setVpsPaymentError("");
     try {
       const base64 = await new Promise<string>((resolve,reject)=>{
         const reader = new FileReader();
@@ -2913,17 +2934,34 @@ export default function DashboardPage() {
         body:JSON.stringify({ base64 })
       });
       const next = await loadVpsCommerce();
-      const paidOrder = next.orders.find((item:CloudOrder)=>item.id===vpsPaymentOrderId);
+      const paidOrder = next.orders.find((item:CloudOrder)=>item.id===checkingId);
       const targetSlotId = String(paidOrder?.slot_id || vpsRenewSlotId || selectedSlotIdRef.current || "");
       await load(targetSlotId);
-      if (result?.status === "PAID") {
+      if (result?.status === "PAID" && paidOrder?.status === "PAID" && paidOrder.slot_id) {
         vpsSlotDialogRef.current?.close();
         setVpsPaymentOrderId("");
         setVpsSlipFile(null);
         setNotice(vpsRenewSlotId ? "ต่ออายุ VPS Slot เสริมสำเร็จ" : "ชำระสำเร็จ · เพิ่ม VPS Slot เสริมใหม่แล้ว");
+      } else {
+        setVpsPaymentError("ยังไม่ยืนยันการเปิด Slot กรุณาตรวจสอบสถานะรายการเดิม ห้ามโอนซ้ำ");
       }
     } catch (e:any) {
-      setError(String(e?.message || "ตรวจสลิปไม่สำเร็จ"));
+      const message = String(e?.message || "ตรวจสลิปไม่สำเร็จ");
+      // If the response was lost, verify the server order state before prompting a retry.
+      let activated = false;
+      try {
+        const updated = await loadVpsCommerce();
+        const order = updated.orders.find((item:CloudOrder)=>item.id===checkingId);
+        if(order?.status==="PAID" && order.slot_id){
+          await load(String(order.slot_id));
+          vpsSlotDialogRef.current?.close();
+          setVpsPaymentOrderId("");
+          setVpsSlipFile(null);
+          setNotice("ชำระสำเร็จ · VPS Slot พร้อมใช้งาน");
+          activated = true;
+        }
+      } catch {}
+      if (!activated) setVpsPaymentError(message+" · หากโอนแล้วอย่าโอนซ้ำหรือยกเลิกรายการ");
     } finally {
       setVpsPurchaseBusy(false);
     }
@@ -2944,27 +2982,39 @@ export default function DashboardPage() {
         setNotice(vpsRenewSlotId ? "ต่ออายุ VPS Slot เสริมสำเร็จ" : "ชำระสำเร็จ · เพิ่ม VPS Slot เสริมใหม่แล้ว");
       }
     } catch (e:any) {
-      setError(String(e?.message || "ตรวจสอบการชำระเงินไม่สำเร็จ"));
+      setVpsPaymentError(String(e?.message || "ตรวจสอบการชำระเงินไม่สำเร็จ"));
     } finally {
       setVpsPurchaseBusy(false);
     }
   }
 
-  async function cancelVpsSlotOrder(closeAfter = false) {
-    if (vpsPurchaseBusy || !vpsPaymentOrderId) {
-      if (closeAfter || !vpsPaymentOrderId) vpsSlotDialogRef.current?.close();
-      return;
-    }
+  function closeVpsSlotDialog() {
+    if(vpsPurchaseBusy)return;
+    vpsSlotDialogRef.current?.close();
+    setVpsPaymentOrderId("");
+    setVpsPaymentError("");
+  }
+
+  async function cancelVpsSlotOrder() {
+    if(vpsPurchaseBusy || !vpsPaymentOrderId)return;
+    const agreed = await confirmPopup({
+      tone:"warning",
+      title:"ยกเลิกรายการชำระเงิน",
+      message:"ยืนยันเฉพาะกรณียังไม่ได้โอนเงิน หากโอนแล้วให้แนบสลิปเดิมหรือติดต่อผู้ดูแล ห้ามสร้างรายการใหม่",
+      confirmLabel:"ยืนยันว่าไม่ได้โอนเงิน",
+      cancelLabel:"กลับไปตรวจสลิป"
+    });
+    if(!agreed)return;
     setVpsPurchaseBusy(true);
+    setVpsPaymentError("");
     try {
-      await api(`/cloud/orders/${vpsPaymentOrderId}/cancel-slip-payment`, { method:"POST" });
+      await api("/cloud/orders/"+vpsPaymentOrderId+"/cancel-slip-payment",{method:"POST"});
       setVpsPaymentOrderId("");
       setVpsSlipFile(null);
       await loadVpsCommerce();
-      if (closeAfter) vpsSlotDialogRef.current?.close();
-    } catch {
-      if (closeAfter) vpsSlotDialogRef.current?.close();
-    } finally {
+    }catch(e:any){
+      setVpsPaymentError(String(e?.message || "ยกเลิกรายการไม่ได้"));
+    }finally{
       setVpsPurchaseBusy(false);
     }
   }
@@ -5926,7 +5976,7 @@ export default function DashboardPage() {
           className={`vps-slot-dialog ${vpsPaymentOrder ? "vps-slot-dialog-checkout" : ""}`}
           onCancel={event=>{
             event.preventDefault();
-            if (!vpsPurchaseBusy) void cancelVpsSlotOrder(true);
+            if (!vpsPurchaseBusy) closeVpsSlotDialog();
           }}
           onClose={()=>{
             setVpsSlipFile(null);
@@ -5956,10 +6006,11 @@ export default function DashboardPage() {
                 {String(data.user?.role || "").toUpperCase()==="OWNER" && !ownerAddonPriceEditorOpen && !vpsPaymentOrder && (
                   <button type="button" className="btn ghost" onClick={openOwnerAddonPricing}>ตั้งราคา Slot เสริม</button>
                 )}
-                <button type="button" className="vps-slot-dialog-close" onClick={()=>void cancelVpsSlotOrder(true)} aria-label="ปิด">×</button>
+                <button type="button" className="vps-slot-dialog-close" onClick={closeVpsSlotDialog} aria-label="ปิด">×</button>
               </div>
             </header>
 
+            {vpsPaymentError && <div className="vps-slot-slip-error" role="alert">{vpsPaymentError}</div>}
             {ownerAddonPriceEditorOpen ? (
               <section className="vps-addon-price-editor">
                 <div className="vps-addon-price-note">
@@ -6176,15 +6227,15 @@ export default function DashboardPage() {
                             disabled={vpsPurchaseBusy || !vpsSlipFile || !vpsPaymentAccount}
                             onClick={()=>void verifyVpsSlotSlip()}
                           >
-                            {vpsPurchaseBusy ? "กำลังดำเนินการ..." : "ตรวจสลิปและเปิดสิทธิ์"}
+                            {vpsPurchaseBusy ? "กำลังตรวจสลิป กรุณารอ..." : "ตรวจสลิปและเปิดสิทธิ์"}
                           </button>
                           <button
                             type="button"
                             className="btn ghost"
                             disabled={vpsPurchaseBusy}
-                            onClick={()=>void cancelVpsSlotOrder(true)}
+                            onClick={()=>void cancelVpsSlotOrder()}
                           >
-                            ยกเลิกรายการ
+                            ยกเลิกรายการ (ยังไม่โอน)
                           </button>
                         </div>
                       </>
@@ -6201,9 +6252,9 @@ export default function DashboardPage() {
                           type="button"
                           className="btn ghost btn-lg"
                           disabled={vpsPurchaseBusy}
-                          onClick={()=>void cancelVpsSlotOrder(true)}
+                          onClick={closeVpsSlotDialog}
                         >
-                          ยกเลิกรายการ
+                          ปิดหน้าต่าง · เก็บรายการไว้
                         </button>
                       </>
                     ) : (

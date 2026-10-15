@@ -598,15 +598,9 @@ export class CloudCustomerController {
         [req.user.sub]
       )).rows[0];
       if (pending) {
-        if (paymentMode() === "EASYSLIP" && !pending.charge_id) {
-          await tx.query(
-            "UPDATE cloud_orders SET status='FAILED',expires_at=now() WHERE id=$1",
-            [pending.id]
-          );
-          await this.promotions.release(tx, "CLOUD", pending.id);
-        } else {
-          throw new ConflictException("มีรายการรอชำระอยู่แล้ว กรุณาตรวจสอบรายการเดิม");
-        }
+        // Never discard an unpaid QR order automatically: the customer might
+        // already have transferred funds before uploading a readable slip.
+        throw new ConflictException("มีรายการรอชำระอยู่แล้ว กรุณาตรวจสลิปของรายการเดิมก่อน หากโอนแล้วอย่ายกเลิกรายการ");
       }
       const purchaseType = body.slotId
         ? "RENEW"

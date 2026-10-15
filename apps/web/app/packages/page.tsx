@@ -520,6 +520,14 @@ export default function PackagesPage() {
 
   async function cancelSlipPayment(type: "local" | "cloud", id: string) {
     if (busy) return false;
+    const agreed = await confirmPopup({
+      tone:"warning",
+      title:"ยกเลิกรายการชำระเงิน",
+      message:"ยืนยันเฉพาะกรณียังไม่ได้โอนเงิน หากโอนแล้วอย่ายกเลิก ให้แนบสลิปเดิมหรือติดต่อผู้ดูแล",
+      confirmLabel:"ยืนยันว่าไม่ได้โอนเงิน",
+      cancelLabel:"กลับไปตรวจสลิป"
+    });
+    if(!agreed)return false;
     setBusy("cancel-" + type);
     setMessage("");
     try {
@@ -531,7 +539,8 @@ export default function PackagesPage() {
       );
       await load();
       return true;
-    } catch {
+    } catch (e:unknown) {
+      notify("bad",e instanceof Error?e.message:"ยกเลิกไม่สำเร็จ");
       return false;
     } finally {
       setBusy("");
@@ -540,14 +549,9 @@ export default function PackagesPage() {
 
   async function closeCheckoutDialog() {
     if (busy) return;
-    if (checkoutOrderId) {
-      const cancelled = await cancelSlipPayment(
-        activeSystem === "LOCAL" ? "local" : "cloud",
-        checkoutOrderId
-      );
-      if (!cancelled) return;
-      setCheckoutOrderId("");
-    }
+    // Dismissing a payment window never cancels an order; the bank transfer may
+    // have been made already. Existing pending orders remain in Payment Details.
+    setCheckoutOrderId("");
     setCheckoutPack(null);
     setPromoState("IDLE");
     setPromoNotice("");
@@ -584,16 +588,25 @@ export default function PackagesPage() {
           body: JSON.stringify({ base64 })
         }
       );
-      await load();
-      notify(
-        "good",
-        result?.status === "PAID"
-          ? "ตรวจสลิปสำเร็จ เปิดสิทธิ์ใช้งานแล้ว"
-          : "ตรวจสลิปสำเร็จ"
-      );
+      if (result?.status !== "PAID") {
+        throw new Error("ยังไม่ยืนยันการชำระเงินและเปิดสิทธิ์");
+      }
+      await load().catch(()=>{});
+      notify("good", "ตรวจสลิปสำเร็จ เปิดสิทธิ์ใช้งานแล้ว");
       return result;
     } catch (error: unknown) {
-      notify("bad", error instanceof Error ? error.message : "ตรวจสลิปไม่สำเร็จ");
+      // A client-side timeout can occur after the order was committed. Re-read
+      // its status before concluding that the payment failed.
+      try {
+        const existing = await api(type === "local" ? "/packages/local/orders" : "/cloud/orders");
+        const order = Array.isArray(existing) ? existing.find((entry:any)=>entry.id===id) : null;
+        if (order?.status==="PAID" && order.slot_id) {
+          await load().catch(()=>{});
+          notify("good","ตรวจสอบกับเซิร์ฟเวอร์แล้ว · ชำระเงินสำเร็จ เปิดสิทธิ์แล้ว");
+          return {status:"PAID"};
+        }
+      } catch {}
+      notify("bad", (error instanceof Error ? error.message : "ตรวจสลิปไม่สำเร็จ")+" · หากโอนแล้วอย่าโอนซ้ำหรือยกเลิกรายการ");
       return null;
     } finally {
       setBusy("");
@@ -1052,6 +1065,11 @@ export default function PackagesPage() {
               </button>
             </div>
 
+            {messageKind==="bad" && message && (
+              <div role="alert" className={styles.message+" "+styles.bad}>
+                {message} · หากโอนแล้วอย่าโอนซ้ำหรือยกเลิกรายการ
+              </div>
+            )}
             <div className={styles.checkoutSteps} aria-label="ขั้นตอนการชำระเงิน">
               <span aria-current={!checkoutOrder ? "step" : undefined} className={!checkoutOrder ? styles.checkoutStepActive : styles.checkoutStepDone}>
                 <b>01</b> ยืนยันแพ็กเกจ

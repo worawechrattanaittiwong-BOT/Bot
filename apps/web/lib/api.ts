@@ -1,6 +1,7 @@
 export const API_URL = process.env.NEXT_PUBLIC_API_URL || "/backend";
 const API_TIMEOUT_MS = 15_000;
 const API_UPLOAD_TIMEOUT_MS = 5 * 60_000;
+const API_SLIP_VERIFICATION_TIMEOUT_MS = 60_000;
 
 function getDeviceId() {
   if (typeof window === "undefined") return "";
@@ -41,7 +42,7 @@ async function requestJson(path: string, init: RequestInit, emergencyAdminKey = 
 
   const timeoutId = window.setTimeout(
     () => controller.abort(),
-    isFormData ? API_UPLOAD_TIMEOUT_MS : API_TIMEOUT_MS
+    isFormData ? API_UPLOAD_TIMEOUT_MS : path.endsWith("/verify-slip") ? API_SLIP_VERIFICATION_TIMEOUT_MS : API_TIMEOUT_MS
   );
   try {
     const response = await fetch(API_URL + "/api" + path, {
