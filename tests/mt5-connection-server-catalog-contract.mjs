@@ -88,7 +88,7 @@ assert.match(
 );
 assert.match(
   dashboard,
-  /brokerCatalog\.filter\(b=>b\.code!=="OTHER"\)/,
+  /\.filter\(b=>!\["EXNESS","OTHER"\]\.includes\(String\(b\.code \|\| ""\)\.toUpperCase\(\)\)\)/,
   "Other broker must not be duplicated"
 );
 assert.match(
