@@ -681,7 +681,7 @@
 .quickNav a:hover,.quickNav a:focus-visible {background:rgba(126,85,247,.23);border-color:#9371ed;outline-offset:2px}
 .healthGrid {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:8px 0 22px}
 .healthCard {display:flex;flex-direction:column;gap:10px;padding:19px 20px;background:linear-gradient(145deg,rgba(32,25,52,.96),rgba(15,12,26,.96));border:1px solid rgba(154,130,232,.2);border-radius:16px;min-width:0}
-.healthCard small {color:#a592ca;letter-spacing:.11em;font-size:10px;font-weight:800}
+.healthCard small {color:#a592ca;letter-spacing:.11em;font-size:11px;font-weight:800}
 .healthCard strong {font-size:17px;line-height:1.3}
 .healthCard span {font-size:11px;color:#a49bad;line-height:1.55}
 .healthGood {color:#8ce6b5}.healthWarn {color:#ffc578}
@@ -747,8 +747,8 @@
 .detailAccountHead{display:flex;align-items:flex-start;gap:12px;justify-content:space-between;flex-wrap:wrap}
 .detailAccountHead>div{display:grid;gap:4px;min-width:0}
 .detailAccountHead b{font-size:13px;color:#f6eeff}
-.detailAccountHead small{font-size:10px;color:#a69ab8;overflow-wrap:anywhere}
-.detailFound,.detailNotFound,.detailUnknown{padding:5px 8px;border-radius:8px;border:1px solid rgba(99,224,154,.3);background:rgba(70,165,112,.1);color:#9ae8bf;font-size:10px;font-weight:700}
+.detailAccountHead small{font-size:11px;color:#a69ab8;overflow-wrap:anywhere}
+.detailFound,.detailNotFound,.detailUnknown{padding:5px 8px;border-radius:8px;border:1px solid rgba(99,224,154,.3);background:rgba(70,165,112,.1);color:#9ae8bf;font-size:11px;font-weight:700}
 .detailNotFound{border-color:rgba(246,182,98,.3);background:rgba(196,119,32,.08);color:#f0cf8c}
 .detailUnknown{border-color:rgba(156,146,180,.3);background:rgba(137,124,166,.08);color:#b8adc9}
 .detailRebate{display:grid;gap:7px;padding-top:11px;border-top:1px solid rgba(164,132,215,.16);font-size:11px;color:#c8badc;overflow-wrap:anywhere}
@@ -766,7 +766,7 @@
 .quickNav a{flex:0 0 auto;padding:8px 11px;font-size:11px;border-radius:9px;white-space:nowrap}
 .healthGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin:8px 0 12px}
 .healthCard{display:flex;flex-direction:row;align-items:center;justify-content:space-between;gap:6px;padding:10px 12px;min-height:42px;border-radius:11px;background:rgba(118,78,201,.065)}
-.healthCard small{font-size:10px;letter-spacing:0;color:#a69ab9;white-space:nowrap}
+.healthCard small{font-size:11px;letter-spacing:0;color:#a69ab9;white-space:nowrap}
 .healthCard strong{font-size:11px;white-space:nowrap;line-height:1.2}
 .foldCard{background:linear-gradient(145deg,rgba(23,17,36,.96),rgba(12,10,21,.96));border:1px solid rgba(154,122,255,.19);border-radius:13px;margin:0 0 9px;min-width:0;scroll-margin-top:22px;overflow:visible}
 .foldSummary{display:flex;align-items:center;justify-content:space-between;gap:13px;padding:12px 15px;min-height:54px;list-style:none;cursor:pointer;color:#e9e0fa}
@@ -805,14 +805,14 @@
 .ibTitle{gap:8px}
 .ibTitle b{font-size:13px}
 .ibTitle button{font-size:11px;min-height:34px;padding:7px 10px}
-.timestamp{display:block;color:#80748f;font-size:10px;margin-top:7px}
+.timestamp{display:block;color:#80748f;font-size:11px;margin-top:7px}
 .clientsHead{padding-bottom:10px}
 .matchSummary{padding:9px 11px;margin:10px 0 4px}
 .clientList{margin-top:2px}
 .clientRow{grid-template-columns:minmax(135px,1.25fr) minmax(110px,.8fr) minmax(93px,.6fr) auto;gap:9px;min-height:58px;padding:10px 0}
 .clientIdentity,.mt5Cell,.clientStatus{gap:4px}
 .clientIdentity b{font-size:12px}
-.clientIdentity span{font-size:10px}
+.clientIdentity span{font-size:11px}
 .mt5Cell b{font-size:11px;overflow-wrap:anywhere;white-space:normal}
 .clientAction{gap:6px;flex-wrap:wrap}
 .clientAction .detailsButton{min-width:0;min-height:34px;padding:7px 11px;font-size:11px}
@@ -832,25 +832,25 @@
 @media(max-width:720px){
   .shell{width:calc(100% - 20px);padding-top:12px;padding-bottom:44px}
   .header h1{font-size:23px}
-  .header span{font-size:10px}
+  .header span{font-size:11px}
   .healthGrid{grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;margin:7px 0 11px}
   .healthCard{flex-direction:column;justify-content:center;gap:4px;padding:8px 4px;min-height:52px;text-align:center}
-  .healthCard small{font-size:9px}
-  .healthCard strong{font-size:10px}
+  .healthCard small{font-size:11px}
+  .healthCard strong{font-size:11px}
   .quickNav a{flex:0 0 auto;padding:7px 10px}
   .card{padding:12px}
   .foldSummary{padding:11px 13px;min-height:51px}
   .foldBody{padding:10px 12px 12px}
   .foldSummary>span:first-child{gap:7px}
-  .foldSummary small{font-size:10px}
+  .foldSummary small{font-size:11px}
   #ib-performance{padding:11px}
   .clientRow{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px 10px;padding:12px 0}
   .clientIdentity{grid-column:1}
   .mt5Cell{grid-column:2;align-self:start}
   .clientStatus{grid-column:1;align-self:center}
   .clientAction{grid-column:2;justify-content:flex-end;padding:0}
-  .clientAction .detailsButton{font-size:10px;padding:7px 9px}
-  .verifyDisclosure summary{font-size:10px;padding:8px 9px}
+  .clientAction .detailsButton{font-size:11px;padding:7px 9px}
+  .verifyDisclosure summary{font-size:11px;padding:8px 9px}
   .verifyDisclosure[open]{flex-basis:100%}
   .verifyBody select{width:115px}
   .accountDetailsHead button{width:auto}
@@ -859,8 +859,8 @@
   .simpleActions button{width:auto;flex:1 1 160px}
 }
 @media(max-width:380px){
-  .healthCard small{font-size:8px}
-  .healthCard strong{font-size:9px}
+  .healthCard small{font-size:11px}
+  .healthCard strong{font-size:11px}
   .clientAction{gap:5px}
   .clientAction .detailsButton{padding:7px}
 }

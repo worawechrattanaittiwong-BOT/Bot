@@ -1,6 +1,6 @@
 .wrap {border:1px solid rgba(139,110,216,.28);border-radius:20px;padding:clamp(16px,2vw,25px);background:linear-gradient(145deg,rgba(30,23,49,.92),rgba(13,10,24,.97));min-width:0;color:#eae2fb}
 .heading {display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
-.heading small{font-weight:800;letter-spacing:.13em;font-size:10px;color:#b9a2ff}
+.heading small{font-weight:800;letter-spacing:.13em;font-size:11px;color:#b9a2ff}
 .heading h2{font-size:21px;line-height:1.35;margin:6px 0;color:#fff}
 .heading p,.editor p{font-size:12px;line-height:1.65;color:#aaa0bd;margin:4px 0}
 .heading a {text-decoration:none;color:#c9b7ff;border:1px solid rgba(158,132,230,.32);border-radius:10px;padding:10px 13px;font-size:12px;font-weight:800}
@@ -75,10 +75,10 @@
 .mobileClientCard{padding:11px;gap:6px}
 .mobileCardHead{gap:2px}
 .mobileCardHead b{font-size:13px}
-.mobileCardArrow{font-size:10px}
+.mobileCardArrow{font-size:11px}
 .mobileCardDest{padding:7px 9px;font-size:12px}
 .mobileCardStats{gap:5px 9px}
-.mobileCardStats span{font-size:10px}
+.mobileCardStats span{font-size:11px}
 .mobileCardStats b{font-size:11px}
 .mobileClientCard .selectButton{padding:9px;font-size:11px}
 .pager{margin-top:9px}

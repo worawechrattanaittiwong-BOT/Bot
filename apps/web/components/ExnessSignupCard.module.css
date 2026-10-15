@@ -277,7 +277,7 @@
 .transferGuide li span{font-size:11px;color:#b3a6c3;line-height:1.65}
 .transferChatCard{display:grid;gap:10px;margin-top:15px;border-radius:12px;border:1px solid rgba(139,108,219,.32);padding:14px;background:#100c1b}
 .transferChatHeading{display:flex;gap:6px;justify-content:space-between;flex-wrap:wrap;align-items:center}
-.transferChatHeading b{font-size:13px;color:#efe4ff}.transferChatHeading span{font-size:10px;color:#a89cb8}
+.transferChatHeading b{font-size:13px;color:#efe4ff}.transferChatHeading span{font-size:11px;color:#a89cb8}
 .transferChatMessage{resize:vertical;min-height:135px;max-height:300px;width:100%;border:1px solid rgba(161,137,208,.32);background:#0b0914;color:#e6dcec;font:inherit;font-size:12px;line-height:1.65;border-radius:10px;padding:12px;overflow-wrap:anywhere}
 .transferChatMessage:focus-visible{outline:2px solid #9d7aff;outline-offset:2px}
 .transferChatCopyButton{width:100%;min-height:41px;border-radius:10px;border:1px solid rgba(163,132,246,.52);background:rgba(121,81,225,.19);color:#eee4ff;font-size:12px;font-weight:800;cursor:pointer}
