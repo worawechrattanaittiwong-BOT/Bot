@@ -115,9 +115,11 @@ Need $web 'MANUAL:{basket:"manualMaxBasketLossMoney"' 'MANUAL risk profile mappi
 Forbid $api 'clean.manualStopLossPoints = 0;' 'Mode switching must not erase the saved MANUAL stop profile'
 Need $web 'ปิด = ไม่มี Broker Stop Loss' 'Dashboard must explain that MANUAL Stop Loss OFF is truly off'
 Need $web 'autoMaxPositions: 3' 'AUTO requested default must be 3 positions'
-Need $web 'raceMaxPositions: 5' 'RACE requested default must be 5 positions'
+# Dashboard new-session draft uses one RACE slot; persisted DB defaults are not modified here.
+Need $web 'raceMaxPositions: 1' 'RACE dashboard draft position limit must remain 1'
 Need $web 'counterMaxPositions: 20' 'COUNTER requested default must be 20 total positions'
-Need $web 'raceProfitTargetMode: "POSITION"' 'RACE requested default must be per-position profit'
+# Dashboard RACE draft is BASKET; user-selected persisted RACE profile is not overridden.
+Need $web 'raceProfitTargetMode: "BASKET"' 'RACE dashboard draft must retain basket target mode'
 Need $web 'counterPerPositionProfitMoney: 1' 'COUNTER requested profit default must be 1'
 Need $web 'autoDailyLossMoney: 0' 'AUTO daily loss must default OFF'
 Need $web 'raceMaxBasketLossMoney: 0' 'RACE basket loss must default OFF'
