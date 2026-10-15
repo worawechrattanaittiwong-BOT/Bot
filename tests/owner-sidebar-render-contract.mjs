@@ -20,7 +20,9 @@ const mocks={
   "./ScenovaBrand":{ScenovaBrand:stubBrand},
   "./InAppCampaignHost":{InAppCampaignHost:()=>null},
   "./i18n/LanguageSwitcher":{LanguageSwitcher:stubLang},
-  "../lib/i18n/provider":{useCustomerLanguage:()=>({lang:"th",t:(key,fallback)=>fallback||key})}
+  "../lib/i18n/provider":{useCustomerLanguage:()=>({
+    lang:"th",t:(key,fallback)=>key==="trading-account"?"บัญชี MT5 และ EA":fallback||key
+  })}
 };
 const js=ts.transpileModule(readFileSync(source,"utf8"),{
   compilerOptions:{jsx:ts.JsxEmit.ReactJSX,module:ts.ModuleKind.CommonJS,esModuleInterop:true}
@@ -44,6 +46,8 @@ assert.match(owner,/owner-nav-groups/,"OWNER dashboard must show grouped sidebar
 assert.match(owner,/MT5 &amp; Accounts/);
 assert.match(owner,/Advanced Settings/);
 assert.match(owner,/Account &amp; Members/);
+assert.match(owner,/MT5 &amp; EA/,"OWNER TH-mixed labels retain old English wording");
+assert.doesNotMatch(owner,/บัญชี MT5 และ EA/,"OWNER Thai labels must not be rewritten");
 assert.doesNotMatch(owner,/owner-nav-label-secondary/,"OWNER dashboard must not use legacy section list");
 for(const href of ["/dashboard?view=account","/broker","/fleet-monitor",
   "/admin?view=customers","/admin/commission","/admin/promotions",
@@ -62,5 +66,6 @@ pathname="/dashboard";
 const customer=render(CustomerSidebar);
 assert.match(customer,/customer-nav-groups/);
 assert.match(customer,/My Account/);
+assert.match(customer,/บัญชี MT5 และ EA/,"CUSTOMER TH translation preserved");
 assert.doesNotMatch(customer,/Advanced Settings/);
 console.log("OWNER grouped /dashboard; ADMIN legacy preserved; CUSTOMER intact: PASS");

@@ -152,7 +152,7 @@ function CustomerNavGroups({
   const currentGroup=groups.find(group=>group.keys.some(key=>key===activeKey))?.key||"";
   const [expanded,setExpanded]=useState<string>(currentGroup);
   useEffect(()=>{if(currentGroup)setExpanded(currentGroup)},[currentGroup]);
-  const title=(key:string,fallback:string)=>t(key,fallback);
+  const title=(key:string,fallback:string)=>owner ? fallback : t(key,fallback);
   const navigate=(event:React.MouseEvent<HTMLAnchorElement>,href:string)=>{
     onChoose?.();
     if(onNavigate?.(href)===true)event.preventDefault();
@@ -162,7 +162,7 @@ function CustomerNavGroups({
     <div className={"customer-nav-groups"+(mobile?" customer-nav-groups-mobile":"")+(owner?" owner-nav-groups":"")}>
       {!mobile&&(
         <div className="owner-nav-section-head customer-nav-heading">
-          <div className="owner-nav-label">{lang==="en"?"NAVIGATION":t("menu","เมนู")}</div>
+          <div className="owner-nav-label">{owner||lang==="en"?"NAVIGATION":t("menu","เมนู")}</div>
           {showLanguageControl&&<LanguageSwitcher compact/>}
         </div>
       )}
