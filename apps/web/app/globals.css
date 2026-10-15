@@ -10718,3 +10718,14 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
 @media (prefers-reduced-motion:reduce) {
   .customer-nav-chevron { transition:none; }
 }
+
+/* Owner Control Center uses the same collapsible navigation as Customer;
+   the existing /admin sidebar keeps its original sections. */
+.owner-sidebar.elevated-sidebar .owner-nav-groups {
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+  min-width:0;
+}
+.owner-sidebar.elevated-sidebar .owner-nav-groups .customer-nav-heading { margin-bottom:7px; }
+.owner-sidebar.elevated-sidebar .owner-nav-groups .customer-nav-root { display:block; margin-bottom:4px; }

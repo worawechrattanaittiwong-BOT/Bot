@@ -125,8 +125,19 @@ const customerMenuGroups = [
   { key:"account", icon:"account", label:"My Account", keys:["my-account","packages","partner-dashboard"] }
 ] as const;
 
+/* Owner role: all 17 existing secondary links remain available, with the same hrefs.
+ * Admin routes retain the existing ungrouped navigation. */
+const ownerMenuGroups = [
+  { key:"mt5", icon:"account", label:"MT5 & Accounts", keys:["trading-account","broker-center","trading-fleet-monitor","admin-workers"] },
+  { key:"strategies", icon:"strategy", label:"Trading Strategies", keys:["follow-master","trading-modes"] },
+  { key:"reports", icon:"overview", label:"Performance & Reports", keys:["trading-backtest","bot-inspection"] },
+  { key:"rewards", icon:"wallet", label:"Rewards & Wallet", keys:["referrals","commission-withdrawals","promotion-center"] },
+  { key:"account", icon:"account", label:"Account & Members", keys:["my-account","admin-customers"] },
+  { key:"advanced", icon:"strategy", label:"Advanced Settings", keys:["admin-overview","service-links","cloud-hardening","website"] }
+] as const;
+
 function CustomerNavGroups({
-  items,activeKey,onNavigate,mobile=false,onChoose,showLanguageControl=false
+  items,activeKey,onNavigate,mobile=false,onChoose,showLanguageControl=false,owner=false
 }:{
   items:NavItem[];
   activeKey:string;
@@ -134,9 +145,11 @@ function CustomerNavGroups({
   mobile?:boolean;
   onChoose?:()=>void;
   showLanguageControl?:boolean;
+  owner?:boolean;
 }) {
   const {t,lang}=useCustomerLanguage();
-  const currentGroup=customerMenuGroups.find(group=>group.keys.some(key=>key===activeKey))?.key||"";
+  const groups = owner ? ownerMenuGroups : customerMenuGroups;
+  const currentGroup=groups.find(group=>group.keys.some(key=>key===activeKey))?.key||"";
   const [expanded,setExpanded]=useState<string>(currentGroup);
   useEffect(()=>{if(currentGroup)setExpanded(currentGroup)},[currentGroup]);
   const title=(key:string,fallback:string)=>t(key,fallback);
@@ -146,7 +159,7 @@ function CustomerNavGroups({
   };
   const control=items.find(item=>item.key==="trading-overview");
   return (
-    <div className={"customer-nav-groups"+(mobile?" customer-nav-groups-mobile":"")}>
+    <div className={"customer-nav-groups"+(mobile?" customer-nav-groups-mobile":"")+(owner?" owner-nav-groups":"")}>
       {!mobile&&(
         <div className="owner-nav-section-head customer-nav-heading">
           <div className="owner-nav-label">{lang==="en"?"NAVIGATION":t("menu","เมนู")}</div>
@@ -168,7 +181,7 @@ function CustomerNavGroups({
           </Link>
         </nav>
       )}
-      {customerMenuGroups.map(group=>{
+      {groups.map(group=>{
         const entries=items.filter(item=>(group.keys as readonly string[]).includes(item.key));
         if(!entries.length)return null;
         const opened=expanded===group.key;
@@ -233,7 +246,9 @@ function UnifiedSidebar({
 }) {
   const {t}=useCustomerLanguage();
   const pathname = usePathname();
-  const showLanguageControl = !(pathname === "/admin" || pathname.startsWith("/admin/"));
+  const adminRoute = pathname === "/admin" || pathname.startsWith("/admin/");
+  const showLanguageControl = !adminRoute;
+  const groupedSidebar = !elevated || (!adminRoute && role.toUpperCase() === "OWNER");
   const navText=(key:string,label:string)=>elevated?label:t(key,label);
   const items = sidebarItems(elevated, partner);
   const sections = (["TRADING","MANAGEMENT","SYSTEM"] as const)
@@ -249,7 +264,7 @@ function UnifiedSidebar({
         <ScenovaBrand className="scenova-brand-logo-sidebar"/>
       </Link>
 
-      {elevated ? sections.map(section=>(
+      {!groupedSidebar ? sections.map(section=>(
         <div key={section}>
           {section === "TRADING" ? (
             <div className="owner-nav-section-head">
@@ -279,7 +294,7 @@ function UnifiedSidebar({
           </nav>
         </div>
       )) : (
-        <CustomerNavGroups items={items} activeKey={activeKey} onNavigate={onNavigate} showLanguageControl={showLanguageControl}/>
+        <CustomerNavGroups items={items} activeKey={activeKey} onNavigate={onNavigate} showLanguageControl={showLanguageControl} owner={elevated}/>
       )}
 
       <div className="owner-profile">
@@ -309,6 +324,8 @@ function UnifiedMobileNav({
 }) {
   const {t}=useCustomerLanguage();
   const pathname = usePathname();
+  const adminRoute = pathname === "/admin" || pathname.startsWith("/admin/");
+  const groupedSidebar = !elevated || !adminRoute;
   const navText=(key:string,label:string)=>elevated?label:t(key,label);
   const items = sidebarItems(elevated, partner);
   const sections = (["TRADING","MANAGEMENT","SYSTEM"] as const)
@@ -423,7 +440,7 @@ function UnifiedMobileNav({
 
             {!pathname.startsWith("/admin") && <div className="owner-mobile-language-slot"><LanguageSwitcher compact /></div>}
             <div className="owner-mobile-drawer-body">
-              {elevated ? sections.map(section=>(
+              {!groupedSidebar ? sections.map(section=>(
                 <section key={section} className="owner-mobile-drawer-section">
                   <div className="owner-mobile-drawer-label">{navText(section,section)}</div>
                   <div className="owner-mobile-drawer-grid">
@@ -449,7 +466,7 @@ function UnifiedMobileNav({
                   </div>
                 </section>
               )) : (
-                <CustomerNavGroups items={items} activeKey={activeKey} onNavigate={onNavigate} mobile onChoose={()=>setOpen(false)}/>
+                <CustomerNavGroups items={items} activeKey={activeKey} onNavigate={onNavigate} owner={elevated} mobile onChoose={()=>setOpen(false)}/>
               )}
             </div>
 

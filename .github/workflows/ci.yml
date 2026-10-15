@@ -76,6 +76,8 @@ jobs:
         run: ./tests/unified-role-sidebar-contract.ps1
       - name: Customer sidebar grouping and role-safety contract
         run: node ./tests/customer-sidebar-group-contract.mjs
+      - name: Owner dashboard sidebar actual render contract
+        run: node ./tests/owner-sidebar-render-contract.mjs
       - name: Trading Fleet Monitor read-only scope contract
         shell: pwsh
         run: ./tests/trading-fleet-monitor-contract.ps1
