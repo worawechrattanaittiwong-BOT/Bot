@@ -5,6 +5,7 @@ import { API_URL } from "../../lib/api";
 import { ScenovaBrand } from "../../components/ScenovaBrand";
 import { ScenovaIcon } from "../../components/ScenovaIcon";
 import styles from "./verify-email.module.css";
+import {useCustomerLanguage} from "../../lib/i18n/provider";
 
 function maskEmail(email: string) {
   const parts = email.split("@");
@@ -15,6 +16,8 @@ function maskEmail(email: string) {
 }
 
 export default function VerifyEmailPage() {
+  const {lang}=useCustomerLanguage();
+  const tx=(th:string,en:string)=>lang==="en"?en:th;
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
@@ -56,19 +59,19 @@ export default function VerifyEmailPage() {
         body: JSON.stringify({ email, code })
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.message || "ไม่สามารถยืนยัน OTP ได้");
+      if (!res.ok) throw new Error(data.message || tx("ไม่สามารถยืนยัน OTP ได้","Unable to verify OTP"));
 
-      if (!data.token) throw new Error("ยืนยันอีเมลสำเร็จแต่ยังไม่ได้รับ Secure Session");
+      if (!data.token) throw new Error(tx("ยืนยันอีเมลสำเร็จแต่ยังไม่ได้รับ Secure Session","Email verified but no secure session was received"));
       localStorage.setItem("bot_token", data.token);
       localStorage.setItem("scenova_login_email", email);
       setMessageKind("success");
-      setMessage("ยืนยันอีเมลสำเร็จ กำลังเข้าสู่ขั้นตอนตั้งค่าบัญชี...");
+      setMessage(tx("ยืนยันอีเมลสำเร็จ กำลังเข้าสู่ขั้นตอนตั้งค่าบัญชี...","Email verified. Opening account setup..."));
       window.setTimeout(() => {
         window.location.replace("/onboarding?verified=1");
       }, 650);
     } catch (err: unknown) {
       setMessageKind("error");
-      setMessage(err instanceof Error ? err.message : "ไม่สามารถยืนยัน OTP ได้");
+      setMessage(err instanceof Error ? err.message : tx("ไม่สามารถยืนยัน OTP ได้","Unable to verify OTP"));
     } finally {
       setBusy(false);
     }
@@ -91,21 +94,21 @@ export default function VerifyEmailPage() {
         if (Number(data.retryAfterSeconds || 0) > 0) {
           setCooldown(Number(data.retryAfterSeconds));
         }
-        throw new Error(data.message || "ยังไม่สามารถส่ง OTP ใหม่ได้");
+        throw new Error(data.message || tx("ยังไม่สามารถส่ง OTP ใหม่ได้","Unable to resend OTP yet"));
       }
 
       if (data.verified) {
         setMessageKind("info");
-        setMessage("อีเมลนี้ยืนยันแล้ว กรุณากลับไปเข้าสู่ระบบ");
+        setMessage(tx("อีเมลนี้ยืนยันแล้ว กรุณากลับไปเข้าสู่ระบบ","This email is already verified. Please sign in."));
         return;
       }
 
       setCooldown(Number(data.retryAfterSeconds || 60));
       setMessageKind("success");
-      setMessage("ส่ง OTP ใหม่แล้ว กรุณาตรวจสอบ Inbox และ Spam");
+      setMessage(tx("ส่ง OTP ใหม่แล้ว กรุณาตรวจสอบ Inbox และ Spam","A new OTP was sent. Check your inbox and spam folder."));
     } catch (err: unknown) {
       setMessageKind("error");
-      setMessage(err instanceof Error ? err.message : "ยังไม่สามารถส่ง OTP ใหม่ได้");
+      setMessage(err instanceof Error ? err.message : tx("ยังไม่สามารถส่ง OTP ใหม่ได้","Unable to resend OTP yet"));
     } finally {
       setResending(false);
     }
@@ -129,14 +132,14 @@ export default function VerifyEmailPage() {
             <ScenovaIcon name="shield" size={28}/>
           </div>
           <div className={styles.eyebrow}>STEP 2 · VERIFY EMAIL</div>
-          <h1>ยืนยันอีเมลของคุณ</h1>
+          <h1>{tx("ยืนยันอีเมลของคุณ","Verify your email")}</h1>
           <p className={styles.lead}>
-            เราส่งรหัส OTP 6 หลักไปที่ <b>{maskedEmail || "อีเมลของคุณ"}</b>
-            <br/>รหัสมีอายุ 10 นาที และใช้ได้เพียงครั้งเดียว
+            {tx("เราส่งรหัส OTP 6 หลักไปที่","We sent a 6-digit OTP to")} <b>{maskedEmail || tx("อีเมลของคุณ","your email")}</b>
+            <br/>{tx("รหัสมีอายุ 10 นาที และใช้ได้เพียงครั้งเดียว","The code expires in 10 minutes and can only be used once.")}
           </p>
 
           <form onSubmit={verify} className={styles.form}>
-            <label htmlFor="otp-code">Verification Code</label>
+            <label htmlFor="otp-code">{tx("รหัสยืนยัน","Verification Code")}</label>
             <input
               id="otp-code"
               className={styles.otp}
@@ -153,7 +156,7 @@ export default function VerifyEmailPage() {
             />
 
             <div className={styles.hint}>
-              <span>อย่าแชร์ OTP ให้บุคคลอื่น</span>
+              <span>{tx("อย่าแชร์ OTP ให้บุคคลอื่น","Do not share your OTP with anyone")}</span>
               <span>{code.length}/6</span>
             </div>
 
@@ -168,19 +171,19 @@ export default function VerifyEmailPage() {
             )}
 
             <button className={styles.primary} type="submit" disabled={busy || code.length !== 6}>
-              {busy ? "กำลังยืนยัน..." : "Verify Email"}
+              {busy ? tx("กำลังยืนยัน...","Verifying...") : "Verify Email"}
               <span aria-hidden="true">→</span>
             </button>
           </form>
 
           <div className={styles.resendRow}>
-            <span>ยังไม่ได้รับอีเมล?</span>
+            <span>{tx("ยังไม่ได้รับอีเมล?","Didn't get the email?")}</span>
             <button type="button" onClick={resend} disabled={resending || cooldown > 0}>
               {resending
-                ? "กำลังส่ง..."
+                ? tx("กำลังส่ง...","Sending...")
                 : cooldown > 0
-                  ? "ส่งใหม่ได้ใน " + cooldown + "s"
-                  : "ส่ง OTP ใหม่"}
+                  ? tx("ส่งใหม่ได้ใน ","Resend in ") + cooldown + "s"
+                  : tx("ส่ง OTP ใหม่","Resend OTP")}
             </button>
           </div>
 
@@ -188,11 +191,11 @@ export default function VerifyEmailPage() {
             <ScenovaIcon name="shield" size={18}/>
             <div>
               <b>SCENOVA Security</b>
-              <small>OTP ถูกเก็บในระบบแบบ Hash และมีการจำกัดการส่ง/จำนวนครั้งที่กรอกผิด</small>
+              <small>{tx("OTP ถูกเก็บในระบบแบบ Hash และมีการจำกัดการส่ง/จำนวนครั้งที่กรอกผิด","OTPs are stored as hashes and both resends and failed attempts are rate-limited.")}</small>
             </div>
           </div>
 
-          <a className={styles.back} href="/login">← กลับไปหน้าเข้าสู่ระบบ</a>
+          <a className={styles.back} href="/login">{tx("← กลับไปหน้าเข้าสู่ระบบ","← Back to sign in")}</a>
         </div>
       </section>
     </main>
