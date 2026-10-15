@@ -2,9 +2,8 @@
 import {useEffect} from "react";
 import {usePathname} from "next/navigation";
 import {useCustomerLanguage} from "../../lib/i18n/provider";
-import translated from "../../lib/i18n/customer-visible-translations.json";
+import {translateEnglishCopy} from "../../lib/i18n/english-mixed-copy";
 
-const dictionary:Record<string,string> = translated as Record<string,string>;
 const originalText = new WeakMap<Text,{th:string;en:string}>();
 const originalAttrs = new WeakMap<Element,Record<string,string>>();
 const blocked = new Set(["SCRIPT","STYLE","CODE","PRE","TEXTAREA","NOSCRIPT"]);
@@ -26,9 +25,10 @@ export function CustomerVisibleTextTranslator(){
     let record=originalText.get(text);
     if(!record){
       const key=current.trim();
-      const en=dictionary[key];
-      if(!en||!key)return;
-      record={th:current,en:current.replace(key,en)};
+      if(!key||!/[ก-๙]/.test(key))return;
+      const en=translateEnglishCopy(current);
+      if(en===current)return;
+      record={th:current,en};
       originalText.set(text,record);
     }
     const next=lang==="en"?record.en:record.th;
@@ -42,12 +42,12 @@ export function CustomerVisibleTextTranslator(){
       const current=element.getAttribute(attr);
       if(!current)return;
       const prior=records[attr];
-      if(prior && current!==prior && current!==dictionary[prior])delete records[attr];
+      if(prior && current!==prior && current!==translateEnglishCopy(prior))delete records[attr];
       if(!records[attr]){
-        if(dictionary[current])records[attr]=current;
+        if(translateEnglishCopy(current)!==current)records[attr]=current;
         else return;
       }
-      const next=lang==="en"?dictionary[records[attr]]:records[attr];
+      const next=lang==="en"?translateEnglishCopy(records[attr]):records[attr];
       if(next&&current!==next)element.setAttribute(attr,next);
     });
   };
