@@ -2,6 +2,8 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
+import {useCustomerLanguage} from "../lib/i18n/provider";
+
 type PopupTone = "success" | "error" | "warning" | "info";
 
 type PopupOptions = {
@@ -92,6 +94,7 @@ async function copyText(value: string) {
 }
 
 export function SystemPopupProvider({ children }: { children: React.ReactNode }) {
+  const {t}=useCustomerLanguage();
   const [popup, setPopup] = useState<PopupState | null>(null);
   const [promptValue, setPromptValue] = useState("");
   const [copied, setCopied] = useState(false);
@@ -136,7 +139,7 @@ export function SystemPopupProvider({ children }: { children: React.ReactNode })
     setAcknowledged(false);
     setPopup({
       kind: "notice",
-      title: options.title || toneTitle(tone),
+      title: options.title || t(tone,toneTitle(tone)),
       message: options.message,
       tone
     });
@@ -155,11 +158,11 @@ export function SystemPopupProvider({ children }: { children: React.ReactNode })
     setAcknowledged(false);
     setPopup({
       kind: "confirm",
-      title: options.title || toneTitle(tone),
+      title: options.title || t(tone,toneTitle(tone)),
       message: options.message,
       tone,
-      confirmLabel: options.confirmLabel || "ยืนยัน",
-      cancelLabel: options.cancelLabel || "ยกเลิก",
+      confirmLabel: options.confirmLabel || t("confirm"),
+      cancelLabel: options.cancelLabel || t("cancel"),
       acknowledgeLabel: options.acknowledgeLabel,
       size: options.size || "default"
     });
@@ -177,14 +180,14 @@ export function SystemPopupProvider({ children }: { children: React.ReactNode })
     setAcknowledged(false);
     setPopup({
       kind: "prompt",
-      title: options.title || toneTitle(tone),
+      title: options.title || t(tone,toneTitle(tone)),
       message: options.message,
       tone,
-      confirmLabel: options.confirmLabel || "ยืนยัน",
-      cancelLabel: options.cancelLabel || "ยกเลิก",
+      confirmLabel: options.confirmLabel || t("confirm"),
+      cancelLabel: options.cancelLabel || t("cancel"),
       requiredText: options.requiredText,
       placeholder: options.placeholder,
-      copyLabel: options.copyLabel || "คัดลอก"
+      copyLabel: options.copyLabel || t("copy")
     });
     return new Promise<string | null>((resolve) => {
       promptResolverRef.current = resolve;
@@ -283,7 +286,7 @@ export function SystemPopupProvider({ children }: { children: React.ReactNode })
             </div>
 
             {popup.kind === "notice" && (
-              <button type="button" className="sc-system-popup-close" onClick={closePopup} aria-label="ปิด">×</button>
+              <button type="button" className="sc-system-popup-close" onClick={closePopup} aria-label={t("close")}>×</button>
             )}
 
             {popup.kind === "confirm" && popup.acknowledgeLabel && (
@@ -301,11 +304,11 @@ export function SystemPopupProvider({ children }: { children: React.ReactNode })
               <div className="sc-system-popup-prompt-body">
                 {popup.requiredText && (
                   <div className="sc-system-popup-required">
-                    <span>พิมพ์ข้อความนี้เพื่อยืนยัน</span>
+                    <span>{t("typeToConfirm","พิมพ์ข้อความนี้เพื่อยืนยัน")}</span>
                     <div>
                       <code>{popup.requiredText}</code>
                       <button type="button" onClick={copyRequiredText}>
-                        {copied ? "คัดลอกแล้ว" : popup.copyLabel}
+                        {copied ? t("copied","คัดลอกแล้ว") : popup.copyLabel}
                       </button>
                     </div>
                   </div>
@@ -320,7 +323,7 @@ export function SystemPopupProvider({ children }: { children: React.ReactNode })
                       resolvePrompt(promptValue.trim());
                     }
                   }}
-                  placeholder={popup.placeholder || popup.requiredText || "พิมพ์ข้อความยืนยัน"}
+                  placeholder={popup.placeholder || popup.requiredText || t("enterConfirmation","พิมพ์ข้อความยืนยัน")}
                   autoComplete="off"
                   spellCheck={false}
                   autoFocus

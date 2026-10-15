@@ -5,6 +5,8 @@ import { API_URL } from "../../lib/api";
 import { ScenovaBrand } from "../../components/ScenovaBrand";
 import { ScenovaIcon } from "../../components/ScenovaIcon";
 import styles from "./login.module.css";
+import {useCustomerLanguage} from "../../lib/i18n/provider";
+import {LanguageSwitcher} from "../../components/i18n/LanguageSwitcher";
 
 const LOGIN_EMAIL_KEY = "scenova_login_email";
 const LOGIN_BACKGROUND_DESKTOP_URL = "/assets/scenova-login-globe-desktop-v1.webp";
@@ -44,6 +46,8 @@ function LoginBackground() {
 }
 
 export default function LoginPage() {
+  const {lang}=useCustomerLanguage();
+  const bilingual=(th:string,en:string)=>lang==="en"?en:th;
   const [register, setRegister] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -275,11 +279,11 @@ export default function LoginPage() {
                 </div>
                 <div className={styles.feature}>
                   <span className={styles.featureIcon}><ScenovaIcon name="clock" size={22} /></span>
-                  <div><b>Monitor in Real-Time</b><small>Anytime, Anywhere</small></div>
+                  <div><b>{bilingual("ติดตามแบบเรียลไทม์","Monitor in Real-Time")}</b><small>Anytime, Anywhere</small></div>
                 </div>
                 <div className={styles.feature}>
                   <span className={styles.featureIcon}><ScenovaIcon name="control" size={22} /></span>
-                  <div><b>Guided Setup</b><small>Account → MT5 → Access</small></div>
+                  <div><b>{bilingual("ตั้งค่าตามขั้นตอน","Guided Setup")}</b><small>Account → MT5 → Access</small></div>
                 </div>
               </div>
             </div>
@@ -314,6 +318,7 @@ export default function LoginPage() {
             <div className={styles.formCard} id="access-form" aria-labelledby="access-title">
               <a className={styles.formBrand} href="/website" aria-label="SCENOVA website"><ScenovaBrand className={styles.formLogo} /></a>
 
+              <div style={{display:"flex",justifyContent:"flex-end",marginBottom:12}}><LanguageSwitcher/></div>
               <div className={styles.formHeading}>
                 <div className={styles.cardEyebrow}>{register ? "CREATE ACCOUNT" : "SECURE ACCESS"}</div>
                 <h2 id="access-title">{register ? "Create Your Account" : "Welcome Back"}</h2>
@@ -331,7 +336,7 @@ export default function LoginPage() {
               )}
 
               <form className={styles.form} onSubmit={submit} aria-busy={busy}>
-                <label className={styles.label} htmlFor="login-email">Email Address</label>
+                <label className={styles.label} htmlFor="login-email">{bilingual("อีเมล","Email Address")}</label>
                 <div className={styles.inputWrap}>
                   <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 6 9 7 9-7"/></svg>
                   <input id="login-email" className={styles.input} type="email" autoComplete="email" autoCapitalize="none" spellCheck={false} value={email} onChange={e=>setEmail(e.target.value)} placeholder="your@email.com" required disabled={busy} />
@@ -357,7 +362,7 @@ export default function LoginPage() {
                   </>
                 )}
 
-                <label className={styles.label} htmlFor="login-password">Password</label>
+                <label className={styles.label} htmlFor="login-password">{bilingual("รหัสผ่าน","Password")}</label>
                 <div className={styles.inputWrap}>
                   <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3"/></svg>
                   <input id="login-password" className={styles.input} type={showPassword ? "text" : "password"} minLength={8} autoComplete={register ? "new-password" : "current-password"} value={password} onChange={e=>setPassword(e.target.value)} placeholder={register ? "อย่างน้อย 8 ตัวอักษร" : "Enter your password"} required disabled={busy} />
@@ -384,28 +389,28 @@ export default function LoginPage() {
                       </div>
                     </div>
 
-                    <label className={styles.label} htmlFor="confirm-password">Confirm Password</label>
+                    <label className={styles.label} htmlFor="confirm-password">{bilingual("ยืนยันรหัสผ่าน","Confirm Password")}</label>
                     <div className={styles.inputWrap + (confirmPassword && confirmPassword !== password ? " " + styles.inputError : "")}>
                       <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="m5 12 4 4L19 6"/><rect x="3" y="3" width="18" height="18" rx="4"/></svg>
-                      <input id="confirm-password" className={styles.input} type={showPassword ? "text" : "password"} minLength={8} autoComplete="new-password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} placeholder="ยืนยันรหัสผ่านอีกครั้ง" required disabled={busy} />
+                      <input id="confirm-password" className={styles.input} type={showPassword ? "text" : "password"} minLength={8} autoComplete="new-password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} placeholder={bilingual("ยืนยันรหัสผ่านอีกครั้ง","Confirm your password")} required disabled={busy} />
                     </div>
 
                     <label className={styles.terms}>
                       <input type="checkbox" checked={acceptedTerms} onChange={e=>setAcceptedTerms(e.target.checked)} disabled={busy} />
-                      <span>ฉันยอมรับเงื่อนไขการใช้งานและรับทราบคำเตือนความเสี่ยงในการใช้ระบบอัตโนมัติ</span>
+                      <span>{bilingual("ฉันยอมรับเงื่อนไขการใช้งานและรับทราบคำเตือนความเสี่ยงในการใช้ระบบอัตโนมัติ","I accept the terms of use and acknowledge the risks of automated trading")}</span>
                     </label>
 
                     <div className={styles.registrationSafety}>
                       <ScenovaIcon name="shield" size={18}/>
-                      <span>ขั้นตอนสมัครนี้ไม่ขอรหัส MT5 หรือ Trading Password ข้อมูล MT5 จะอยู่ในขั้นตอนเชื่อมต่อแยกต่างหาก</span>
+                      <span>{bilingual("ขั้นตอนสมัครนี้ไม่ขอรหัส MT5 หรือ Trading Password ข้อมูล MT5 จะอยู่ในขั้นตอนเชื่อมต่อแยกต่างหาก","Registration does not request your MT5 trading password. You will connect MT5 in a separate step.")}</span>
                     </div>
                   </>
                 )}
 
                 {!register && (
                   <div className={styles.formOptions}>
-                    <label className={styles.remember}><input type="checkbox" checked={rememberEmail} onChange={e=>setRememberEmail(e.target.checked)} /> <span>Remember me</span></label>
-                    <button className={styles.forgot} type="button" onClick={showPasswordRecovery}>Forgot password?</button>
+                    <label className={styles.remember}><input type="checkbox" checked={rememberEmail} onChange={e=>setRememberEmail(e.target.checked)} /> <span>{bilingual("จดจำอีเมล","Remember me")}</span></label>
+                    <button className={styles.forgot} type="button" onClick={showPasswordRecovery}>{bilingual("ลืมรหัสผ่าน?","Forgot password?")}</button>
                   </div>
                 )}
 

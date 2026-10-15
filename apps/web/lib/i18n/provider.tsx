@@ -12,14 +12,14 @@ const texts:Record<string,[string,string]>={
 "logout":["ออกจากระบบ","Sign Out"],"menu":["เมนู","Menu"],"userId":["รหัสผู้ใช้","User ID"],
 "success":["สำเร็จ","Success"],"error":["ดำเนินการไม่สำเร็จ","Action failed"],
 "warning":["โปรดยืนยัน","Please confirm"],"confirm":["ยืนยัน","Confirm"],
-"cancel":["ยกเลิก","Cancel"],"copy":["คัดลอก","Copy"],"close":["ปิด","Close"]
+"cancel":["ยกเลิก","Cancel"],"copy":["คัดลอก","Copy"],"close":["ปิด","Close"],"copied":["คัดลอกแล้ว","Copied"],"typeToConfirm":["พิมพ์ข้อความนี้เพื่อยืนยัน","Type this text to confirm"],"enterConfirmation":["พิมพ์ข้อความยืนยัน","Enter confirmation text"]
 };
 const C=createContext<{lang:Lang;setLang:(l:Lang)=>void;t:(key:string,fallback?:string)=>string}|null>(null);
 export function CustomerLanguageProvider({children}:{children:React.ReactNode}){
  const [lang,setState]=useState<Lang>("th");
  useEffect(()=>{const v=localStorage.getItem("scenova-customer-lang");if(v==="th"||v==="en")setState(v)},[]);
  const setLang=(v:Lang)=>{setState(v);localStorage.setItem("scenova-customer-lang",v)};
- const t=(key:string,fallback=key)=>texts[key]?.[lang==="th"?0:1]||fallback;
+ const t=(key:string,fallback=key)=>texts[key]?.[(typeof window!=="undefined" && window.location.pathname.startsWith("/admin")) || lang==="th" ? 0:1]||fallback;
  return <C.Provider value={{lang,setLang,t}}>{children}</C.Provider>
 }
 export function useCustomerLanguage(){const ctx=useContext(C);if(!ctx)throw Error("Missing CustomerLanguageProvider");return ctx}
