@@ -4,6 +4,7 @@ import path from "node:path";
 
 const root="apps/web";
 const dict=JSON.parse(fs.readFileSync(path.join(root,"lib/i18n/customer-visible-translations.json"),"utf8"));
+for(const [th,en] of Object.entries({"สัญญาณและสถานะ":"Signals and status","หยุด ปลอดภัย":"Safe Stop","ออเดอร์ที่กำลังรัน":"Running orders","จำนวนคำสั่งรอต่อฝั่ง":"Pending orders per side"})){ assert.equal(dict[th],en,`Dashboard translation regression: ${th}`) }
 function walk(dir){
  return fs.readdirSync(dir,{withFileTypes:true}).flatMap(entry=>{
   const full=path.join(dir,entry.name);
