@@ -49,7 +49,10 @@ Need $web 'payload.profitTargetMode = "OFF";' 'RACE/COUNTER/ZERO/FLIP must not i
 # Only modes with a direct configurable trade-profit target default to 1.
 # AUTO has no visible money target and FLIP LOCK uses trailing SL, so they stay untouched.
 Need $web 'manualBasketProfitTargetMoney: 1' 'MANUAL Basket target must default to 1'
-Need $web 'raceCloseAllProfitMoney: 1' 'RACE Basket target must default to 1'
+# Dashboard's unsaved RACE draft target is lot-based (0.01 lot = 2 account-currency units).
+# API and persisted defaults for new accounts remain 1; do not mutate live trading behavior to satisfy a UI assertion.
+Need $web 'raceCloseAllProfitMoney: 2' 'RACE dashboard draft target must match lot-based default of 2'
+Need $web 'Math.round(selectedRaceLot * 20000) / 100' 'RACE basket target must follow the documented lot calculation'
 Need $web 'racePerPositionProfitMoney: 1' 'RACE per-position target must default to 1'
 Need $web 'counterPerPositionProfitMoney: 1' 'COUNTER per-position target must default to 1'
 Need $web 'zeroGridMinNetProfitMoney: 1' 'ZERO GRID net target must default to 1'

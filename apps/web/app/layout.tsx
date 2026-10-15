@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { CustomerLanguageProvider } from "../lib/i18n/provider";
+import { CustomerLanguageDock } from "../components/i18n/CustomerLanguageDock";
 import "./globals.css";
 import "./premium-dashboard.css";
 import "./dashboard-live.css";
@@ -47,7 +48,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="th">
       <body>
-        <CustomerLanguageProvider><SystemPopupProvider>
+        <CustomerLanguageProvider><CustomerLanguageDock/><SystemPopupProvider>
           <Mt5ManualActionControls />
           <MobileMirrorOverlay />
           {children}
