@@ -14,7 +14,28 @@ const overrides:Record<string,string>={
   "คำสั่งรอ":"Pending orders",
   "ไม่มีข้อมูล":"No data",
   "ข้อมูลไม่พร้อมใช้งาน":"Data unavailable",
-  "กำไร/ขาดทุน":"Profit/Loss"
+  "กำไร/ขาดทุน":"Profit/Loss",
+  "จำนวน":"Number of",
+  "ต่อฝั่ง":"per side",
+  "กำไรสุทธิ":"Net profit",
+  "การเชื่อมต่อ":"Connection",
+  "สร้างบัญชี":"Create account",
+  "ล้าง":"Clear",
+  "ระดับ":"levels",
+  "รอ":"Waiting",
+  "ยังไม่มี":"Not available yet",
+  "เพิ่มเติม":"More",
+  "โปรดตรวจสอบ":"Please check",
+  "สถานะ":"Status",
+  "คำสั่ง":"Orders",
+  "เป้ากำไร":"Profit target",
+  "ยอดรวม":"Total",
+  "บันทึก":"Save",
+  "ย้อนกลับ":"Back",
+  "รายละเอียด":"Details",
+  "ต่อไม้":"per position",
+  "ขนาด":"Size",
+  "ระบบ":"System"
 };
 const fragments={...dictionary,...overrides};
 const thai=/[ก-๙]/;
