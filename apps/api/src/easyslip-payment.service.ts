@@ -250,7 +250,9 @@ export class EasySlipPaymentService implements OnApplicationBootstrap {
     const data = payload?.data;
     if (!data) throw new ConflictException("EasySlip ไม่ส่งผลตรวจสอบกลับมา");
     if (!data.matchedAccount) {
-      throw new ConflictException("บัญชีผู้รับในสลิปไม่ตรงกับบัญชีรับเงินของ SCENOVA");
+      throw new ConflictException(
+        "บัญชีผู้รับเงินในสลิปไม่ตรงกับบัญชีที่ลงทะเบียนไว้ใน EasySlip ของ SCENOVA · อย่าโอนเงินซ้ำ กรุณาแจ้งผู้ดูแลตรวจบัญชีรับเงินและใช้สลิปเดิม"
+      );
     }
     if (data.isAmountMatched !== true) {
       throw new ConflictException(
@@ -394,29 +396,74 @@ export class EasySlipPaymentService implements OnApplicationBootstrap {
       throw new ConflictException("รายการนี้ไม่อยู่ในสถานะที่สามารถแนบสลิปได้");
     }
 
-    const verification = await this.verifySlip({
-      base64: input.base64,
-      amountSatang: Number(snapshot.amount),
-      orderType: input.orderType,
-      orderId: input.orderId
-    });
+    // Record only a safe rejection code (never the image, transfer reference,
+    // bank account, sender/recipient or provider's raw response). This makes
+    // failures traceable for Owner and Support without weakening the verifier.
+    let stage: "PROVIDER" | "SLIP_TIME" | "ACTIVATION" = "PROVIDER";
+    try {
+      const verification = await this.verifySlip({
+        base64: input.base64,
+        amountSatang: Number(snapshot.amount),
+        orderType: input.orderType,
+        orderId: input.orderId
+      });
 
-    const slipTime = verification.slipDate ? Date.parse(verification.slipDate) : NaN;
-    const orderTime = Date.parse(String(snapshot.created_at || ""));
-    if (
-      !Number.isFinite(slipTime) ||
-      !Number.isFinite(orderTime) ||
-      slipTime < orderTime - 5 * 60 * 1000
-    ) {
-      throw new ConflictException("สลิปนี้เก่ากว่ารายการสั่งซื้อ กรุณาใช้สลิปของรายการนี้");
-    }
-    if (slipTime > Date.now() + 10 * 60 * 1000) {
-      throw new ConflictException("เวลาในสลิปไม่ถูกต้อง กรุณาตรวจสอบสลิปอีกครั้ง");
-    }
+      stage = "SLIP_TIME";
+      const slipTime = verification.slipDate ? Date.parse(verification.slipDate) : NaN;
+      const orderTime = Date.parse(String(snapshot.created_at || ""));
+      if (
+        !Number.isFinite(slipTime) ||
+        !Number.isFinite(orderTime) ||
+        slipTime < orderTime - 5 * 60 * 1000
+      ) {
+        throw new ConflictException("สลิปนี้เก่ากว่ารายการสั่งซื้อ กรุณาใช้สลิปของรายการนี้");
+      }
+      if (slipTime > Date.now() + 10 * 60 * 1000) {
+        throw new ConflictException("เวลาในสลิปไม่ถูกต้อง กรุณาตรวจสอบสลิปอีกครั้ง");
+      }
 
-    return input.orderType === "LOCAL"
-      ? this.activateLocal(input.userId, input.orderId, verification)
-      : this.activateCloud(input.userId, input.orderId, verification);
+      stage = "ACTIVATION";
+      return input.orderType === "LOCAL"
+        ? await this.activateLocal(input.userId, input.orderId, verification)
+        : await this.activateCloud(input.userId, input.orderId, verification);
+    } catch (error: any) {
+      const response = typeof error?.getResponse === "function" ? error.getResponse() : null;
+      const message = String(
+        (typeof response === "object" && response !== null ? response.message : null) ||
+        error?.message || ""
+      );
+      let reason = stage === "PROVIDER" ? "PROVIDER_REJECTED_OR_UNAVAILABLE"
+        : stage === "SLIP_TIME" ? "SLIP_TIME_REJECTED" : "ACTIVATION_REJECTED";
+      if (message.includes("บัญชีผู้รับ") || message.includes("บัญชีผู้รับเงิน")) {
+        reason = "RECEIVER_UNMATCHED";
+      } else if (message.includes("ยอดเงินในสลิป")) {
+        reason = "AMOUNT_MISMATCH";
+      } else if (message.includes("สลิปนี้ถูกใช้")) {
+        reason = "DUPLICATE_SLIP";
+      } else if (message.includes("สลิปนี้เก่ากว่า")) {
+        reason = "SLIP_BEFORE_ORDER";
+      } else if (message.includes("เวลาในสลิปไม่ถูกต้อง")) {
+        reason = "SLIP_TIME_INVALID";
+      } else if (message.includes("เลขอ้างอิงธุรกรรม")) {
+        reason = "MISSING_TRANSFER_REFERENCE";
+      } else if (error?.name === "TimeoutError" || error?.name === "AbortError") {
+        reason = "PROVIDER_TIMEOUT";
+      }
+
+      try {
+        await this.db.query(
+          `INSERT INTO audit_logs(actor,action,entity_type,entity_id,detail)
+           VALUES('EASYSLIP','SLIP_VERIFICATION_REJECTED','order',$1,$2::jsonb)`,
+          [
+            input.orderId,
+            JSON.stringify({ orderType: input.orderType, provider: "EASYSLIP", stage, reason })
+          ]
+        );
+      } catch {
+        // Recording a diagnostic must never turn an invalid slip into a valid one.
+      }
+      throw error;
+    }
   }
 
   private async activateLocal(
