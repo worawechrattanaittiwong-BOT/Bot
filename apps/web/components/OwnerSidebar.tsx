@@ -115,6 +115,105 @@ function sidebarItems(elevated:boolean, partner?:PartnerSummary): NavItem[] {
   return items;
 }
 
+
+/* Customer navigation presentation only: preserve original destinations and role checks. */
+const customerMenuGroups = [
+  { key:"mt5", icon:"account", label:"MT5 & Accounts", keys:["trading-account","broker-center","trading-fleet-monitor"] },
+  { key:"strategies", icon:"strategy", label:"Trading Strategies", keys:["follow-master"] },
+  { key:"reports", icon:"overview", label:"Performance & Reports", keys:["trading-backtest","bot-inspection"] },
+  { key:"rewards", icon:"wallet", label:"Rewards & Wallet", keys:["referrals"] },
+  { key:"account", icon:"account", label:"My Account", keys:["my-account","packages","partner-dashboard"] }
+] as const;
+
+function CustomerNavGroups({
+  items,activeKey,onNavigate,mobile=false,onChoose,showLanguageControl=false
+}:{
+  items:NavItem[];
+  activeKey:string;
+  onNavigate?:SidebarNavigateHandler;
+  mobile?:boolean;
+  onChoose?:()=>void;
+  showLanguageControl?:boolean;
+}) {
+  const {t,lang}=useCustomerLanguage();
+  const currentGroup=customerMenuGroups.find(group=>group.keys.some(key=>key===activeKey))?.key||"";
+  const [expanded,setExpanded]=useState<string>(currentGroup);
+  useEffect(()=>{if(currentGroup)setExpanded(currentGroup)},[currentGroup]);
+  const title=(key:string,fallback:string)=>t(key,fallback);
+  const navigate=(event:React.MouseEvent<HTMLAnchorElement>,href:string)=>{
+    onChoose?.();
+    if(onNavigate?.(href)===true)event.preventDefault();
+  };
+  const control=items.find(item=>item.key==="trading-overview");
+  return (
+    <div className={"customer-nav-groups"+(mobile?" customer-nav-groups-mobile":"")}>
+      {!mobile&&(
+        <div className="owner-nav-section-head customer-nav-heading">
+          <div className="owner-nav-label">{lang==="en"?"NAVIGATION":t("menu","เมนู")}</div>
+          {showLanguageControl&&<LanguageSwitcher compact/>}
+        </div>
+      )}
+      {control&&(
+        <nav className="customer-nav-root" aria-label="Control Center">
+          <Link
+            href={control.href}
+            prefetch
+            aria-current={activeKey===control.key?"page":undefined}
+            className={"customer-nav-primary"+(activeKey===control.key?" active":"")}
+            onClick={event=>navigate(event,control.href)}
+          >
+            <span className="customer-nav-primary-icon"><ScenovaIcon name={control.icon} size={18}/></span>
+            <span className="customer-nav-primary-text">{title(control.key,control.label)}</span>
+            <span aria-hidden="true" className="customer-nav-arrow">›</span>
+          </Link>
+        </nav>
+      )}
+      {customerMenuGroups.map(group=>{
+        const entries=items.filter(item=>(group.keys as readonly string[]).includes(item.key));
+        if(!entries.length)return null;
+        const opened=expanded===group.key;
+        const selected=entries.some(item=>item.key===activeKey);
+        return (
+          <section className={"customer-nav-group"+(selected?" has-active":"")+(opened?" expanded":"")} key={group.key}>
+            <button
+              type="button"
+              className="customer-nav-group-button"
+              aria-expanded={opened}
+              aria-controls={(mobile?"customer-mobile-menu-":"customer-desktop-menu-")+group.key}
+              onClick={()=>setExpanded(open=>open===group.key?"":group.key)}
+            >
+              <span className="customer-nav-primary-icon"><ScenovaIcon name={group.icon} size={18}/></span>
+              <span className="customer-nav-primary-text">{group.label}</span>
+              <span aria-hidden="true" className="customer-nav-chevron">›</span>
+            </button>
+            <nav
+              id={(mobile?"customer-mobile-menu-":"customer-desktop-menu-")+group.key}
+              className="customer-nav-children"
+              aria-label={group.label}
+              hidden={!opened}
+            >
+              {entries.map(item=>(
+                <Link
+                  key={item.key}
+                  href={item.href}
+                  prefetch
+                  title={item.hint}
+                  aria-current={activeKey===item.key?"page":undefined}
+                  className={"customer-nav-child"+(activeKey===item.key?" active":"")}
+                  onClick={event=>navigate(event,item.href)}
+                >
+                  <span className="customer-nav-child-dot" aria-hidden="true"/>
+                  <span>{title(item.key,item.label)}</span>
+                </Link>
+              ))}
+            </nav>
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
 function UnifiedSidebar({
   activeKey,
   onLogout,
@@ -150,7 +249,7 @@ function UnifiedSidebar({
         <ScenovaBrand className="scenova-brand-logo-sidebar"/>
       </Link>
 
-      {sections.map(section=>(
+      {elevated ? sections.map(section=>(
         <div key={section}>
           {section === "TRADING" ? (
             <div className="owner-nav-section-head">
@@ -179,8 +278,9 @@ function UnifiedSidebar({
             ))}
           </nav>
         </div>
-      ))}
-
+      )) : (
+        <CustomerNavGroups items={items} activeKey={activeKey} onNavigate={onNavigate} showLanguageControl={showLanguageControl}/>
+      )}
 
       <div className="owner-profile">
         <div className="owner-avatar">{avatar}</div>
@@ -323,7 +423,7 @@ function UnifiedMobileNav({
 
             {!pathname.startsWith("/admin") && <div className="owner-mobile-language-slot"><LanguageSwitcher compact /></div>}
             <div className="owner-mobile-drawer-body">
-              {sections.map(section=>(
+              {elevated ? sections.map(section=>(
                 <section key={section} className="owner-mobile-drawer-section">
                   <div className="owner-mobile-drawer-label">{navText(section,section)}</div>
                   <div className="owner-mobile-drawer-grid">
@@ -348,7 +448,9 @@ function UnifiedMobileNav({
                     ))}
                   </div>
                 </section>
-              ))}
+              )) : (
+                <CustomerNavGroups items={items} activeKey={activeKey} onNavigate={onNavigate} mobile onChoose={()=>setOpen(false)}/>
+              )}
             </div>
 
             <button

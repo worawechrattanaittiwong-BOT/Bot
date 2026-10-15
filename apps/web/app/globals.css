@@ -10556,3 +10556,165 @@ body{background:radial-gradient(circle at 72% 0%,rgba(91,61,210,.10),transparent
 @media (max-width: 760px) {
   .scenova-language-utility-strip--mobile-only { display: flex; }
 }
+
+/* Customer sidebar accordion: presentation only; owner/admin navigation is unchanged. */
+.customer-role-sidebar .customer-nav-groups,
+.owner-mobile-drawer .customer-nav-groups-mobile {
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+  min-width:0;
+}
+.customer-role-sidebar .customer-nav-heading {
+  margin-bottom:7px;
+}
+.customer-role-sidebar .customer-nav-root {
+  display:block;
+  margin-bottom:4px;
+}
+.customer-nav-primary,
+.customer-nav-group-button {
+  box-sizing:border-box;
+  width:100%;
+  min-height:43px;
+  display:grid;
+  grid-template-columns:30px minmax(0,1fr) 14px;
+  gap:8px;
+  align-items:center;
+  padding:5px 9px;
+  background:transparent;
+  border:1px solid transparent;
+  border-radius:10px;
+  text-align:left;
+  text-decoration:none;
+  color:#c4cce2;
+  cursor:pointer;
+  font:inherit;
+}
+.customer-nav-primary:hover,
+.customer-nav-group-button:hover {
+  background:rgba(107,84,188,.10);
+  border-color:rgba(139,112,224,.18);
+}
+.customer-nav-primary.active,
+.customer-nav-group.has-active > .customer-nav-group-button {
+  background:linear-gradient(95deg,rgba(95,69,181,.22),rgba(39,31,76,.35));
+  border-color:rgba(144,107,238,.30);
+  color:#f6f1ff;
+}
+.customer-nav-primary.active {
+  box-shadow:inset 3px 0 0 #9b76f2;
+}
+.customer-nav-primary-icon {
+  display:grid;
+  place-items:center;
+  width:29px;
+  height:29px;
+  border-radius:8px;
+  color:#9c9bbf;
+  background:rgba(15,19,36,.8);
+  border:1px solid rgba(83,75,133,.28);
+}
+.customer-nav-primary.active .customer-nav-primary-icon,
+.customer-nav-group.has-active > .customer-nav-group-button .customer-nav-primary-icon {
+  color:#cbb7ff;
+  border-color:rgba(140,108,222,.4);
+}
+.customer-nav-primary-text {
+  min-width:0;
+  font-size:11.5px;
+  font-weight:760;
+  line-height:1.25;
+  overflow-wrap:anywhere;
+}
+.customer-nav-arrow,
+.customer-nav-chevron {
+  font-size:19px;
+  font-weight:500;
+  line-height:1;
+  text-align:center;
+  color:#69728e;
+}
+.customer-nav-chevron { transition:transform .18s ease; }
+.customer-nav-group.expanded > .customer-nav-group-button .customer-nav-chevron { transform:rotate(90deg); }
+.customer-nav-children {
+  padding:3px 0 6px 19px;
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+}
+.customer-nav-children[hidden] { display:none!important; }
+.customer-nav-child {
+  min-height:32px;
+  display:flex;
+  gap:10px;
+  align-items:center;
+  padding:7px 8px;
+  border-radius:8px;
+  border:1px solid transparent;
+  color:#8d9aba;
+  font-size:11px;
+  font-weight:670;
+  line-height:1.3;
+  text-decoration:none;
+  overflow-wrap:anywhere;
+}
+.customer-nav-child:hover {
+  color:#efedff;
+  background:rgba(116,91,214,.11);
+}
+.customer-nav-child.active {
+  color:#e9e0ff;
+  border-color:rgba(145,113,239,.20);
+  background:rgba(95,69,173,.16);
+}
+.customer-nav-child-dot {
+  width:5px;
+  height:5px;
+  flex:0 0 5px;
+  border-radius:50%;
+  background:#515b76;
+}
+.customer-nav-child.active .customer-nav-child-dot { background:#b396ff; }
+.customer-nav-primary:focus-visible,
+.customer-nav-group-button:focus-visible,
+.customer-nav-child:focus-visible {
+  outline:2px solid #b092ff;
+  outline-offset:2px;
+}
+.owner-mobile-drawer .customer-nav-groups-mobile {
+  padding:2px 1px 8px;
+  gap:7px;
+}
+.owner-mobile-drawer .customer-nav-groups-mobile .customer-nav-primary,
+.owner-mobile-drawer .customer-nav-groups-mobile .customer-nav-group-button {
+  min-height:48px;
+  grid-template-columns:34px minmax(0,1fr) 18px;
+  gap:10px;
+  padding:7px 10px;
+  border-color:rgba(119,91,181,.24);
+  background:rgba(24,16,40,.72);
+  color:#e1d9f1;
+}
+.owner-mobile-drawer .customer-nav-groups-mobile .customer-nav-primary-text {
+  font-size:13px;
+}
+.owner-mobile-drawer .customer-nav-groups-mobile .customer-nav-primary-icon {
+  width:32px;
+  height:32px;
+  color:#b9a1e5;
+  background:rgba(72,44,112,.35);
+}
+.owner-mobile-drawer .customer-nav-groups-mobile .customer-nav-children {
+  padding-left:22px;
+}
+.owner-mobile-drawer .customer-nav-groups-mobile .customer-nav-child {
+  min-height:40px;
+  padding:9px 10px;
+  font-size:12px;
+  color:#bbacd4;
+}
+.owner-mobile-drawer .customer-nav-groups-mobile .customer-nav-child.active { color:#fff; }
+@media (prefers-reduced-motion:reduce) {
+  .customer-nav-chevron { transition:none; }
+}
