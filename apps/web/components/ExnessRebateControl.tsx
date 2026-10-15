@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { adminApi } from "../lib/api";
+import { useSystemPopup } from "./SystemPopupProvider";
 import css from "./ExnessRebateControl.module.css";
 
 type Section = "groups" | "clients" | "rebates" | "payments" | "history";
@@ -27,6 +28,7 @@ function safeCell(value:unknown) {
   return typeof value==="boolean"?(value?"ใช่":"ไม่"):String(value);
 }
 export function ExnessRebateControl() {
+  const {confirmPopup}=useSystemPopup();
   const [section,setSection]=useState<Section>("clients");
   const [reports,setReports]=useState<Partial<Record<Section,Report>>>({});
   const [offsets,setOffsets]=useState<Record<Section,number>>({clients:0,groups:0,rebates:0,payments:0,history:0});
@@ -62,7 +64,7 @@ export function ExnessRebateControl() {
   async function changePercent() {
     const value=Number(percent);
     if(!/^\d{5,20}$/.test(account)||!/^\d{5,20}$/.test(destination)||!Number.isFinite(value)||value<0||value>100){setError("กรอกเลขบัญชีลูกค้า บัญชีปลายทาง และเปอร์เซ็นต์ 0-100 ให้ถูกต้อง");return;}
-    if(!window.confirm(`ส่งคำสั่งตั้งเงินคืน ${value}% ให้บัญชี Exness ${account} ไปยังบัญชีรับเงิน ${destination} จริงหรือไม่? การเปลี่ยนแปลงนี้มีผลใน Exness Partners`))return;
+    if(!(await confirmPopup({tone:"warning",message:`ส่งคำสั่งตั้งเงินคืน ${value}% ให้บัญชี Exness ${account} ไปยังบัญชีรับเงิน ${destination} จริงหรือไม่? การเปลี่ยนแปลงนี้มีผลใน Exness Partners`})))return;
     setBusy("change");setError("");setMessage("");
     try{
       await adminApi("/admin/brokers/exness/rebate-control/client",{method:"PUT",body:JSON.stringify({clientAccount:account,destinationClientAccount:destination,percent:value})});
@@ -74,7 +76,7 @@ export function ExnessRebateControl() {
   function toggleId(id:string) {setSelectedIds(prev=>prev.includes(id)?prev.filter(x=>x!==id):prev.length>=20?prev:[...prev,id]);}
   async function startApproval() {
     if(!selectedIds.length){setError("กรุณาเลือก Rebate ID จากรายการอย่างน้อยหนึ่งรายการ");return;}
-    if(!window.confirm(`ส่งคำขอเริ่มอนุมัติ Rebate จำนวน ${selectedIds.length} รายการไป Exness จริงหรือไม่? จะต้องยืนยันกับ Exness เพิ่มเติม`))return;
+    if(!(await confirmPopup({tone:"warning",message:`ส่งคำขอเริ่มอนุมัติ Rebate จำนวน ${selectedIds.length} รายการไป Exness จริงหรือไม่? จะต้องยืนยันกับ Exness เพิ่มเติม`})))return;
     setBusy("start");setError("");setMessage("");
     try{
       const out=await adminApi("/admin/brokers/exness/rebate-control/approve/start",{method:"POST",body:JSON.stringify({rebates:selectedIds})});
@@ -85,7 +87,7 @@ export function ExnessRebateControl() {
   }
   async function finishApproval() {
     if(!attemptId||!token.trim())return;
-    if(!window.confirm("ยืนยันส่ง Verification Token ไป Exness เพื่อจบการอนุมัติรายการเงินจริงหรือไม่?"))return;
+    if(!(await confirmPopup({tone:"warning",message:"ยืนยันส่ง Verification Token ไป Exness เพื่อจบการอนุมัติรายการเงินจริงหรือไม่?"})))return;
     setBusy("complete");setError("");setMessage("");
     try{
       await adminApi("/admin/brokers/exness/rebate-control/approve/complete",{method:"POST",body:JSON.stringify({attemptId,verificationToken:token.trim()})});
