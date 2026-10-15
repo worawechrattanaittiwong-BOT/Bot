@@ -350,7 +350,7 @@ function UnifiedMobileNav({
               }}
             >
               <ScenovaIcon name="logout" size={19}/>
-              <span>{navText("logout","ออกจากระบบ")}</span>
+              {elevated ? <span>ออกจากระบบ</span> : <span>{t("logout")}</span>}
             </button>
           </aside>
         </div>
