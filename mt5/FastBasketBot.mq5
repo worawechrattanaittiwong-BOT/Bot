@@ -504,6 +504,10 @@ bool     g_raceHadExposure = false;
 bool     g_raceReentryPending = false;
 datetime g_raceReentryStartedAt = 0;
 double   g_raceLastObservedCycleProfit = 0.0;
+// Last losing RACE side, persisted across cycles and MT5 restarts.
+// 1=BUY loss => force next flat RACE entry SELL, -1=SELL loss => BUY.
+// Clear only after the opposite opening deal actually executes.
+int      g_raceLastLossSide = 0;
 int      g_raceReentryObserveSeconds = 6;
 // RACE VNext Phase 4 news-pause telemetry. RACE only; existing baskets are
 // never force-closed merely because an event window became active.
@@ -1703,6 +1707,7 @@ int OnInit()
    g_minOrderIntervalMs = InpMinOrderIntervalMs;
    g_maxOrdersPerMinute = InpMaxOrdersPerMinute;
    g_entryMode = InpEntryMode;
+   RaceRestoreLossFlip();
    g_raceCloseAllProfitEnabled = InpRaceCloseAllProfitEnabled;
    g_raceCloseAllProfitMoney = MathMax(0.01, InpRaceCloseAllProfitMoney);
    g_raceProfitTargetMode = g_raceCloseAllProfitEnabled ? "BASKET" : "OFF";
@@ -3326,6 +3331,84 @@ bool ManageZeroGrid()
    else
       g_executionStatus=ladderReady ? "ZERO_GRID_READY" : "ZERO_GRID_BUILDING";
    return true;
+}
+
+// Race loss-flip is strictly per account/magic/symbol and RACE-owned deals.
+// A losing BUY forces the NEXT FLAT Race entry SELL and vice versa, without
+// waiting for an opposite analysis signal or adding any cooldown. Existing
+// positions remain under their original single-direction Basket management.
+string RaceLossFlipGlobalKey()
+{
+   return StringFormat("SCN_RFLIP_%I64d_%I64d_%s",
+      (long)AccountInfoInteger(ACCOUNT_LOGIN),InpMagic,_Symbol);
+}
+
+void RaceRestoreLossFlip()
+{
+   g_raceLastLossSide=0;
+   if(MQLInfoInteger(MQL_TESTER))
+      return;
+   string key=RaceLossFlipGlobalKey();
+   if(!GlobalVariableCheck(key))
+      return;
+   int saved=(int)GlobalVariableGet(key);
+   if(saved==1 || saved==-1)
+      g_raceLastLossSide=saved;
+}
+
+void RaceTrackLossFlipDeal(ulong dealTicket)
+{
+   if(dealTicket==0 || !HistoryDealSelect(dealTicket))
+      return;
+   long entry=HistoryDealGetInteger(dealTicket,DEAL_ENTRY);
+   if(entry!=DEAL_ENTRY_IN && entry!=DEAL_ENTRY_OUT &&
+      entry!=DEAL_ENTRY_OUT_BY && entry!=DEAL_ENTRY_INOUT)
+      return;
+   long type=HistoryDealGetInteger(dealTicket,DEAL_TYPE);
+   if(type!=DEAL_TYPE_BUY && type!=DEAL_TYPE_SELL)
+      return;
+
+   // Exit comments may belong to a broker SL/manual close. Resolve the
+   // original opening deal's RACE ownership instead of the active web mode.
+   if(TradeModeForDeal(dealTicket)!="RACE" ||
+      !HistoryDealSelect(dealTicket))
+      return;
+
+   if(entry==DEAL_ENTRY_IN)
+   {
+      int openedSide=type==DEAL_TYPE_BUY ? 1 : -1;
+      if(g_raceLastLossSide!=0 && openedSide==-g_raceLastLossSide)
+      {
+         g_raceLastLossSide=0;
+         if(!MQLInfoInteger(MQL_TESTER))
+         {
+            GlobalVariableDel(RaceLossFlipGlobalKey());
+            GlobalVariablesFlush();
+         }
+         Print("RACE forced loss-flip completed after opposite entry.");
+      }
+      return;
+   }
+
+   // The exit SELL closes a BUY, and exit BUY closes a SELL.
+   double net=HistoryDealGetDouble(dealTicket,DEAL_PROFIT)+
+      HistoryDealGetDouble(dealTicket,DEAL_SWAP)+
+      HistoryDealGetDouble(dealTicket,DEAL_COMMISSION)+
+      HistoryDealGetDouble(dealTicket,DEAL_FEE);
+   if(net>=-0.00000001)
+      return;
+
+   g_raceLastLossSide=type==DEAL_TYPE_SELL ? 1 : -1;
+   if(!MQLInfoInteger(MQL_TESTER))
+   {
+      GlobalVariableSet(RaceLossFlipGlobalKey(),(double)g_raceLastLossSide);
+      GlobalVariablesFlush();
+   }
+   Print("RACE next flat entry forced ",
+      g_raceLastLossSide>0 ? "SELL" : "BUY",
+      " after losing ",g_raceLastLossSide>0 ? "BUY" : "SELL",
+      " deal=",dealTicket,
+      " net=",DoubleToString(net,2));
 }
 
 // Brain V17 RACE ------------------------------------------------------------
@@ -5346,7 +5429,22 @@ bool StartRaceCycle(double momentum)
 
    ResetRaceRuntime();
 
-   int direction=RaceAnalysisDirection(momentum);
+   // Immediate flip after a confirmed losing RACE exit: bypass the M5 side
+   // selection for the FIRST order of the next flat cycle. No WAIT signal,
+   // no cooldown. Original permission/lease/SL/spread/rate gates still apply.
+   int direction=0;
+   if(g_raceLastLossSide!=0)
+   {
+      direction=-g_raceLastLossSide;
+      g_raceVNextDecisionScore=(double)direction;
+      g_raceVNextLegPhase=direction>0
+         ? "LOSS_FLIP_BUY"
+         : "LOSS_FLIP_SELL";
+   }
+   else
+   {
+      direction=RaceAnalysisDirection(momentum);
+   }
    if(direction==0)
    {
       g_executionStatus="RACE_M5_STRUCTURE_WAIT";
@@ -6853,6 +6951,10 @@ void OnTradeTransaction(
 
    if(symbol == _Symbol && ownerMagic == InpMagic)
    {
+      RaceTrackLossFlipDeal(trans.deal);
+      // Ownership lookup may select position history: restore the deal before
+      // the existing journal/metrics pipeline inspects this transaction.
+      HistoryDealSelect(trans.deal);
       RecordBasketDeal(trans.deal);
       RecalculateDailyClosedProfit();
       TrackBasketJournalDeal(trans.deal);
