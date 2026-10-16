@@ -57,6 +57,31 @@ for(const href of ["/dashboard?view=account","/broker","/fleet-monitor",
 const ownerSelected=render(OwnerSidebar,{role:"OWNER",activeKey:"commission-withdrawals"});
 assert.match(ownerSelected,/id="customer-desktop-menu-rewards"/);
 assert.match(ownerSelected,/class="customer-nav-group has-active expanded"/);
+// Navigate to every Owner Console route: the grouped sidebar must never
+// revert to TRADING / MANAGEMENT / SYSTEM when Next.js changes pathname.
+const ownerPages=[
+  ["/dashboard","trading-overview","Control Center"],
+  ["/admin","admin-overview","Advanced Settings"],
+  ["/admin","admin-workers","MT5 & Accounts"],
+  ["/admin","admin-customers","Account &amp; Members"],
+  ["/admin/promotions","promotion-center","Rewards &amp; Wallet"],
+  ["/admin/commission","commission-withdrawals","Rewards &amp; Wallet"],
+  ["/admin/trading-modes","trading-modes","Trading Strategies"],
+  ["/admin/service-links","service-links","Advanced Settings"],
+  ["/admin/cloud-hardening","cloud-hardening","Advanced Settings"]
+];
+for(const [route,key,groupLabel] of ownerPages) {
+  pathname=route;
+  // Most /admin pages invoke <OwnerSidebar> without passing role.
+  const html=render(OwnerSidebar,{activeKey:key});
+  assert.match(html,/owner-nav-groups/,"Grouped Owner sidebar missing on "+route+" / "+key);
+  assert.doesNotMatch(html,/owner-nav-label-secondary/,"Legacy sidebar reappeared on "+route+" / "+key);
+  assert.ok(html.includes(groupLabel.replaceAll("& ","&amp; ")),"Owner menu group missing on "+route+" / "+key);
+  if(key==="trading-overview") assert.match(html,/customer-nav-primary active/,"Control Center stays selected");
+  else assert.match(html,/customer-nav-group has-active expanded/,"Active section must open on "+route+" / "+key);
+  assert.equal((html.match(/customer-nav-primary-text/g)||[]).length,7,
+    "Owner navigation must show 6 groups plus Control Center on "+route+" / "+key);
+}
 // Admin retains its original ungrouped sidebar on admin routes.
 pathname="/admin";
 const admin=render(OwnerSidebar,{role:"ADMIN"});
@@ -68,4 +93,4 @@ assert.match(customer,/customer-nav-groups/);
 assert.match(customer,/My Account/);
 assert.match(customer,/บัญชี MT5 และ EA/,"CUSTOMER TH translation preserved");
 assert.doesNotMatch(customer,/Advanced Settings/);
-console.log("OWNER grouped /dashboard; ADMIN legacy preserved; CUSTOMER intact: PASS");
+console.log("OWNER grouped across 9 page/view combinations; ADMIN legacy preserved with explicit role; CUSTOMER intact: PASS");

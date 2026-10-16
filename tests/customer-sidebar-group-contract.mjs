@@ -49,9 +49,9 @@ const ownerActual=ownerGroups.flatMap(x=>x.keys);
 assert.deepEqual([...ownerActual].sort(),[...ownerExpected].sort(),"OWNER must retain all 17 secondary destinations");
 assert.equal(new Set(ownerActual).size,17);
 assert.match(sidebar,/role\.toUpperCase\(\) === "OWNER"/);
-assert.match(sidebar,/const groupedSidebar = !elevated \|\| \(!adminRoute/);
+assert.match(sidebar,/const groupedSidebar = !elevated \|\| role\.toUpperCase\(\) === "OWNER"/);
 assert.match(sidebar,/owner=\{elevated\}/);
-assert.match(sidebar,/const groupedSidebar = !elevated \|\| !adminRoute/);
+assert.match(sidebar,/const groupedSidebar = !elevated \|\| String\(role \|\| "OWNER"\)\.toUpperCase\(\) === "OWNER"/);
 // Existing account, owner and admin filtering/destinations remain source-of-truth.
 assert.match(sidebar,/elevated \? \[\.\.\.ownerNavItems\] : \[\.\.\.customerNavItems\]/);
 assert.match(sidebar,/if \(!elevated && partner\)/);

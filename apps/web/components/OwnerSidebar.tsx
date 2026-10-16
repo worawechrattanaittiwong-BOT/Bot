@@ -248,7 +248,9 @@ function UnifiedSidebar({
   const pathname = usePathname();
   const adminRoute = pathname === "/admin" || pathname.startsWith("/admin/");
   const showLanguageControl = !adminRoute;
-  const groupedSidebar = !elevated || (!adminRoute && role.toUpperCase() === "OWNER");
+  // OWNER navigation is consistent across /dashboard and every /admin subpage.
+  // The current route determines the active link, not the sidebar layout.
+  const groupedSidebar = !elevated || role.toUpperCase() === "OWNER";
   const navText=(key:string,label:string)=>elevated?label:t(key,label);
   const items = sidebarItems(elevated, partner);
   const sections = (["TRADING","MANAGEMENT","SYSTEM"] as const)
@@ -314,18 +316,21 @@ function UnifiedMobileNav({
   onNavigate,
   onLogout,
   elevated,
+  role,
   partner
 }:{
   activeKey:string;
   onNavigate?:SidebarNavigateHandler;
   onLogout?:()=>void;
   elevated:boolean;
+  role?:string;
   partner?:PartnerSummary;
 }) {
   const {t}=useCustomerLanguage();
   const pathname = usePathname();
   const adminRoute = pathname === "/admin" || pathname.startsWith("/admin/");
-  const groupedSidebar = !elevated || !adminRoute;
+  // Mirror the desktop role-based layout on every page (including /admin).
+  const groupedSidebar = !elevated || String(role || "OWNER").toUpperCase() === "OWNER";
   const navText=(key:string,label:string)=>elevated?label:t(key,label);
   const items = sidebarItems(elevated, partner);
   const sections = (["TRADING","MANAGEMENT","SYSTEM"] as const)
@@ -540,13 +545,15 @@ export function CustomerSidebar({
 export function OwnerMobileNav({
   activeKey,
   onNavigate,
-  onLogout
+  onLogout,
+  role = "OWNER"
 }:{
   activeKey:string;
   onNavigate?:SidebarNavigateHandler;
   onLogout?:()=>void;
+  role?:string;
 }) {
-  return <UnifiedMobileNav activeKey={activeKey} onNavigate={onNavigate} onLogout={onLogout} elevated/>;
+  return <UnifiedMobileNav activeKey={activeKey} onNavigate={onNavigate} onLogout={onLogout} elevated role={role}/>;
 }
 
 export function CustomerMobileNav({
