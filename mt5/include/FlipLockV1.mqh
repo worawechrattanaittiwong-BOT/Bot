@@ -1,13 +1,13 @@
 #ifndef SCENOVA_FLIP_LOCK_V1_MQH
 #define SCENOVA_FLIP_LOCK_V1_MQH
 
-// FLIP LOCK 1.3.0 - M1 one-position protected-net-profit engine.
-// An XAU position starts with the wide broker-side Safety SL. Only arm its
-// profit trail when the projected net money at the new stop covers $1 USD
-// (including observed opening fees, swap and estimated closing fees).
-// Once armed, trail the executable market price by $1.50 of XAU quote price,
-// independent of _Point and the broker's symbol digits. SL never retreats.
-// BTC keeps its pre-existing 100-point trail, but shares the $1 net gate.
+// FLIP LOCK M1 one-position broker-SL engine.
+// XAU: retain the original Safety SL until the live executable quote moves
+// 2.00 price units in favor, then trail exactly 1.00 quote unit behind Bid
+// (BUY) or ahead of Ask (SELL). Do not check monetary P/L to move XAU SL.
+// Only tighten the SL; if the exact quote-distance stop is broker-illegal,
+// keep the previous SL and retry on the next local tick.
+// BTC retains the existing 100-point / projected-net gate behavior.
 // No opposite pending baton is used.
 #define FLIP_LOCK_V1_VERSION "1.3.0"
 #define FLIP_LOCK_PENDING_COMMENT "SCNFlipLock"
@@ -15,7 +15,8 @@
 #define FLIP_LOCK_UNARMED_RESTART_COOLDOWN_SECONDS 5
 #define FLIP_LOCK_STOP_SYNC_MIN_MS 250
 #define FLIP_LOCK_LEGACY_BTC_TRAIL_POINTS 100.0
-#define FLIP_LOCK_GOLD_TRAIL_PRICE 1.50
+#define FLIP_LOCK_GOLD_TRAIL_PRICE 1.00
+#define FLIP_LOCK_GOLD_ARM_PRICE_MOVE 2.00
 #define FLIP_LOCK_MIN_NET_PROFIT_USD 1.00
 #define FLIP_LOCK_EXIT_FEE_RESERVE_USD_PER_LOT 10.0
 
@@ -556,10 +557,12 @@ double FlipLockProfitLockPrice(
    double quoteTrail=FlipLockIsGoldQuote()
       ? FLIP_LOCK_GOLD_TRAIL_PRICE
       : FLIP_LOCK_LEGACY_BTC_TRAIL_POINTS*_Point;
-   double distance=MathMax(
-      quoteTrail,
-      FlipLockBrokerMinDistancePoints()*_Point
-   );
+   // Gold stays at the user-requested exact 1.00 quote-price gap.
+   // Broker stop/freeze restrictions are checked separately; do not silently
+   // widen its gap. Preserve the legacy broker-min behavior for BTC.
+   double distance=FlipLockIsGoldQuote()
+      ? quoteTrail
+      : MathMax(quoteTrail,FlipLockBrokerMinDistancePoints()*_Point);
    double executablePrice=direction>0 ? tick.bid : tick.ask;
    double target=direction>0
       ? executablePrice-distance
@@ -596,14 +599,30 @@ bool FlipLockSyncProfitLock(
    if(!PositionSelectByTicket(positionTicket)) return false;
 
    const double openPrice=PositionGetDouble(POSITION_PRICE_OPEN);
+   const bool isGold=FlipLockIsGoldQuote();
+   if(isGold)
+   {
+      // Bid for BUY, Ask for SELL: entry+2.000 / entry-2.000 is the
+      // ONLY arming condition for XAU. Fees, swap, lot and money profit
+      // must not delay its first or subsequent SL moves.
+      double executablePrice=direction>0 ? tick.bid : tick.ask;
+      double favorablePriceMove=direction*(executablePrice-openPrice);
+      if(favorablePriceMove+1e-9<FLIP_LOCK_GOLD_ARM_PRICE_MOVE)
+      {
+         g_flipLockReason="WAIT_GOLD_2_00_PRICE_MOVE";
+         g_executionStatus="FLIP_LOCK_WAIT_GOLD_TRAIL";
+         return true;
+      }
+   }
+
    const double target=FlipLockProfitLockPrice(
       direction,
       openPrice,
       tick
    );
 
-   // Until the quote-distance trail can sit legally beyond entry, keep the
-   // original wide Safety SL. A separate net-money gate follows below.
+   // Keep Safety SL until the requested price-distance SL is legal.
+   // XAU does not widen its 1.00 gap to accommodate broker stop/freeze levels.
    if(target<=0.0 || !FlipLockProfitStopIsLegal(direction,target,openPrice,tick))
    {
       g_flipLockReason="WAIT_PROFIT_LOCK_DISTANCE";
@@ -611,19 +630,24 @@ bool FlipLockSyncProfitLock(
       return true;
    }
 
-   double projectedNet=0.0;
-   if(!FlipLockProjectedNetAtStop(
-      positionTicket,direction,positionVolume,openPrice,target,projectedNet))
+   // Retain BTC's existing monetary safety gate. XAU is intentionally
+   // price-only, including on cent accounts and with large commissions.
+   if(!isGold)
    {
-      g_flipLockReason="WAIT_ENTRY_FEE_HISTORY";
-      g_executionStatus="FLIP_LOCK_WAIT_FEE_HISTORY";
-      return true;
-   }
-   if(projectedNet+1e-8<FlipLockDollarToAccountMoney(FLIP_LOCK_MIN_NET_PROFIT_USD))
-   {
-      g_flipLockReason="WAIT_MIN_NET_PROFIT_USD";
-      g_executionStatus="FLIP_LOCK_WAIT_MIN_NET_PROFIT";
-      return true;
+      double projectedNet=0.0;
+      if(!FlipLockProjectedNetAtStop(
+         positionTicket,direction,positionVolume,openPrice,target,projectedNet))
+      {
+         g_flipLockReason="WAIT_ENTRY_FEE_HISTORY";
+         g_executionStatus="FLIP_LOCK_WAIT_FEE_HISTORY";
+         return true;
+      }
+      if(projectedNet+1e-8<FlipLockDollarToAccountMoney(FLIP_LOCK_MIN_NET_PROFIT_USD))
+      {
+         g_flipLockReason="WAIT_MIN_NET_PROFIT_USD";
+         g_executionStatus="FLIP_LOCK_WAIT_MIN_NET_PROFIT";
+         return true;
+      }
    }
 
    double tickSize=SymbolInfoDouble(_Symbol,SYMBOL_TRADE_TICK_SIZE);
@@ -660,7 +684,9 @@ bool FlipLockSyncProfitLock(
    g_flipLockLastStopSyncMs=nowMs;
    g_flipLockTriggerPrice=target;
    g_flipLockArmed=true;
-   g_flipLockReason="LOCAL_NET_1USD_GOLD_1_50_TRAIL";
+   g_flipLockReason=isGold
+      ? "LOCAL_GOLD_2_00_ARM_1_00_TRAIL"
+      : "LOCAL_BTC_NET_TRAIL";
    g_executionStatus=direction>0
       ? "FLIP_LOCK_BUY_PROFIT_LOCK"
       : "FLIP_LOCK_SELL_PROFIT_LOCK";

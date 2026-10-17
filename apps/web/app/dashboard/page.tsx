@@ -7378,7 +7378,7 @@ function BotSettingsModal(props:any) {
   ))));
   const modeCopy:Record<string,{title:string;subtitle:string}> = {
     AUTO:{title:"AUTO · VECTOR EDGE",subtitle:"AUTO เป็นเจ้าของเฉพาะ Position ที่ AUTO เปิดเอง · Lot ต่อไม้ใช้ค่าที่ตั้งแบบตายตัว · ไม่รับช่วง Position จากโหมดอื่น"},
-    FLIP_LOCK:{title:"FLIP LOCK",subtitle:"M1 เท่านั้น · 1 Position พร้อม Safety SL · XAU ล็อกกำไรสุทธิประมาณ $1 ต่อไม้ก่อน แล้ว Trailing ตาม Bid/Ask ห่างราคา $1.50 และ SL ไม่ถอยกลับ · Lot คงที่ ไม่มี Martingale"},
+    FLIP_LOCK:{title:"FLIP LOCK",subtitle:"M1 เท่านั้น · 1 Position พร้อม Safety SL · XAU เมื่อ Bid/Ask เดินกำไร 2.000 หน่วยราคา เริ่ม Trailing ห่างราคา 1.000 โดยไม่รอกำไรเป็นเงิน · SL ไม่ถอยกลับ · Lot คงที่ ไม่มี Martingale"},
     RACE:{title:"RACE",subtitle:"เพิ่มความถี่ในการเปิดสถานะเพื่อให้ครบจำนวนที่กำหนดเร็วขึ้น โดยแยกการบริหารรอบจากโหมดอัตโนมัติ"},
     COUNTER:{title:"COUNTER",subtitle:"กราฟขึ้นเปิด BUY · กราฟลงเปิด SELL · เลือกจำนวนไม้รวมแล้วแบ่ง BUY/SELL ครึ่งต่อครึ่ง · ไม่มี Stop Loss"},
     ZERO_GRID:{title:"ZERO GRID",subtitle:"วางคำสั่ง BUY STOP และ SELL STOP แบบสมมาตร รองรับ 1–30 ระดับต่อฝั่ง"},
@@ -7631,7 +7631,7 @@ function BotSettingsModal(props:any) {
           ? (profitKind === "POSITION" ? formatAccountMoney(props.settings.manualPerPositionProfitMoney,accountCurrency)+" ต่อไม้" : formatAccountMoney(props.settings.manualBasketProfitTargetMoney,accountCurrency)+" ทั้งชุด · ถึงแล้วปิดทันที")
           : "—";
   const slLabel = controlMode === "FLIP_LOCK"
-    ? "Safety SL ก่อน · XAU ล็อกกำไรสุทธิประมาณ $1 แล้ว Trail ห่างราคา $1.50 (Broker อาจบังคับให้ห่างขึ้น) · SL ไม่ถอยกลับ"
+    ? "Safety SL ก่อน · XAU เมื่อราคาเดินกำไร 2.000 ให้ Trail ห่าง Bid/Ask 1.000 (ถ้า Broker ไม่อนุญาตระยะนี้ จะรอจนแก้ SL ได้) · SL ไม่ถอยกลับ"
     : controlMode === "COUNTER"
       ? "ไม่มี Stop Loss"
       : controlMode === "MANUAL"
@@ -7692,8 +7692,8 @@ function BotSettingsModal(props:any) {
             <span>MANUAL Ownership</span>
             <span>MT5 Local Tick · Server ไม่กำหนดราคา SL</span>
             <span>ราคา / SL / TP / Exit บริหารใน MT5 โดยตรงทุกโหมด</span>
-            <span>FLIP LOCK M1 · XAU ล็อกกำไรสุทธิประมาณ $1 ก่อน Trail ห่างราคาปัจจุบัน $1.50</span>
-            <span>FLIP LOCK ไม่วาง Pending ฝั่งตรงข้าม · XAU Trail $1.50 หลังประเมินกำไรสุทธิ $1 (อาจคลาดเคลื่อนจาก Slippage) · SL ไม่ถอยกลับ · ชน SL แล้วสลับ BUY↔SELL</span>
+            <span>FLIP LOCK M1 · XAU เดินกำไร 2.000 หน่วยราคาแล้ว Trail ห่าง Bid/Ask 1.000 โดยไม่ตรวจยอดเงินกำไร</span>
+            <span>FLIP LOCK ไม่วาง Pending ฝั่งตรงข้าม · XAU เดินกำไร 2.000 แล้ว Trail ห่างราคา 1.000 โดยไม่รอกำไรสุทธิ · SL ไม่ถอยกลับ · ชน SL แล้วสลับ BUY↔SELL</span>
           </div>
           <section className="cc-bot-v2-mode-section cc-mode-guide-anchor">
             <div className="cc-bot-v2-section-title"><span>01</span><div><b>โหมดการเทรด</b></div></div>
@@ -7763,7 +7763,7 @@ function BotSettingsModal(props:any) {
                   </>}
                 </div>
                 <div className="cc-bot-v17-hidden-engine">{controlMode!=="ZERO_GRID"&&(controlMode==="FLIP_LOCK"
-                  ? <div className="cc-bot-v2-engine-line"><ScenovaIcon name="trend" size={16}/><b>โครงสร้าง FLIP LOCK</b><span>1 Position + Safety SL · XAU เริ่ม Trailing หลังจุด SL คาดว่าล็อกกำไรสุทธิ $1 (รวม Swap/ค่าธรรมเนียมประมาณการ) · Trail ห่าง Bid/Ask $1.50 และไม่ถอยกลับ · ชน SL แล้วเปิดฝั่งตรงข้าม · Lot คงที่ ไม่มี Martingale</span></div>
+                  ? <div className="cc-bot-v2-engine-line"><ScenovaIcon name="trend" size={16}/><b>โครงสร้าง FLIP LOCK</b><span>1 Position + Safety SL · XAU เริ่ม Trailing เมื่อราคา Bid/Ask เดินกำไร 2.000 · SL ห่างราคาปัจจุบัน 1.000 และไม่ถอยกลับ · ไม่ตรวจจำนวนเงินกำไร · ชน SL แล้วเปิดฝั่งตรงข้าม · Lot คงที่ ไม่มี Martingale</span></div>
                   : controlMode==="AUTO"
                     ? <div className="cc-bot-v2-engine-line"><ScenovaIcon name="spark" size={16}/><b>AUTO · Shared Zone Brain</b><span>Demand/Supply + Reaction เป็นแกนเข้าออเดอร์ร่วมกับ MANUAL · AUTO วาง SL/TP และจัดการ Position ของ AUTO เอง</span></div>
                     : controlMode==="MANUAL"
@@ -7840,7 +7840,7 @@ function BotSettingsModal(props:any) {
               </dl>
               )}
               {controlMode!=="ZERO_GRID"&&controlMode!=="COUNTER"&&controlMode!=="FLIP_LOCK"&&<div className="cc-bot-v2-summary-note"><ScenovaIcon name="brain" size={17}/><span><b>การวิเคราะห์ 5 กรอบเวลา</b><small>แนวรับ–แนวต้าน · Order Block · Fibonacci · Momentum</small></span></div>}
-              {controlMode==="FLIP_LOCK"&&<div className="cc-bot-v2-summary-note"><ScenovaIcon name="shield" size={17}/><span><b>XAU · Profit Lock</b><small>SL ต้องคาดว่าคุ้มต้นทุนและเหลือกำไรประมาณ $1 ก่อนเริ่ม Trail $1.50 · รวมต้นทุนที่ทราบและสำรองค่าปิด · Gap/Slippage ไม่รับประกันกำไรจริง · BTC ใช้ Trailing เดิม</small></span></div>}
+              {controlMode==="FLIP_LOCK"&&<div className="cc-bot-v2-summary-note"><ScenovaIcon name="shield" size={17}/><span><b>XAU · Profit Lock</b><small>XAU เมื่อ Bid/Ask เดินกำไร 2.000 ให้เริ่มเลื่อน SL ห่างราคา 1.000 · ไม่ตรวจยอดเงินกำไรหรือค่าธรรมเนียม · ถ้า Broker ห้ามระยะดังกล่าวจะรอ · Gap/Slippage ไม่รับประกันกำไรจริง · BTC ใช้ Trailing เดิม</small></span></div>}
               {controlMode==="COUNTER"&&<div className="cc-bot-v2-summary-note"><ScenovaIcon name="trend" size={17}/><span><b>กฎเดียว</b><small>กราฟขึ้น BUY · กราฟลง SELL · BUY/SELL แยก Slot · เติมทีละไม้ · ปิดแต่ละไม้เมื่อถึงกำไรที่ตั้ง</small></span></div>}
             </aside>
           </div>
