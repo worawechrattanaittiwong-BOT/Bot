@@ -247,7 +247,6 @@ export default function LoginPage() {
         <section className={styles.sessionCard}>
           <ScenovaBrand className={styles.formLogo} />
           <div className={styles.sessionLoader}><span /> Checking your secure session...</div>
-          <p>หากเซสชันยังใช้งานได้ ระบบจะพาคุณเข้าสู่ Control Center โดยอัตโนมัติ</p>
         </section>
       </main>
     );
@@ -261,39 +260,15 @@ export default function LoginPage() {
       <div className={styles.frame}>
         <header className={styles.header}>
           <a href="/website" aria-label="SCENOVA website"><ScenovaBrand className={styles.brand} /></a>
-          <span>PRECISION IN MOTION.</span>
         </header>
 
         <section className={styles.layout}>
           <div className={styles.leftPane}>
-            <div className={styles.copy}>
-              <div className={styles.eyebrow}>SCENOVA SECURE ACCESS</div>
-              <h1>One Account for Your<br /><span>Trading Control Center</span></h1>
-              <p>เข้าสู่ระบบเพื่อจัดการ MT5, สิทธิ์ใช้งาน และระบบอัตโนมัติจาก Control Center เดียว โดยแยกขั้นตอนบัญชีออกจากข้อมูล MT5 อย่างชัดเจน</p>
-
-              <div className={styles.features}>
-                <div className={styles.feature}>
-                  <span className={styles.featureIcon}><ScenovaIcon name="strategy" size={22} /></span>
-                  <div><b>Automate Trading</b><small>Smart EA Systems</small></div>
-                </div>
-                <div className={styles.feature}>
-                  <span className={styles.featureIcon}><ScenovaIcon name="clock" size={22} /></span>
-                  <div><b>{bilingual("ติดตามแบบเรียลไทม์","Monitor in Real-Time")}</b><small>Anytime, Anywhere</small></div>
-                </div>
-                <div className={styles.feature}>
-                  <span className={styles.featureIcon}><ScenovaIcon name="control" size={22} /></span>
-                  <div><b>{bilingual("ตั้งค่าตามขั้นตอน","Guided Setup")}</b><small>Account → MT5 → Access</small></div>
-                </div>
-              </div>
-            </div>
-
             {exnessInfo?.active && (
               <aside className={styles.partnerCard} aria-label="สมัคร Exness ผ่าน Partner SCENOVA">
                 <div className={styles.partnerMark} aria-hidden="true">E</div>
                 <div className={styles.partnerCopy}>
-                  <small>PARTNER SCENOVA · EXNESS</small>
                   <b>เปิดบัญชี Exness ผ่าน Partner SCENOVA</b>
-                  <span>{exnessInfo.benefitMessage || "สมัครผ่านลิงก์ Partner ของ SCENOVA แล้วกลับมาเชื่อม MT5 ได้ภายหลัง"}</span>
                 </div>
                 <button
                   type="button"
@@ -303,14 +278,9 @@ export default function LoginPage() {
                 >
                   {exnessBusy ? "กำลังเปิด..." : "สมัคร Exness"} <span aria-hidden="true">↗</span>
                 </button>
-                <div className={styles.partnerTrust}>
-                  <ScenovaIcon name="shield" size={15}/>
-                  <span>Official Partner Link · ใช้ลิงก์สำหรับ {exnessInfo.platform === "MOBILE" ? "มือถือ" : "คอมพิวเตอร์"}</span>
-                </div>
               </aside>
             )}
 
-            <div className={styles.visualFooter}>DESIGNED FOR YOUR TRADING JOURNEY</div>
           </div>
 
           <div className={styles.formPane}>
@@ -319,20 +289,8 @@ export default function LoginPage() {
 
 
               <div className={styles.formHeading}>
-                <div className={styles.cardEyebrow}>{register ? "CREATE ACCOUNT" : "SECURE ACCESS"}</div>
                 <h2 id="access-title">{register ? "Create Your Account" : "Welcome Back"}</h2>
-                <p className={styles.muted}>
-                  {register
-                    ? "สร้างบัญชีก่อน จากนั้นระบบจะพาไปเชื่อม MT5 และตรวจสอบ Trial / Subscription เป็นขั้นตอน"
-                    : "เข้าสู่ Control Center เพื่อจัดการ MT5 และระบบอัตโนมัติของคุณ"}
-                </p>
               </div>
-
-              {register && (
-                <div className={styles.steps}>
-                  <span className={styles.active}>1 · Account</span><span>2 · Connect MT5</span><span>3 · Access</span>
-                </div>
-              )}
 
               <form className={styles.form} onSubmit={submit} aria-busy={busy}>
                 <label className={styles.label} htmlFor="login-email">{bilingual("อีเมล","Email Address")}</label>
@@ -401,7 +359,7 @@ export default function LoginPage() {
 
                     <div className={styles.registrationSafety}>
                       <ScenovaIcon name="shield" size={18}/>
-                      <span>{bilingual("ขั้นตอนสมัครนี้ไม่ขอรหัส MT5 หรือ Trading Password ข้อมูล MT5 จะอยู่ในขั้นตอนเชื่อมต่อแยกต่างหาก","Registration does not request your MT5 trading password. You will connect MT5 in a separate step.")}</span>
+                      <span>{bilingual("ขั้นตอนนี้ไม่ต้องกรอกรหัส MT5","No MT5 password is needed here")}</span>
                     </div>
                   </>
                 )}
@@ -420,18 +378,11 @@ export default function LoginPage() {
                 </button>
               </form>
 
-              <div className={styles.divider}><span>or</span></div>
               <button type="button" className={styles.switch} disabled={busy} onClick={switchMode}>{register ? "Already have an account? Sign In" : "Create Account"}</button>
               <a className={styles.back} href="/website">← Back to Website</a>
 
-              <div className={styles.security}>
-                <div><ScenovaIcon name="shield" size={20}/><p>Encrypted<br/>session<small>บัญชีและ Token แยกจาก MT5</small></p></div>
-                <div><ScenovaIcon name="control" size={20}/><p>Guided<br/>onboarding<small>Account → MT5 → Access</small></p></div>
-                <div><ScenovaIcon name="cloud" size={20}/><p>Cloud + Local<br/>ready<small>เลือกภายหลังได้</small></p></div>
-              </div>
             </div>
 
-            <div className={styles.formFooter}><ScenovaIcon name="shield" size={17}/><span>Protected by SCENOVA secure authentication</span></div>
           </div>
         </section>
       </div>

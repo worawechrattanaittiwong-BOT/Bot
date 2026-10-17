@@ -30,7 +30,7 @@ assert.match(signup, /คอมพิวเตอร์/);
 assert.match(signup, /platform: mobile \? "MOBILE" : "WEB"/);
 assert.match(signup, /ไปสมัคร Exness/);
 
-assert.match(login, /PARTNER SCENOVA · EXNESS/);
+assert.match(login, /<aside className=\{styles\.partnerCard\} aria-label="สมัคร Exness ผ่าน Partner SCENOVA">/);
 assert.match(login, /สมัคร Exness/);
 assert.match(login, /\/api\/public\/brokers\/exness\/signup\?platform=/);
 assert.match(loginCss, /\.partnerCard\{/);
