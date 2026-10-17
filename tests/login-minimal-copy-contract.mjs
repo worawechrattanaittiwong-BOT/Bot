@@ -6,7 +6,38 @@ const page=fs.readFileSync("apps/web/app/login/page.tsx","utf8");
 const original=execFileSync("git",["show","HEAD:apps/web/app/login/page.tsx"],{encoding:"utf8"});
 const stylesheet=fs.readFileSync("apps/web/app/login/login.module.css","utf8");
 const originalStyles=execFileSync("git",["show","HEAD:apps/web/app/login/login.module.css"],{encoding:"utf8"});
-assert.equal(stylesheet,originalStyles,"Do not change login styling or layout");
+// Appearance is locked: all existing image, color, backdrop and control
+// rules must remain byte-identical. Responsive layout overrides are allowed.
+function firstRule(css, selector) {
+  const start=css.indexOf(selector+"{");
+  assert.ok(start>=0,"Missing CSS selector: "+selector);
+  const end=css.indexOf("}",start);
+  assert.ok(end>start);
+  return css.slice(start,end+1);
+}
+for(const selector of [
+  ".background",".backgroundImage",".vignette",".brand",".formCard",
+  ".formLogo",".inputWrap",".input",".passwordToggle",".submit",
+  ".partnerCard",".partnerMark",".partnerButton",".terms",".security"
+]) {
+  assert.equal(firstRule(stylesheet,selector),firstRule(originalStyles,selector),
+    "Login image, theme, card or controls changed: "+selector);
+}
+assert.match(stylesheet,/\.page\{overflow-x:hidden;overflow-y:auto\}/,
+  "Short viewports must scroll instead of cropping registration");
+assert.match(stylesheet,/justify-content:safe center/,
+  "Short mobile screens must not vertically clip long signup forms");
+assert.match(stylesheet,/@media \(min-width:901px\)\{[\s\S]*?\.layout\{grid-template-columns:/);
+assert.match(stylesheet,/@media \(max-width:900px\)\{[\s\S]*?\.formPane\{order:1;[\s\S]*?\.leftPane\{order:2;/,
+  "Mobile form must come before Exness");
+assert.match(stylesheet,/\.leftPane\{order:2;[^}]*min-height:0;/,
+  "Mobile must not reserve 590-660px for deleted promotion");
+assert.match(stylesheet,/\.leftPane:empty\{display:none\}/,
+  "No empty promotional pane when Exness is disabled");
+assert.match(stylesheet,/\.partnerCard\{position:relative;left:auto;bottom:auto;/,
+  "Mobile Exness banner should follow the form in normal flow");
+assert.match(stylesheet,/@media \(max-width:420px\)\{[\s\S]*?\.partnerButton\{grid-column:1 \/ -1;width:100%\}/,
+  "Small phones must not crop Exness button");
 for(const x of ["LOGIN_BACKGROUND_DESKTOP_URL","LOGIN_BACKGROUND_MOBILE_URL","<LoginBackground />",
   "styles.leftPane","styles.formPane","styles.formCard","styles.header","styles.partnerCard","styles.partnerMark",
   'className={styles.inputWrap}',"styles.passwordToggle","styles.submit","styles.switch",
@@ -34,4 +65,4 @@ assert.ok(page.includes('type="checkbox"'));
 assert.ok(page.includes('aria-label={showPassword ? "Hide password" : "Show password"}'));
 assert.ok(page.includes('value={inviteCode}'));
 assert.ok(page.includes('onClick={openExnessSignup}'));
-console.log("Login/register content cleanup PASS: unchanged images/CSS, forms, auth handlers, partner link");
+console.log("Login/register responsive layout PASS: original imagery/theme/controls and auth handlers preserved; compact mobile flow");

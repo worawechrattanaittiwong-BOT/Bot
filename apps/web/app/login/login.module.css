@@ -309,3 +309,40 @@
   }
   .partnerTrust{grid-column:1 / -1}
 }
+
+/* Layout after removing promotional copy. Keep the existing imagery,
+   theme, branded card and controls unchanged. */
+.page{overflow-x:hidden;overflow-y:auto}
+.formHeading h2{margin:0 0 20px}
+.switch{margin-top:15px}
+.back{margin-top:16px}
+
+@media (min-width:901px){
+  .layout{grid-template-columns:minmax(0,1fr) minmax(420px,540px);gap:clamp(20px,3vw,44px)}
+  .leftPane{min-height:0;height:100%}
+  .formPane{min-height:0;padding-top:0;align-items:flex-end}
+  .partnerCard{width:min(500px,95%)}
+}
+
+@media (max-width:900px){
+  /* Put the actual sign-in form before the optional Exness banner.
+     Remove the obsolete 590-660px hero spacer on tablets and phones. */
+  .layout{display:flex;flex-direction:column;align-items:center;justify-content:safe center;gap:16px;padding:12px 0 22px}
+  .formPane{order:1;width:100%;min-height:0;padding:0;align-items:center}
+  .leftPane{order:2;width:100%;max-width:560px;min-height:0;padding:0;display:flex;align-items:center;justify-content:center}
+  .leftPane:empty{display:none}
+  .partnerCard{position:relative;left:auto;bottom:auto;width:100%;max-width:560px}
+}
+
+@media (max-width:640px){
+  .frame{padding-top:10px;padding-bottom:14px}
+  .header{min-height:58px}
+  .layout{gap:12px;padding:6px 0 8px}
+  .leftPane{min-height:0}
+  .formHeading h2{margin:0 0 16px}
+}
+
+@media (max-width:420px){
+  .partnerCard{grid-template-columns:42px minmax(0,1fr)}
+  .partnerButton{grid-column:1 / -1;width:100%}
+}
