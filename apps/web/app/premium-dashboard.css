@@ -7165,3 +7165,11 @@ button.cc-mode-guide-video-poster{
   .cc-mode-guide-footer{padding:7px 9px max(9px,env(safe-area-inset-bottom))}
 }
 /* ===== /Control Center V62 ===== */
+
+/* RACE hours use their own guarded endpoint and must remain editable while RUNNING.
+   The rest of the strategy settings remain locked by the existing CSS rules. */
+.cc-bot-v2-embedded.is-locked .cc-bot-v2-body .cc-race-hours-schedule input,
+.cc-bot-v2-embedded.is-locked .cc-bot-v2-body .cc-race-hours-schedule button,
+.cc-bot-v2-embedded.is-locked .cc-bot-v2-body .cc-race-hours-schedule summary{
+  pointer-events:auto!important;
+}

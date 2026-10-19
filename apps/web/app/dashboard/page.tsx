@@ -5198,16 +5198,16 @@ export default function DashboardPage() {
 
               <div className="cc-v19-three-card-grid">
                 <section className="cc-v17-settings-column cc-v19-settings-card" aria-label="ตั้งค่าบอท">
-                  {String(data?.settings?.controlMode || data?.settings?.engineMode || "AUTO").toUpperCase()==="RACE" && (
-                    <TradingHoursSchedule
-                      slotId={String(data?.selectedSlot?.id || "")}
-                      settings={data?.settings || {}}
-                      onSaved={()=>load(selectedSlotIdRef.current)}
-                    />
-                  )}
                   <BotSettingsModal
                     embedded
                     open
+                    scheduleControl={String(data?.settings?.controlMode || data?.settings?.engineMode || "AUTO").toUpperCase()==="RACE" ? (
+                      <TradingHoursSchedule
+                        slotId={String(data?.selectedSlot?.id || "")}
+                        settings={data?.settings || {}}
+                        onSaved={()=>load(selectedSlotIdRef.current)}
+                      />
+                    ) : null}
                     locked={settingsLocked}
                     settings={settings}
                     symbol={String(metrics.symbol||settings.symbol||"")}
@@ -7747,6 +7747,7 @@ function BotSettingsModal(props:any) {
                 })}
               </div>
             )}
+            {embedded && controlMode==="RACE" && props.scheduleControl}
           </section>
 
           <div className="cc-bot-v2-workspace">
