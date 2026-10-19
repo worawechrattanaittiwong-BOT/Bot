@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../lib/api";
 import styles from "./TradingHoursSchedule.module.css";
+import { useSystemPopup } from "./SystemPopupProvider";
 
 type Props = {slotId:string;settings:any;onSaved:()=>Promise<any>};
 
@@ -13,6 +14,7 @@ function todayHour() {
 }
 
 export function TradingHoursSchedule({slotId,settings,onSaved}:Props) {
+  const {confirmPopup}=useSystemPopup();
   const [enabled,setEnabled]=useState(true);
   const [hours,setHours]=useState<number[]>(hours24);
   const [saving,setSaving]=useState(false);
@@ -56,7 +58,14 @@ export function TradingHoursSchedule({slotId,settings,onSaved}:Props) {
   }
   async function pause() {
     if(!slotId || pausing || !armed) return;
-    if(!window.confirm("ยกเลิกการเริ่มอัตโนมัติ และสั่ง Safe Stop หากบอทกำลังทำงาน?")) return;
+    const confirmed=await confirmPopup({
+      title:"ยืนยันยกเลิก Auto Resume",
+      tone:"warning",
+      message:"ยกเลิกการเริ่มอัตโนมัติ และสั่ง Safe Stop หากบอทกำลังทำงาน?",
+      confirmLabel:"ยกเลิก Auto Resume",
+      cancelLabel:"กลับไปตั้งค่า"
+    });
+    if(!confirmed) return;
     setPausing(true);setNotice("");
     try {
       await api("/bot/schedule/pause?slotId="+encodeURIComponent(slotId),{method:"POST"});

@@ -3010,5 +3010,7 @@
   "เลือกทั้งหมด": "Select All",
   "ตารางเวลาทำงาน RACE": "RACE Trading Schedule",
   "ค่าเริ่มต้น 24 ชั่วโมง · ปรับเลือกเวลาได้ภายหลัง": "24-hour default · You can choose shorter trading hours later",
-  "ตารางเวลาทำงานโหมด RACE": "RACE Trading Schedule"
+  "ตารางเวลาทำงานโหมด RACE": "RACE Trading Schedule",
+  "ยืนยันยกเลิก Auto Resume": "Confirm Cancel Auto Resume",
+  "ยกเลิก Auto Resume": "Cancel Auto Resume"
 }
