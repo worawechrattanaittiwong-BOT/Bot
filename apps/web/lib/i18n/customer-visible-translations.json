@@ -3012,5 +3012,12 @@
   "ค่าเริ่มต้น 24 ชั่วโมง · ปรับเลือกเวลาได้ภายหลัง": "24-hour default · You can choose shorter trading hours later",
   "ตารางเวลาทำงานโหมด RACE": "RACE Trading Schedule",
   "ยืนยันยกเลิก Auto Resume": "Confirm Cancel Auto Resume",
-  "ยกเลิก Auto Resume": "Cancel Auto Resume"
+  "ยกเลิก Auto Resume": "Cancel Auto Resume",
+  "ชั่วโมง": "hours",
+  "ตลอด 24 ชั่วโมง": "All 24 hours",
+  "ยังไม่ได้เลือกเวลา": "No hours selected",
+  "เปิดใช้": "Enable",
+  "เลือกชั่วโมงทำงาน RACE": "Select RACE trading hours",
+  "เวลาทำงาน RACE": "RACE Trading Hours",
+  "เวลาไทย (UTC+7)": "Thailand Time (UTC+7)"
 }
