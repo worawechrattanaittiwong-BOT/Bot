@@ -7,6 +7,8 @@
 .enable{display:flex;align-items:center;gap:5px;white-space:nowrap;color:#ded5f6;font-size:11px;cursor:pointer}
 .enable input,.hour input{accent-color:#9772ff;cursor:pointer}
 .trigger{display:flex;align-items:center;justify-content:space-between;gap:6px;flex:1;min-width:0;cursor:pointer;min-height:35px;border:1px solid #554782;border-radius:10px;background:#141529;color:#f7f3ff;padding:7px 10px;font-size:12px;font-weight:700;white-space:nowrap}
+/* Keep the selected-hour label from widening the field on narrow phones. */
+.triggerText{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .trigger:focus-visible{outline:2px solid #a890ff;outline-offset:2px}
 .chevron{color:#c7b5ff;font-size:18px;line-height:1;transition:transform .2s}
 .chevronOpen{transform:rotate(180deg)}
@@ -24,8 +26,41 @@
 .notice{margin-right:auto;color:#b2e6d9;font-size:11px}
 .save{border:1px solid #a88afb;border-radius:8px;background:#47338d;color:#fff;padding:7px 12px;font-size:11px;font-weight:750;cursor:pointer}
 .actions button:disabled,.quick button:disabled{opacity:.45;cursor:not-allowed}
-@media(max-width:560px){
-  .field{grid-template-columns:1fr;gap:6px}
-  .fieldLabel{flex-direction:row;align-items:center;justify-content:space-between}
-  .right{width:100%}
+/* Match the mobile form geometry used by every other Bot Settings select.
+   The enable checkbox occupies the left third of the control column; the
+   hours dropdown occupies exactly the right two thirds and stays right-aligned.
+   The portaled list itself remains outside the card and never stretches it. */
+@media(max-width:760px){
+  .inline{padding-left:0;padding-right:0}
+  .field{
+    grid-template-columns:minmax(0,var(--settings-label,116px)) minmax(0,1fr);
+    gap:7px;
+    align-items:center;
+    min-height:var(--mobile-form-row-h,52px);
+    box-sizing:border-box;
+  }
+  .fieldLabel{flex-direction:column;align-items:flex-start;justify-content:center;gap:2px}
+  .fieldLabel b{font-size:12px}
+  .fieldLabel small{font-size:10px}
+  .right{
+    display:grid;
+    grid-template-columns:minmax(0,1fr) minmax(0,2fr);
+    gap:0;
+    width:100%;
+    min-width:0;
+  }
+  .enable{justify-self:start;gap:3px;font-size:10px;min-width:0}
+  .enable input{margin:0}
+  .trigger{
+    box-sizing:border-box;
+    width:100%;
+    min-width:0;
+    max-width:100%;
+    height:var(--mobile-form-control-h,36px);
+    min-height:var(--mobile-form-control-h,36px);
+    border-radius:9px;
+    font-size:11px;
+    padding:6px 7px;
+  }
+  .chevron{flex:none;font-size:16px}
 }
