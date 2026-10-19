@@ -1,6 +1,7 @@
 import { ConflictException, Injectable } from "@nestjs/common";
 import { DbService } from "./db.service";
 import { isVersionAtLeast } from "./release-version";
+import { checkTradingScheduleStart, isRaceSchedule } from "./trading-schedule-rules";
 
 export const TRADE_MODES = ["AUTO", "RACE", "COUNTER", "FLIP_LOCK", "ZERO_GRID", "MANUAL"] as const;
 export type TradingMode = typeof TRADE_MODES[number];
@@ -26,7 +27,7 @@ export class TradingModeControlService {
     }
   }
 
-  async requestStart(instanceId: string, mode: TradingMode, unlockDailyProfit = false) {
+  async requestStart(instanceId: string, mode: TradingMode, unlockDailyProfit = false, scheduleAuto = false) {
     // Use the same advisory lock as OWNER mode toggles: a racing START must
     // never overwrite the SAFE_STOP decided by an administrator.
     await this.db.transaction(async tx => {
@@ -37,6 +38,15 @@ export class TradingModeControlService {
         "SELECT canonical_mode_key(settings) AS mode FROM bot_settings WHERE bot_instance_id=$1 FOR SHARE",
         [instanceId]
       )).rows[0];
+      const currentSchedule = (await tx.query(
+        "SELECT settings FROM bot_settings WHERE bot_instance_id=$1 FOR UPDATE", [instanceId]
+      )).rows[0]?.settings || {};
+      checkTradingScheduleStart(currentSchedule, scheduleAuto);
+      if (unlockDailyProfit && isRaceSchedule(currentSchedule) &&
+          currentSchedule.tradingScheduleEnabled === true &&
+          currentSchedule.tradingScheduleArmed !== true) {
+        throw new ConflictException("ลูกค้าสั่งหยุดบอทเอง ต้องกด Start ใหม่ก่อน");
+      }
       const effectiveMode = String(saved?.mode || mode);
       const row=(await tx.query(
         "SELECT enabled FROM trading_mode_controls WHERE mode=$1 FOR SHARE", [effectiveMode]
@@ -44,6 +54,13 @@ export class TradingModeControlService {
       if (!row?.enabled) throw new ConflictException(
         "โหมด " + effectiveMode + " ถูกผู้ดูแลปิดชั่วคราว · ไม่สามารถเริ่มรอบใหม่ได้"
       );
+      if (effectiveMode === "RACE" && currentSchedule.tradingScheduleEnabled === true) {
+        await tx.query(
+          `UPDATE bot_settings SET settings=settings ||
+            '{"tradingScheduleArmed":true,"tradingScheduleResumePending":false}'::jsonb,
+            updated_at=now() WHERE bot_instance_id=$1`,[instanceId]
+        );
+      }
       await tx.query(
         `UPDATE bot_instances SET desired_state='RUNNING',lock_owner=id::text,
           metrics=CASE WHEN $2::boolean THEN

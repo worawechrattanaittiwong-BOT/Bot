@@ -18,6 +18,7 @@ const semver=(v,r)=>{
 new Function("module","exports","require",compiled)(mod,mod.exports,(name)=>{
   if(name==="@nestjs/common")return {Injectable:()=>target=>target,ConflictException};
   if(name==="./release-version")return {isVersionAtLeast:semver};
+  if(name==="./trading-schedule-rules")return {checkTradingScheduleStart:()=>{}};
   throw Error("unexpected import "+name);
 });
 const {TradingModeControlService,canonicalTradingMode,TRADE_MODES}=mod.exports;

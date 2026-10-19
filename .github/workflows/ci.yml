@@ -29,6 +29,8 @@ jobs:
         run: node --test ./tests/mt5-connect-progress.test.cjs
       - name: Owner trading-mode Safe Stop contract
         run: node --test ./tests/trading-mode-safe-stop.test.cjs
+      - name: RACE Bangkok hourly schedule and safe resume contracts
+        run: node --test ./tests/trading-schedule-contract.test.cjs ./tests/trading-schedule-reconcile.test.cjs
       - name: Owner trading-mode compact switch UI contract
         run: node --test ./tests/trading-mode-compact-ui.test.cjs
       - name: Deleted account and email re-registration regression

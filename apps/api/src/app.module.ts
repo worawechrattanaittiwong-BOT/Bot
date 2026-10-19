@@ -49,6 +49,7 @@ import { SmsService } from "./sms.service";
 import { DbService } from "./db.service";
 import { MaintenanceService } from "./maintenance.service";
 import { TradingModeControlService } from "./trading-mode-control.service";
+import { TradingScheduleService } from "./trading-schedule.service";
 import { CloudService, CloudAdminController, CloudCustomerController, CloudPaymentController } from "./cloud.controller";
 import { CloudBulkController } from "./cloud-bulk.controller";
 import { LocalPackageService, LocalPackageCustomerController, LocalPackageAdminController } from "./local-package.controller";
@@ -132,6 +133,7 @@ import { ExnessRebateController } from "./brokers/exness-rebate.controller";
     DbService,
     MaintenanceService,
     TradingModeControlService,
+    TradingScheduleService,
     PartnerService,
     ReferralService,
     TrialAuthorizationService,
