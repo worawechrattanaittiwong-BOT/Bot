@@ -14,6 +14,7 @@ import { useSystemPopup } from "../../components/SystemPopupProvider";
 import { TradingModeGuideVideos } from "../../components/TradingModeGuideVideos";
 import { ExnessSignupCard } from "../../components/ExnessSignupCard";
 import { BulkVpsSlots } from "../../components/BulkVpsSlots";
+import { TradingHoursSchedule } from "../../components/TradingHoursSchedule";
 
 type Dashboard = {
   user: any;
@@ -5197,6 +5198,13 @@ export default function DashboardPage() {
 
               <div className="cc-v19-three-card-grid">
                 <section className="cc-v17-settings-column cc-v19-settings-card" aria-label="ตั้งค่าบอท">
+                  {String(data?.settings?.controlMode || data?.settings?.engineMode || "AUTO").toUpperCase()==="RACE" && (
+                    <TradingHoursSchedule
+                      slotId={String(data?.selectedSlot?.id || "")}
+                      settings={data?.settings || {}}
+                      onSaved={()=>load(selectedSlotIdRef.current)}
+                    />
+                  )}
                   <BotSettingsModal
                     embedded
                     open

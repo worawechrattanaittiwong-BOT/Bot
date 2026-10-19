@@ -523,6 +523,10 @@ bool   g_confidenceGateEnabled;
 int    g_confidenceThreshold;
 int    g_sessionStartHour;
 int    g_sessionEndHour;
+// Only a guard against entries outside the customer's Bangkok schedule.
+// It does not start the EA: the server remains the sole Auto Resume authority.
+bool   g_tradingScheduleEnabled = false;
+int    g_tradingScheduleHourMask = 0;
 double g_maxAtrPoints;
 string g_marketRegime = "INITIALIZING";
 string g_marketRegimeDetail = "INITIALIZING";
@@ -5844,8 +5848,37 @@ bool CloudStoppedFlatIdle()
       ScenovaAccountPendingCount()<=0;
 }
 
+bool TradingScheduleBangkokAllowed()
+{
+   if(g_controlMode!="RACE" || !g_tradingScheduleEnabled) return true;
+   datetime utcNow=TimeGMT();
+   if(utcNow<=0) return false; // Fail closed on an invalid local clock.
+   MqlDateTime localThai;
+   TimeToStruct(utcNow+7*60*60,localThai);
+   int hour=MathMax(0,MathMin(23,localThai.hour));
+   return (g_tradingScheduleHourMask & (1<<hour))!=0;
+}
+
+void EnforceTradingScheduleWindow()
+{
+   if(g_controlMode!="RACE" || !g_tradingScheduleEnabled || TradingScheduleBangkokAllowed()) return;
+   if(g_state==STATE_RUNNING || g_runAuthorized)
+   {
+      // Keep the existing Safe Stop drain/position-management logic.
+      g_state=STATE_SAFE_STOP;
+      g_runAuthorized=false;
+      g_safeStopDrainRequested=true;
+      g_executionStatus="SCHEDULED_SAFE_STOP";
+      g_autoFirstEntryRunStartedAt=0;
+      g_autoFirstEntryCandidateSince=0;
+      g_autoFirstEntryCandidateLastSeenAt=0;
+      g_autoFirstEntryCandidateDirection=0;
+   }
+}
+
 void OnTick()
 {
+   EnforceTradingScheduleWindow();
    // Timer watchdog. Standard timer is independent of market ticks, but a live
    // tick gives us a second recovery path if the terminal ever drops timer
    // delivery after startup.
@@ -6592,6 +6625,8 @@ bool SendFlatHeartbeatIfDue()
 void OnTimer()
 {
    g_lastTimerEventTickMs=GetTickCount64();
+   // Local MT5 protection even if the cloud control channel is unavailable.
+   EnforceTradingScheduleWindow();
 
    // A flat/STOPPED Cloud runtime has no exposure to protect. Give a due
    // heartbeat the whole timer pass before indicators/chart/profit work so a
@@ -8035,6 +8070,10 @@ void SendHeartbeat()
    // ladder. Customer-initiated SAFE_STOP retains its original drain policy.
    if(ownerDisabledMode && desired=="RUNNING")
       desired="SAFE_STOP";
+   // The server is authoritative for Auto Start, but local clock gating is
+   // a second fence against a late/stale RUNNING heartbeat outside Thai hours.
+   if(g_controlMode=="RACE" && g_tradingScheduleEnabled && !TradingScheduleBangkokAllowed() && desired=="RUNNING")
+      desired="SAFE_STOP";
    g_safeStopDrainRequested = (g_access && desired == "SAFE_STOP" && !ownerDisabledMode);
    if(!g_access)
    {
@@ -9173,6 +9212,8 @@ void ApplySettings(string json)
    g_confidenceThreshold = (int)MathMax(40.0, MathMin(95.0, JsonNumber(json, "confidenceThreshold", g_confidenceThreshold)));
    g_sessionStartHour = (int)MathMax(0.0, MathMin(23.0, JsonNumber(json, "sessionStartHour", g_sessionStartHour)));
    g_sessionEndHour = (int)MathMax(1.0, MathMin(24.0, JsonNumber(json, "sessionEndHour", g_sessionEndHour)));
+   g_tradingScheduleHourMask = (int)MathMax(0.0, MathMin(16777215.0, JsonNumber(json, "tradingScheduleHourMask", g_tradingScheduleHourMask)));
+   g_tradingScheduleEnabled = JsonBool(json, "tradingScheduleEnabled", g_tradingScheduleEnabled);
    g_maxAtrPoints = MathMax(0.0, JsonNumber(json, "maxAtrPoints", g_maxAtrPoints));
    string indicatorMode = JsonString(json, "indicatorV6Mode", "");
    StringToUpper(indicatorMode);

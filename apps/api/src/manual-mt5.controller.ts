@@ -18,6 +18,7 @@ import {
 } from "./release-version";
 import { JwtGuard } from "./security";
 import { MaintenanceService } from "./maintenance.service";
+import { checkTradingScheduleStart, isRaceSchedule } from "./trading-schedule-rules";
 import { PartnerService } from "./partner.service";
 
 type ManualMt5Action = "UPDATE_EA_RESTART" | "CONNECT_MT5";
@@ -103,14 +104,27 @@ export class ManualMt5Controller {
 
   private async activateStart(instanceId: string, access: AccessState) {
     await this.maintenance.assertStartAllowed();
+    const schedule=await this.db.one(
+      "SELECT settings FROM bot_settings WHERE bot_instance_id=$1",[instanceId]);
+    checkTradingScheduleStart(schedule?.settings || {},false);
+    await this.db.transaction(async tx => {
+      await tx.query("SELECT pg_advisory_xact_lock(740096)");
+      const active=(await tx.query(
+        "SELECT settings FROM bot_settings WHERE bot_instance_id=$1 FOR UPDATE",
+        [instanceId])).rows[0]?.settings || {};
+      checkTradingScheduleStart(active,false);
+      if (isRaceSchedule(active) && active.tradingScheduleEnabled === true) {
+        await tx.query(
+          "UPDATE bot_settings SET settings=settings || '{\"tradingScheduleArmed\":true,\"tradingScheduleResumePending\":false}'::jsonb,updated_at=now() WHERE bot_instance_id=$1",[instanceId]);
+      }
     if (access.source === "TRIAL_READY" && access.trialId) {
-      await this.db.query(
+      await tx.query(
         "UPDATE trial_grants SET status='ACTIVE',started_at=now(),expires_at=now() + (duration_minutes || ' minutes')::interval WHERE id=$1 AND status='APPROVED'",
         [access.trialId]
       );
     }
 
-    await this.db.query(
+    await tx.query(
       `UPDATE bot_instances
        SET desired_state='RUNNING',
            lock_owner=id::text,
@@ -123,14 +137,15 @@ export class ManualMt5Controller {
        WHERE id=$1`,
       [instanceId, new Date().toISOString()]
     );
-    await this.db.query(
+    await tx.query(
       "UPDATE bot_commands SET status='ACKED',acked_at=now() WHERE bot_instance_id=$1 AND status IN ('PENDING','DELIVERED') AND command IN ('START','SAFE_STOP')",
       [instanceId]
     );
-    await this.db.query(
+    await tx.query(
       "INSERT INTO bot_commands(bot_instance_id,command) VALUES($1,'START')",
       [instanceId]
     );
+    });
   }
 
   private async localInstance(userId: string, slotId: string) {
@@ -170,6 +185,9 @@ export class ManualMt5Controller {
     if (!instance.mt5_account_id) {
       throw new ConflictException("ยังไม่พบบัญชี MT5 ที่เชื่อมต่อ");
     }
+    const schedule = await this.db.one(
+      "SELECT settings FROM bot_settings WHERE bot_instance_id=$1",[instance.id]);
+    checkTradingScheduleStart(schedule?.settings || {},false);
 
     const access = await this.accessState(
       req.user.sub,
@@ -242,6 +260,17 @@ export class ManualMt5Controller {
 
     // At this point the EA binary/runtime is current; recovery is only allowed
     // to reconnect an offline MT5. It does not perform an EA update/reload.
+    await this.db.transaction(async tx => {
+      await tx.query("SELECT pg_advisory_xact_lock(740096)");
+      const active=(await tx.query(
+        "SELECT settings FROM bot_settings WHERE bot_instance_id=$1 FOR UPDATE",
+        [instance.id])).rows[0]?.settings || {};
+      checkTradingScheduleStart(active,false);
+      if (isRaceSchedule(active) && active.tradingScheduleEnabled === true) {
+        await tx.query(
+          "UPDATE bot_settings SET settings=settings || '{\"tradingScheduleArmed\":true,\"tradingScheduleResumePending\":false}'::jsonb,updated_at=now() WHERE bot_instance_id=$1",[instance.id]);
+      }
+    });
     const action: ManualMt5Action = "CONNECT_MT5";
     const actionId = randomUUID();
     const requestedAt = new Date().toISOString();

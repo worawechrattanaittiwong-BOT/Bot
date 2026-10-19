@@ -3,6 +3,7 @@ import { DbService } from "./db.service";
 import { EA_RUNTIME_CONTRACT, isEaVersionExact, latestEaRelease } from "./release-version";
 import { CryptoService } from "./security";
 import { MaintenanceService } from "./maintenance.service";
+import { checkTradingScheduleStart, isRaceSchedule } from "./trading-schedule-rules";
 import { PartnerService } from "./partner.service";
 
 const ACTION_PENDING_TTL_MS = 15 * 60_000;
@@ -155,6 +156,13 @@ export class AgentActionController {
   }
 
   private async completeRecoveredStart(instance: any) {
+    const schedule=(await this.db.one(
+      "SELECT settings FROM bot_settings WHERE bot_instance_id=$1",
+      [instance.id]))?.settings || {};
+    if (isRaceSchedule(schedule) && schedule.tradingScheduleEnabled === true) {
+      if (schedule.tradingScheduleArmed !== true) return false;
+      try { checkTradingScheduleStart(schedule,false); } catch { return false; }
+    }
     const maintenance = await this.maintenance.current();
     if (maintenance.blockStarts) {
       await this.db.query(
@@ -193,7 +201,19 @@ export class AgentActionController {
     }
 
     const completedAt = new Date().toISOString();
-    await this.db.query(
+    return this.db.transaction(async tx => {
+      await tx.query("SELECT pg_advisory_xact_lock(740096)");
+      const persisted=(await tx.query(
+        "SELECT settings FROM bot_settings WHERE bot_instance_id=$1 FOR UPDATE",
+        [instance.id])).rows[0]?.settings || {};
+      const refreshed=(await tx.query(
+        "SELECT metrics FROM bot_instances WHERE id=$1 FOR UPDATE",
+        [instance.id])).rows[0]?.metrics || {};
+      if (isRaceSchedule(persisted) &&
+          refreshed.startAfterRepairRequested !== true) return false;
+      if (isRaceSchedule(persisted) && persisted.tradingScheduleEnabled === true && persisted.tradingScheduleArmed !== true) return false;
+      try { checkTradingScheduleStart(persisted,false); } catch { return false; }
+    await tx.query(
       `UPDATE bot_instances
        SET desired_state='RUNNING',
            lock_owner=id::text,
@@ -209,15 +229,16 @@ export class AgentActionController {
        WHERE id=$1`,
       [instance.id, completedAt]
     );
-    await this.db.query(
+    await tx.query(
       "UPDATE bot_commands SET status='ACKED',acked_at=now() WHERE bot_instance_id=$1 AND status IN ('PENDING','DELIVERED') AND command IN ('START','SAFE_STOP')",
       [instance.id]
     );
-    await this.db.query(
+    await tx.query(
       "INSERT INTO bot_commands(bot_instance_id,command) VALUES($1,'START')",
       [instance.id]
     );
     return true;
+    });
   }
 
   @Post("agent-actions")

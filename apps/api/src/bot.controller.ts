@@ -19,6 +19,7 @@ import { EA_RUNTIME_CONTRACT, FIRST_CONNECT_PRIME_MIN_EA_VERSION, ZERO_GRID_MAX_
 import { AdminGuard, CryptoService, JwtGuard } from "./security";
 import { MaintenanceService } from "./maintenance.service";
 import { TradingModeControlService, canonicalTradingMode } from "./trading-mode-control.service";
+import { checkTradingScheduleStart, isRaceSchedule, validTradingHours } from "./trading-schedule-rules";
 import { PartnerService } from "./partner.service";
 import { TrialAuthorizationService } from "./trial-authorization.service";
 import { RuntimeMigrationService } from "./runtime-migration.service";
@@ -3355,6 +3356,7 @@ export class BotController {
       [instance.id]
     );
     const startSettings = startSettingsRow?.settings || {};
+    checkTradingScheduleStart(startSettings, req.scheduleAuto === true);
     await this.tradingModes.assertEnabled(canonicalTradingMode(startSettings));
     if (startSettings.firstConnectPrimePending === true) {
       if (instance.mode === "CLOUD") {
@@ -3588,7 +3590,7 @@ export class BotController {
     }
     // A second check narrows the time-of-check gap before writing RUNNING.
     await this.tradingModes.assertEnabled(canonicalTradingMode(startSettings));
-    await this.tradingModes.requestStart(instance.id, canonicalTradingMode(startSettings));
+    await this.tradingModes.requestStart(instance.id, canonicalTradingMode(startSettings), false, req.scheduleAuto === true);
       this.logger.log(JSON.stringify({
         event: "BOT_START_ACCEPTED",
         userId: req.user?.sub || null,
@@ -3646,6 +3648,86 @@ export class BotController {
   @Post("close-all")
   async closeAll(@Req() req: any, @Query("slotId") slotId = "") {
     return this.commandForUser(req.user.sub, "CLOSE_ALL", slotId || null);
+  }
+
+  @Post("schedule/pause")
+  async pauseSchedule(@Req() req:any,@Query("slotId") slotId="") {
+    const instance=await this.getInstance(req.user.sub,slotId || null);
+    return this.db.transaction(async tx=>{
+      await tx.query("SELECT pg_advisory_xact_lock(740096)");
+      const saved=(await tx.query(
+        "SELECT settings FROM bot_settings WHERE bot_instance_id=$1 FOR UPDATE",
+        [instance.id])).rows[0]?.settings || {};
+      if(!isRaceSchedule(saved)) throw new ConflictException("ตารางเวลาทำงานใช้เฉพาะโหมด RACE");
+      await tx.query(
+        `UPDATE bot_settings SET settings=settings ||
+          '{"tradingScheduleArmed":false,"tradingScheduleResumePending":false}'::jsonb,
+          updated_at=now() WHERE bot_instance_id=$1`,[instance.id]);
+      const live=(await tx.query(
+        "SELECT desired_state FROM bot_instances WHERE id=$1 FOR UPDATE",[instance.id]
+      )).rows[0];
+      if(live?.desired_state==="RUNNING") {
+        await tx.query("UPDATE bot_instances SET desired_state='SAFE_STOP' WHERE id=$1",[instance.id]);
+        await tx.query(
+          "UPDATE bot_commands SET status='ACKED',acked_at=now() WHERE bot_instance_id=$1 AND command IN ('START','SAFE_STOP') AND status IN ('PENDING','DELIVERED')",[instance.id]);
+        await tx.query(
+          "INSERT INTO bot_commands(bot_instance_id,command,payload) VALUES($1,'SAFE_STOP',$2::jsonb)",
+          [instance.id,JSON.stringify({source:"CUSTOMER_SCHEDULE_PAUSE"})]
+        );
+      }
+      return {ok:true,armed:false,state:live?.desired_state==="RUNNING"?"SAFE_STOP":live?.desired_state};
+    });
+  }
+
+  @Put("schedule")
+  async updateSchedule(@Req() req: any,@Query("slotId") slotId = "",@Body() body: Record<string,any>) {
+    const instance = await this.getInstance(req.user.sub,slotId || null);
+    if (typeof body?.enabled !== "boolean" ||
+        !Array.isArray(body?.hours) ||
+        body.hours.length > 24 ||
+        body.hours.some((h:unknown) => !Number.isInteger(h) || Number(h)<0 || Number(h)>23) ||
+        new Set(body.hours).size!==body.hours.length ||
+        (body.enabled && !validTradingHours(body.hours))) {
+      throw new BadRequestException("กรุณาเลือกสถานะและชั่วโมงไทย 0–23 ที่ไม่ซ้ำกัน (เปิดใช้ต้องเลือกอย่างน้อย 1 ชั่วโมง)");
+    }
+    const settings = await this.db.transaction(async tx => {
+      await tx.query("SELECT pg_advisory_xact_lock(740096)");
+      const old = (await tx.query(
+        "SELECT settings FROM bot_settings WHERE bot_instance_id=$1 FOR UPDATE",[instance.id]
+      )).rows[0]?.settings || {};
+      if (!isRaceSchedule(old)) {
+        throw new ConflictException("ตารางเวลาทำงานรองรับเฉพาะโหมด RACE");
+      }
+      const live = (await tx.query(
+        "SELECT desired_state FROM bot_instances WHERE id=$1 FOR UPDATE",[instance.id]
+      )).rows[0];
+      const armed=body.enabled && (old.tradingScheduleArmed === true || live?.desired_state === "RUNNING");
+      const state={
+        tradingScheduleEnabled:body.enabled,
+        tradingScheduleHours:[...body.hours].sort((a:number,b:number)=>a-b),
+        tradingScheduleHourMask:body.hours.reduce((mask:number,h:number)=>mask+(2**h),0),
+        tradingScheduleArmed:armed,
+        tradingScheduleResumePending:armed && old.tradingScheduleResumePending===true
+      };
+      const updated=await tx.query(`
+        INSERT INTO bot_settings(bot_instance_id,settings,updated_at)
+        VALUES($1,$2::jsonb,now())
+        ON CONFLICT(bot_instance_id) DO UPDATE SET
+          settings=bot_settings.settings||EXCLUDED.settings,updated_at=now()
+        RETURNING settings`,[instance.id,JSON.stringify(state)]);
+      await tx.query(
+        "UPDATE bot_commands SET status='ACKED',acked_at=now() WHERE bot_instance_id=$1 AND command='UPDATE_SETTINGS' AND status IN ('PENDING','DELIVERED')",[instance.id]);
+      await tx.query(
+        "INSERT INTO bot_commands(bot_instance_id,command,payload) VALUES($1,'UPDATE_SETTINGS',$2::jsonb)",
+        [instance.id,JSON.stringify(state)]);
+      return updated.rows[0].settings;
+    });
+    return {ok:true,schedule:{
+      enabled:settings.tradingScheduleEnabled===true,
+      hours:settings.tradingScheduleHours,
+      armed:settings.tradingScheduleArmed===true,
+      resumePending:settings.tradingScheduleResumePending===true
+    }};
   }
 
   @Put("settings")
@@ -4339,6 +4421,14 @@ export class BotController {
     );
 
     const savedSettings = saved?.settings || clean;
+    if (isRaceSchedule(currentSettings) && !isRaceSchedule(savedSettings) &&
+        currentSettings.tradingScheduleEnabled === true) {
+      await this.db.query(
+        `UPDATE bot_settings SET settings=settings ||
+          '{"tradingScheduleArmed":false,"tradingScheduleResumePending":false}'::jsonb,
+          updated_at=now() WHERE bot_instance_id=$1`,[instance.id]
+      );
+    }
     const runtimeMetrics =
       instance.metrics && typeof instance.metrics === "object"
         ? instance.metrics
@@ -4396,12 +4486,25 @@ export class BotController {
 
   private async commandForUser(userId: string, command: string, slotId?: string | null) {
     const instance = await this.getInstance(userId, slotId || null);
-    const pendingCloseAll = await this.db.one(
-      "SELECT id FROM bot_commands WHERE bot_instance_id=$1 AND command='CLOSE_ALL' AND status IN ('PENDING','DELIVERED') ORDER BY id DESC LIMIT 1",
+    return this.db.transaction(async tx => {
+      await tx.query("SELECT pg_advisory_xact_lock(740096)");
+      await tx.query(
+        `UPDATE bot_settings SET settings=settings ||
+          '{"tradingScheduleArmed":false,"tradingScheduleResumePending":false}'::jsonb,
+          updated_at=now() WHERE bot_instance_id=$1
+          AND canonical_mode_key(settings)='RACE'`,[instance.id]
+      );
+    // Manual Stop also cancels a pending RACE Local MT5 reconnect-to-start job.
+    await tx.query(
+      "UPDATE bot_instances SET metrics=COALESCE(metrics,'{}'::jsonb) || jsonb_build_object('startAfterRepairRequested',false,'startAfterRepairStatus','CANCELLED') WHERE id=$1 AND EXISTS (SELECT 1 FROM bot_settings bs WHERE bs.bot_instance_id=$1 AND canonical_mode_key(bs.settings)='RACE') AND COALESCE((metrics->>'startAfterRepairRequested')::boolean,false)=true",
       [instance.id]
     );
+    const pendingCloseAll = (await tx.query(
+      "SELECT id FROM bot_commands WHERE bot_instance_id=$1 AND command='CLOSE_ALL' AND status IN ('PENDING','DELIVERED') ORDER BY id DESC LIMIT 1",
+      [instance.id]
+    )).rows[0];
 
-    await this.db.query(
+    await tx.query(
       command === "CLOSE_ALL"
         ? "UPDATE bot_commands SET status='ACKED',acked_at=now() WHERE bot_instance_id=$1 AND status IN ('PENDING','DELIVERED') AND command<>'CLOSE_ALL'"
         : "UPDATE bot_commands SET status='ACKED',acked_at=now() WHERE bot_instance_id=$1 AND status IN ('PENDING','DELIVERED') AND command IN ('START','SAFE_STOP')",
@@ -4409,13 +4512,13 @@ export class BotController {
     );
 
     if (pendingCloseAll) {
-      await this.db.query("UPDATE bot_instances SET desired_state='STOPPED' WHERE id=$1", [instance.id]);
+      await tx.query("UPDATE bot_instances SET desired_state='STOPPED' WHERE id=$1", [instance.id]);
       return { ok: true, state: "STOPPED", closeAllPending: true };
     }
 
     const desired = command === "CLOSE_ALL" ? "STOPPED" : "SAFE_STOP";
-    await this.db.query("UPDATE bot_instances SET desired_state=$2 WHERE id=$1", [instance.id, desired]);
-    await this.db.query(
+    await tx.query("UPDATE bot_instances SET desired_state=$2 WHERE id=$1", [instance.id, desired]);
+    await tx.query(
       "INSERT INTO bot_commands(bot_instance_id,command,payload) VALUES($1,$2,$3::jsonb)",
       [
         instance.id,
@@ -4432,5 +4535,6 @@ export class BotController {
       ]
     );
     return { ok: true, state: desired };
+    });
   }
 }

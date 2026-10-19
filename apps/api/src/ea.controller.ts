@@ -17,6 +17,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { MaintenanceService } from "./maintenance.service";
 import { TradingModeControlService, canonicalTradingMode } from "./trading-mode-control.service";
+import { isRaceSchedule, tradingHourAllowed } from "./trading-schedule-rules";
 import { PartnerService } from "./partner.service";
 import { TrialAuthorizationService } from "./trial-authorization.service";
 
@@ -813,6 +814,10 @@ export class EaController {
     if (
       firstConnectPrimeRuntimeReady &&
       !modeDisabled &&
+      // RACE: a background Cloud prime must never bypass the selected hours,
+      // or restore RUNNING after the customer explicitly disarmed Auto Resume.
+      (!isRaceSchedule(runtimeSettings) || runtimeSettings.tradingScheduleEnabled !== true ||
+        (runtimeSettings.tradingScheduleArmed === true && tradingHourAllowed(runtimeSettings))) &&
       heartbeatActualState !== "RUNNING" &&
       String(latestControl?.desired_state || "").toUpperCase() === "STOPPED"
     ) {
