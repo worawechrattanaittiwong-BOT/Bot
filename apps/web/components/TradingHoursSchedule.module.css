@@ -6,18 +6,19 @@
 .right{display:flex;align-items:center;gap:8px;min-width:0}
 .enable{display:flex;align-items:center;gap:5px;white-space:nowrap;color:#ded5f6;font-size:11px;cursor:pointer}
 .enable input,.hour input{accent-color:#9772ff;cursor:pointer}
-.dropdown{position:relative;flex:1;min-width:0;color:#f7f3ff}
-.trigger{display:flex;align-items:center;justify-content:space-between;gap:6px;list-style:none;cursor:pointer;min-height:35px;border:1px solid #554782;border-radius:10px;background:#141529;padding:7px 10px;font-size:12px;font-weight:700;white-space:nowrap}
-.trigger::-webkit-details-marker{display:none}
+.trigger{display:flex;align-items:center;justify-content:space-between;gap:6px;flex:1;min-width:0;cursor:pointer;min-height:35px;border:1px solid #554782;border-radius:10px;background:#141529;color:#f7f3ff;padding:7px 10px;font-size:12px;font-weight:700;white-space:nowrap}
 .trigger:focus-visible{outline:2px solid #a890ff;outline-offset:2px}
 .chevron{color:#c7b5ff;font-size:18px;line-height:1;transition:transform .2s}
-.dropdown[open] .chevron{transform:rotate(180deg)}
-.menu{margin-top:7px;padding:9px;border:1px solid #655395;border-radius:10px;background:#131024;box-shadow:0 10px 24px #0005}
-.hours{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px;max-height:204px;overflow-y:auto}
-.hour{display:flex;align-items:center;justify-content:center;gap:5px;border:1px solid #39334c;border-radius:7px;padding:8px 4px;background:#111020;color:#c4b9da;font-size:11px;cursor:pointer;font-variant-numeric:tabular-nums;white-space:nowrap}
-.hour.selected{background:#302459;border-color:#9675ef;color:#fff}
+.chevronOpen{transform:rotate(180deg)}
+/* Portaled outside Settings: a true overlay, never part of the card's height. */
+.floatingMenu{z-index:100000;display:flex;flex-direction:column;overflow:hidden;padding:7px;border:1px solid #655395;border-radius:10px;background:#131024;color:#f7f3ff;box-shadow:0 14px 38px #0009;box-sizing:border-box}
+.hours{display:flex;flex-direction:column;gap:3px;overflow-y:auto;overscroll-behavior:contain;min-height:0;flex:1}
+.hour{display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid transparent;border-radius:7px;padding:8px 12px;background:#111020;color:#d0c5df;font-size:12px;cursor:pointer;font-variant-numeric:tabular-nums;white-space:nowrap}
+.hour.selected{background:#302459;border-color:#7051b9;color:#fff}
+.hour:hover{border-color:#9675ef}
+.hour input{width:16px;height:16px;margin:0;flex:none}
 .hour:has(input:disabled){opacity:.5}
-.quick{display:flex;justify-content:flex-end;gap:7px;margin-top:8px}
+.quick{flex:none;display:flex;justify-content:space-between;gap:7px;padding:8px 3px 2px;border-top:1px solid #39334c;margin-top:6px}
 .quick button,.pause{padding:6px 9px;border:1px solid #51476e;border-radius:8px;background:#17112d;color:#e8deff;font-size:11px;cursor:pointer}
 .actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:8px}
 .notice{margin-right:auto;color:#b2e6d9;font-size:11px}
@@ -27,5 +28,4 @@
   .field{grid-template-columns:1fr;gap:6px}
   .fieldLabel{flex-direction:row;align-items:center;justify-content:space-between}
   .right{width:100%}
-  .hours{grid-template-columns:repeat(3,minmax(0,1fr))}
 }

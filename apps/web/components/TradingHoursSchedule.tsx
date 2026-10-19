@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { api } from "../lib/api";
 import styles from "./TradingHoursSchedule.module.css";
 import { useSystemPopup } from "./SystemPopupProvider";
@@ -17,6 +18,49 @@ export function TradingHoursSchedule({slotId,settings,onSaved}:Props) {
   const [saving,setSaving]=useState(false);
   const [pausing,setPausing]=useState(false);
   const [notice,setNotice]=useState("");
+  const [listOpen,setListOpen]=useState(false);
+  const triggerRef=useRef<HTMLButtonElement>(null);
+  const menuRef=useRef<HTMLDivElement>(null);
+  const [menuPosition,setMenuPosition]=useState<{top:number;left:number;width:number;maxHeight:number}>({
+    top:0,left:0,width:240,maxHeight:360
+  });
+  useEffect(()=>{
+    if(!listOpen) return;
+    function reposition() {
+      const trigger=triggerRef.current;
+      if(!trigger) return;
+      const rect=trigger.getBoundingClientRect();
+      const margin=8;
+      const wantedHeight=390;
+      const availableBelow=window.innerHeight-rect.bottom-12;
+      const availableAbove=rect.top-12;
+      const placeAbove=availableBelow<220 && availableAbove>availableBelow;
+      const maxHeight=Math.max(100,Math.min(wantedHeight,placeAbove?availableAbove:availableBelow));
+      const width=Math.min(Math.max(225,rect.width),window.innerWidth-16);
+      const left=Math.max(margin,Math.min(rect.right-width,window.innerWidth-width-margin));
+      const top=placeAbove?Math.max(margin,rect.top-maxHeight-6):Math.min(window.innerHeight-margin,rect.bottom+6);
+      setMenuPosition({top,left,width,maxHeight});
+    }
+    reposition();
+    function outside(event:PointerEvent) {
+      if(triggerRef.current?.contains(event.target as Node) ||
+         menuRef.current?.contains(event.target as Node)) return;
+      setListOpen(false);
+    }
+    function escape(event:KeyboardEvent) {
+      if(event.key==="Escape") {setListOpen(false);triggerRef.current?.focus();}
+    }
+    window.addEventListener("resize",reposition);
+    window.addEventListener("scroll",reposition,true);
+    document.addEventListener("pointerdown",outside);
+    document.addEventListener("keydown",escape);
+    return ()=>{
+      window.removeEventListener("resize",reposition);
+      window.removeEventListener("scroll",reposition,true);
+      document.removeEventListener("pointerdown",outside);
+      document.removeEventListener("keydown",escape);
+    };
+  },[listOpen]);
 
   // Unconfigured RACE slots retain their legacy all-day trading behavior.
   const configured=typeof settings?.tradingScheduleEnabled === "boolean";
@@ -29,6 +73,7 @@ export function TradingHoursSchedule({slotId,settings,onSaved}:Props) {
     setEnabled(storedEnabled);
     setHours(storedHours);
     setNotice("");
+    setListOpen(false);
   },[slotId,storedEnabled,hourKey]);
   const selected=useMemo(()=>new Set(hours),[hours]);
   const dirty=enabled!==storedEnabled || hours.join(",")!==hourKey;
@@ -74,29 +119,48 @@ export function TradingHoursSchedule({slotId,settings,onSaved}:Props) {
         </div>
         <div className={styles.right}>
           <label className={styles.enable}><input type="checkbox" checked={enabled} onChange={e=>setEnabled(e.target.checked)}/>เปิดใช้</label>
-          <details className={styles.dropdown}>
-            <summary className={styles.trigger} aria-label="เลือกชั่วโมงทำงาน RACE">
-              {hours.length===24?"ตลอด 24 ชั่วโมง":hours.length===0?"ยังไม่ได้เลือกเวลา":"เลือก "+hours.length+" ชั่วโมง"}
-              <span className={styles.chevron} aria-hidden="true">⌄</span>
-            </summary>
-            <div className={styles.menu}>
-              <div className={styles.hours}>
-                {hours24.map(h=>(
-                  <label key={h} className={styles.hour+" "+(selected.has(h)?styles.selected:"")}>
-                    <input type="checkbox" disabled={!enabled} checked={selected.has(h)}
-                      onChange={e=>setHours(prev=>e.target.checked?[...prev,h].sort((a,b)=>a-b):prev.filter(v=>v!==h))}/>
-                    {time(h)}
-                  </label>
-                ))}
-              </div>
-              <div className={styles.quick}>
-                <button type="button" disabled={!enabled} onClick={()=>setHours([...hours24])}>เลือกทั้งหมด</button>
-                <button type="button" disabled={!enabled} onClick={()=>setHours([])}>ล้าง</button>
-              </div>
-            </div>
-          </details>
+          <button
+            ref={triggerRef}
+            type="button"
+            className={styles.trigger}
+            aria-label="เลือกชั่วโมงทำงาน RACE"
+            aria-expanded={listOpen}
+            aria-haspopup="dialog"
+            onClick={()=>setListOpen(open=>!open)}
+          >
+            {hours.length===24?"ตลอด 24 ชั่วโมง":hours.length===0?"ยังไม่ได้เลือกเวลา":"เลือก "+hours.length+" ชั่วโมง"}
+            <span className={styles.chevron+(listOpen?" "+styles.chevronOpen:"")} aria-hidden="true">⌄</span>
+          </button>
         </div>
       </div>
+      {listOpen && typeof document!=="undefined" && createPortal(
+        <div
+          ref={menuRef}
+          className={styles.floatingMenu}
+          style={{position:"fixed",top:menuPosition.top,left:menuPosition.left,width:menuPosition.width,maxHeight:menuPosition.maxHeight}}
+          role="dialog"
+          aria-label="เลือกชั่วโมงทำงาน RACE"
+        >
+          <div className={styles.hours}>
+            {hours24.map(h=>(
+              <label key={h} className={styles.hour+(selected.has(h)?" "+styles.selected:"")}>
+                <span>{time(h)}</span>
+                <input
+                  type="checkbox"
+                  disabled={!enabled}
+                  checked={selected.has(h)}
+                  onChange={e=>setHours(prev=>e.target.checked?[...prev,h].sort((a,b)=>a-b):prev.filter(v=>v!==h))}
+                />
+              </label>
+            ))}
+          </div>
+          <div className={styles.quick}>
+            <button type="button" disabled={!enabled} onClick={()=>setHours([...hours24])}>เลือกทั้งหมด</button>
+            <button type="button" disabled={!enabled} onClick={()=>setHours([])}>ล้าง</button>
+          </div>
+        </div>,
+        document.body
+      )}
       {(dirty || armed || notice) && <div className={styles.actions}>
         {notice && <span className={styles.notice} role="status">{notice}</span>}
         {dirty && <button type="button" className={styles.save} disabled={!slotId||saving||(enabled&&!hours.length)} onClick={()=>void save()}>{saving?"กำลังบันทึก...":"บันทึกตารางเวลา"}</button>}
