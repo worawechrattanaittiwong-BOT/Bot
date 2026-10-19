@@ -111,6 +111,17 @@ test("production contracts: schedule respects explicit stop, Live settings isola
  assert.match(dropdownCSS,/\.hours\{[^}]*flex-direction:column/);
  assert.match(dropdownCSS,/\.hour\{[^}]*justify-content:space-between/);
  assert.doesNotMatch(dropdownCSS,/\.hours\{[^}]*grid-template-columns/);
+ // Mobile RACE selector shares the exact responsive 2/3 control-column
+ // geometry and 36px height of the established Bot Settings controls.
+ const dashboardCSS=fs.readFileSync("apps/web/app/premium-dashboard.css","utf8");
+ assert.match(dashboardCSS,/--mobile-form-control-width:66\.666%/);
+ assert.match(dashboardCSS,/--mobile-form-control-h:36px/);
+ assert.match(dropdownCSS,/@media\(max-width:760px\)\{/);
+ assert.match(dropdownCSS,/\.field\{\s*grid-template-columns:minmax\(0,var\(--settings-label,116px\)\) minmax\(0,1fr\)/);
+ assert.match(dropdownCSS,/\.right\{\s*display:grid;\s*grid-template-columns:minmax\(0,1fr\) minmax\(0,2fr\)/);
+ assert.match(dropdownCSS,/\.trigger\{[^}]*width:100%;[^}]*height:var\(--mobile-form-control-h,36px\)/);
+ assert.match(dropdownCSS,/\.triggerText\{[^}]*text-overflow:ellipsis/);
+ assert.match(web,/<span className=\{styles\.triggerText\}>/);
  assert.doesNotMatch(web,/เมื่อพ้นเวลาที่ติ๊ก ระบบใช้ Safe Stop/);
  assert.match(web,/เวลาไทย \(UTC\+7\)/);
  const raceCSS=fs.readFileSync("apps/web/app/premium-dashboard.css","utf8");

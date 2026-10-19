@@ -128,7 +128,9 @@ export function TradingHoursSchedule({slotId,settings,onSaved}:Props) {
             aria-haspopup="dialog"
             onClick={()=>setListOpen(open=>!open)}
           >
-            {hours.length===24?"ตลอด 24 ชั่วโมง":hours.length===0?"ยังไม่ได้เลือกเวลา":"เลือก "+hours.length+" ชั่วโมง"}
+            <span className={styles.triggerText}>
+              {hours.length===24?"ตลอด 24 ชั่วโมง":hours.length===0?"ยังไม่ได้เลือกเวลา":"เลือก "+hours.length+" ชั่วโมง"}
+            </span>
             <span className={styles.chevron+(listOpen?" "+styles.chevronOpen:"")} aria-hidden="true">⌄</span>
           </button>
         </div>
