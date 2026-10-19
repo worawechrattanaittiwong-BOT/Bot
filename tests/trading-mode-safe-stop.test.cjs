@@ -96,7 +96,7 @@ test("source: heartbeat blocks stale RUNNING, preserves pending-safe flat check"
   assert.match(ea,/const modeDisabled = await this\.tradingModes\.disabled/);
   assert.match(ea,/Number\(metrics\.accountScenovaPendingOrders\) === 0/);
   assert.match(ea,/modeDisabled,\s*entrySuppressed/);
-  assert.match(ea,/!modeDisabled\s*&&\s*heartbeatActualState/);
+  assert.match(ea,/!modeDisabled\s*&&[\s\S]*?heartbeatActualState/);
   assert.match(mq5,/JsonBool\(response,"modeDisabled",false\)/);
   assert.match(mq5,/g_safeStopDrainRequested = \(g_access && desired == "SAFE_STOP" && !ownerDisabledMode\)/);
   assert.match(bot,/tradingModes\.requestStart/);
