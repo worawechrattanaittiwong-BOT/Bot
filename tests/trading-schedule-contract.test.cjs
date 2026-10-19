@@ -96,6 +96,8 @@ test("production contracts: schedule respects explicit stop, Live settings isola
  const page=fs.readFileSync("apps/web/app/dashboard/page.tsx","utf8");
  assert.match(page,/toUpperCase\(\)==="RACE" && \(/);
  assert.match(svc,/canonical_mode_key\(bs\.settings\)='RACE'/);
+ const ea=fs.readFileSync("apps/api/src/ea.controller.ts","utf8");
+ assert.match(ea,/firstConnectPrimeRuntimeReady &&[\s\S]*?tradingScheduleArmed === true && tradingHourAllowed\(runtimeSettings\)/);
  assert.match(mq5,/g_controlMode!="RACE" \|\| !g_tradingScheduleEnabled/);
  assert.match(mq5,/g_controlMode=="RACE" && g_tradingScheduleEnabled/);
  assert.match(web,/schedule\/pause/);
