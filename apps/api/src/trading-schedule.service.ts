@@ -49,7 +49,32 @@ export class TradingScheduleService implements OnApplicationBootstrap, OnModuleD
     } finally { this.scanning = false; }
   }
 
+  private hardSafetyLock(metrics:any): boolean {
+    return metrics?.dailyLossLocked === true || metrics?.dailyProfitLocked === true ||
+      ["DAILY_LOSS_LOCK","DAILY_PROFIT_LOCK","DAILY_PROFIT_GIVEBACK_LOCK",
+       "NO_ACCESS","MAINTENANCE"].includes(String(metrics?.executionStatus || "").toUpperCase());
+  }
+
+  private async cancelAutoResume(instanceId:string) {
+    // Use the same serialized lock as manual Start/Stop. Any hard safety lock
+    // revokes the previous schedule-armed intention until the user clicks Start.
+    await this.db.transaction(async tx => {
+      await tx.query("SELECT pg_advisory_xact_lock(740096)");
+      await tx.query(
+        `UPDATE bot_settings SET settings=settings ||
+         '{"tradingScheduleArmed":false,"tradingScheduleResumePending":false}'::jsonb,
+         updated_at=now()
+         WHERE bot_instance_id=$1
+           AND canonical_mode_key(settings)='RACE'
+           AND settings->>'tradingScheduleEnabled'='true'
+           AND (settings->>'tradingScheduleArmed'='true' OR
+                settings->>'tradingScheduleResumePending'='true')`,[instanceId]
+      );
+    });
+  }
+
   private async reconcileOne(row: any) {
+    const hardBlocked=this.hardSafetyLock(row.metrics);
     const allowed = tradingHourAllowed(row.settings);
     if (!allowed) {
       if (row.desired_state === "RUNNING") {
@@ -80,6 +105,11 @@ export class TradingScheduleService implements OnApplicationBootstrap, OnModuleD
           );
         });
       }
+      if (hardBlocked) await this.cancelAutoResume(row.id);
+      return;
+    }
+    if (hardBlocked) {
+      await this.cancelAutoResume(row.id);
       return;
     }
     const s=row.settings;
@@ -88,8 +118,6 @@ export class TradingScheduleService implements OnApplicationBootstrap, OnModuleD
       row.slot_status !== "ACTIVE" && row.slot_status !== "AVAILABLE" ||
       !row.assigned_user_id || !row.last_seen_at ||
       Date.now()-new Date(row.last_seen_at).getTime() > 20_000 ||
-      row.metrics?.dailyLossLocked === true || row.metrics?.dailyProfitLocked === true ||
-      ["DAILY_LOSS_LOCK","DAILY_PROFIT_LOCK","DAILY_PROFIT_GIVEBACK_LOCK","NO_ACCESS","MAINTENANCE"].includes(String(row.metrics?.executionStatus||"")) ||
       this.retryAt.get(row.id)! > Date.now()) return;
     // Never infer a flat account from missing or stale metrics.
     const pos=Number(row.metrics?.accountScenovaPositions ?? row.metrics?.positions);
@@ -108,7 +136,13 @@ export class TradingScheduleService implements OnApplicationBootstrap, OnModuleD
     try {
       await controller.start({user:{sub:row.assigned_user_id},scheduleAuto:true},row.slot_id);
     } catch (error:any) {
-      this.logger.warn("Auto Start deferred for "+row.id+": "+String(error?.message || error));
+      const reason=String(error?.message || error);
+      // An expired/grant-revoked subscription, maintenance or daily risk lock
+      // is a persistent veto. Transient MT5/runtime readiness failures retry.
+      if (/หมดอายุ|ยังไม่มี Trial|สิทธิ์กลุ่ม|ปิดชั่วคราว|ปิดปรับปรุง|ปิดอย่างปลอดภัย|Maintenance|FORCE FLAT|DAILY[_ ](?:LOSS|PROFIT)|Daily Loss|Daily Profit/i.test(reason)) {
+        await this.cancelAutoResume(row.id);
+      }
+      this.logger.warn("Auto Start deferred for "+row.id+": "+reason);
     }
   }
 }

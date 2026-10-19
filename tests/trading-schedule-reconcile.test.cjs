@@ -92,3 +92,23 @@ test("timer scans only persisted RACE schedules",async()=>{
   await h.svc.reconcile();
   assert.match(h.queries.join("\n"),/canonical_mode_key\(bs\.settings\)='RACE'/);
 });
+
+test("daily risk lock permanently disarms RACE auto-resume",async()=>{
+  const h=harness();
+  await h.svc.reconcileOne({...row(),metrics:{
+    accountScenovaPositions:0,accountScenovaPendingOrders:0,
+    dailyLossLocked:true,executionStatus:"DAILY_LOSS_LOCK"
+  }});
+  assert.equal(h.starts.length,0);
+  assert.match(h.queries.join("\\n"),/tradingScheduleArmed.*false/);
+});
+test("expired subscription veto disarms RACE while temporary problems retry",async()=>{
+  const h=harness();
+  h.svc.moduleRef={get:()=>({start:async()=>{throw Error("Trial หมดอายุแล้ว");}})};
+  await h.svc.reconcileOne(row());
+  assert.match(h.queries.join("\\n"),/tradingScheduleArmed.*false/);
+  const temporary=harness();
+  temporary.svc.moduleRef={get:()=>({start:async()=>{throw Error("EA ยังไม่พร้อม");}})};
+  await temporary.svc.reconcileOne(row());
+  assert.doesNotMatch(temporary.queries.join("\\n"),/tradingScheduleArmed.*false/);
+});
