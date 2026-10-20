@@ -104,6 +104,57 @@ foreach ($required in @(
   }
 }
 
+# The added compact table must reuse existing visibleSlots and stay read-only.
+# The original card grid, existing search, period/filter controls and default
+# card presentation must remain present for every fleet-monitor user.
+foreach ($required in @(
+  'useState<FleetViewMode>("CARDS")',
+  'useState<TableSortKey>("DEFAULT")',
+  'useState<string | null>(null)',
+  'viewMode === "CARDS"',
+  'viewMode === "TABLE"',
+  'className={styles.cards}',
+  'className={styles.fleetTable}',
+  'tableSlots.map(slot =>',
+  'aria-sort=',
+  'aria-pressed={viewMode === "CARDS"}',
+  'aria-pressed={viewMode === "TABLE"}',
+  'setTableSort("DEFAULT")',
+  'slot.account?.number || "—"',
+  'slot.money.balance',
+  'slot.money.equity',
+  'slot.money.todayClosedProfit',
+  'slot.money.netProfit',
+  'slot.runtime.lastSeenAt',
+  'aria-expanded={open}',
+  'expandedSlotId === slot.slotId',
+  'data.elevated ? <SortHead label="ลูกค้า"',
+  'colSpan={data.elevated ? 10 : 9}',
+  'role="region"',
+  'tabIndex={0}'
+)) {
+  if (-not $web.Contains($required)) {
+    throw "Fleet monitor optional table view missing: $required"
+  }
+}
+foreach ($required in @(
+  '.tableViewport{',
+  'overflow:auto',
+  'position:sticky',
+  '.viewSwitcher',
+  '.tableExpandedContent',
+  '.rowDetailsButton',
+  '.fleetTable'
+)) {
+  if (-not $css.Contains($required)) {
+    throw "Fleet monitor table style missing: $required"
+  }
+}
+if ($web.Contains('onClick={() => api(') -or $web.Contains('onClick={() => startBot(')) {
+  throw 'Fleet table must remain read-only'
+}
+Write-Host 'Trading Fleet Monitor Cards/Table shared filters and read-only scope PASS'
+
 if ($web.Contains('label="Today P/L · Live"')) {
   throw 'Fleet Monitor account cards must follow the selected period instead of showing a fixed Today P/L metric'
 }

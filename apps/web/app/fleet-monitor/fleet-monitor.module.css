@@ -323,6 +323,39 @@
   font-size:var(--ui-type-caption);
   white-space:nowrap;
 }
+/* Second read-only presentation of the existing filtered fleet results. */
+.viewBar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 10px;flex-wrap:wrap}
+.viewBar small{font-size:11px;color:#8291ae}
+.viewSwitcher{display:inline-flex;align-items:center;gap:5px;padding:4px;border:1px solid #2b3554;border-radius:10px;background:#0a1020}
+.viewSwitcher>span{font-size:11px;color:#9baccb;margin:0 8px}
+.viewSwitcher button{min-height:31px;padding:5px 13px;color:#aab6d1;background:transparent;border:1px solid transparent;border-radius:7px;font-size:12px;font-weight:800;cursor:pointer}
+.viewSwitcher button:hover{color:#f5f3ff;border-color:#41456f}
+.viewSwitcher button.viewActive{color:#f6f3ff;border-color:#6655a1;background:linear-gradient(145deg,#30234f,#171b36)}
+.viewSwitcher button:focus-visible,.tableSortButton:focus-visible,.rowDetailsButton:focus-visible,.tableViewport:focus-visible{outline:2px solid #b39cff;outline-offset:2px}
+.tablePanel{min-width:0;border:1px solid #263553;border-radius:12px;background:#0a1223;overflow:hidden}
+.tableViewport{max-width:100%;max-height:72vh;min-height:75px;overflow:auto;overscroll-behavior:contain}
+.fleetTable{width:100%;min-width:1130px;border-collapse:separate;border-spacing:0;font-size:12px;font-variant-numeric:tabular-nums}
+.fleetTable th{position:sticky;top:0;z-index:2;padding:0;background:#14223c;border-bottom:1px solid #3b4c71;text-align:left;color:#aebfdf;white-space:nowrap;font-weight:800}
+.fleetTable th:last-child{padding:12px 14px}
+.tableSortButton{width:100%;min-height:45px;padding:10px 12px;display:flex;gap:6px;justify-content:space-between;align-items:center;border:0;background:transparent;color:inherit;text-align:left;font:inherit;cursor:pointer}
+.tableSortButton:hover{color:#fff;background:#1d2c49}
+.tableSortButton span{color:#9280f0}
+.fleetTable td{max-width:205px;padding:12px;border-bottom:1px solid #1d2c44;color:#e8edfa;vertical-align:middle}
+.tableDataRow:nth-of-type(even){background:#0c1729}
+.tableDataRow:hover{background:#14223c}
+.fleetTable .status{width:fit-content;min-width:81px}
+.tablePrimary{font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tableSecondary,.tableLate{margin-top:4px;color:#8697b4;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tableLate{color:#ff96a0}
+.tableNumeric{white-space:nowrap;text-align:right}
+.rowDetailsButton{min-height:32px;white-space:nowrap;padding:6px 10px;border:1px solid #514779;border-radius:8px;background:#1b1733;color:#e2d5ff;font-size:11px;font-weight:750;cursor:pointer}
+.rowDetailsButton:hover{border-color:#9c82ed;background:#282046}
+.tableExpandedRow td{padding:0;border-bottom:1px solid #38456b;background:#101c32}
+.tableExpandedContent{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:0;padding:8px 12px}
+.tableExpandedContent .metric{border-bottom:1px solid #26364d}
+@media(max-width:1180px){.tableExpandedContent{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:680px){.tableViewport{max-height:67vh}.tableExpandedContent{grid-template-columns:repeat(2,minmax(0,1fr))}.viewBar small{width:100%}}
+
 .cards{
   display:grid;
   grid-template-columns:repeat(4,minmax(0,1fr));
