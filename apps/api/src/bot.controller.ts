@@ -19,7 +19,7 @@ import { EA_RUNTIME_CONTRACT, FIRST_CONNECT_PRIME_MIN_EA_VERSION, ZERO_GRID_MAX_
 import { AdminGuard, CryptoService, JwtGuard } from "./security";
 import { MaintenanceService } from "./maintenance.service";
 import { TradingModeControlService, canonicalTradingMode } from "./trading-mode-control.service";
-import { checkTradingScheduleStart, isRaceSchedule, validTradingHours } from "./trading-schedule-rules";
+import { checkTradingScheduleStart, isRaceSchedule, tradingHourAllowed, validTradingHours } from "./trading-schedule-rules";
 import { PartnerService } from "./partner.service";
 import { TrialAuthorizationService } from "./trial-authorization.service";
 import { RuntimeMigrationService } from "./runtime-migration.service";
@@ -3356,7 +3356,12 @@ export class BotController {
       [instance.id]
     );
     const startSettings = startSettingsRow?.settings || {};
-    checkTradingScheduleStart(startSettings, req.scheduleAuto === true);
+    const mayWaitForRaceHours =
+      req.scheduleAuto !== true &&
+      isRaceSchedule(startSettings) &&
+      startSettings.tradingScheduleEnabled === true &&
+      !tradingHourAllowed(startSettings);
+    if (!mayWaitForRaceHours) checkTradingScheduleStart(startSettings, req.scheduleAuto === true);
     await this.tradingModes.assertEnabled(canonicalTradingMode(startSettings));
     if (startSettings.firstConnectPrimePending === true) {
       if (instance.mode === "CLOUD") {
@@ -3582,15 +3587,19 @@ export class BotController {
       }
     }
 
-    if (access.source === "TRIAL_READY") {
+    // Check again inside the serialized Start/Stop transaction. Waiting for a
+    // future RACE window must not prematurely consume the 3-hour Trial.
+    await this.tradingModes.assertEnabled(canonicalTradingMode(startSettings));
+    const startResult = await this.tradingModes.requestStart(
+      instance.id, canonicalTradingMode(startSettings), false,
+      req.scheduleAuto === true, req.scheduleAuto !== true
+    );
+    if (!startResult.waitingForWindow && access.source === "TRIAL_READY") {
       await this.db.query(
-        "UPDATE trial_grants SET status='ACTIVE',started_at=now(),expires_at=now() + (duration_minutes || ' minutes')::interval WHERE id=$1 AND status='APPROVED'",
+        "UPDATE trial_grants SET status='ACTIVE',started_at=now(),expires_at=now() + (duration_minutes || ' minutes') WHERE id=$1 AND status='APPROVED'",
         [access.trialId]
       );
     }
-    // A second check narrows the time-of-check gap before writing RUNNING.
-    await this.tradingModes.assertEnabled(canonicalTradingMode(startSettings));
-    await this.tradingModes.requestStart(instance.id, canonicalTradingMode(startSettings), false, req.scheduleAuto === true);
       this.logger.log(JSON.stringify({
         event: "BOT_START_ACCEPTED",
         userId: req.user?.sub || null,
@@ -3606,7 +3615,11 @@ export class BotController {
         terminalConnected: instance?.metrics?.terminalConnected ?? null,
         accessSource: access?.source || null
       }));
-      return { ok: true, state: "RUNNING" };
+      return {
+        ok:true,
+        state:startResult.waitingForWindow ? "SAFE_STOP" : "RUNNING",
+        waitingForSchedule:startResult.waitingForWindow
+      };
     } catch (error: any) {
       const lastSeenAt = instance?.last_seen_at ? new Date(instance.last_seen_at).getTime() : NaN;
       const eaLastSeenAgeMs = Number.isFinite(lastSeenAt)

@@ -112,3 +112,27 @@ test("expired subscription veto disarms RACE while temporary problems retry",asy
   await temporary.svc.reconcileOne(row());
   assert.doesNotMatch(temporary.queries.join("\\n"),/tradingScheduleArmed.*false/);
 });
+
+
+test("armed Start outside the window resumes when flat and allowed",async()=>{
+  const h=harness({command:"SAFE_STOP",payload:{source:"TRADING_SCHEDULE_WAIT_FOR_WINDOW"}});
+  await h.svc.reconcileOne(row());
+  assert.equal(h.starts.length,1);
+  assert.equal(h.starts[0].req.scheduleAuto,true);
+});
+test("outside-window waiting never sends Start prematurely",async()=>{
+  const nowHour=bangkokHour();
+  const h=harness({command:"SAFE_STOP",payload:{source:"TRADING_SCHEDULE_WAIT_FOR_WINDOW"}});
+  const r=row();
+  r.settings.tradingScheduleHours=[(nowHour+12)%24];
+  await h.svc.reconcileOne(r);
+  assert.equal(h.starts.length,0);
+});
+test("manual Stop clears the queued intention even with a previous wait command",async()=>{
+  const h=harness({command:"SAFE_STOP",payload:{source:"TRADING_SCHEDULE_WAIT_FOR_WINDOW"}});
+  const r=row();
+  r.settings.tradingScheduleArmed=false;
+  r.settings.tradingScheduleResumePending=false;
+  await h.svc.reconcileOne(r);
+  assert.equal(h.starts.length,0);
+});

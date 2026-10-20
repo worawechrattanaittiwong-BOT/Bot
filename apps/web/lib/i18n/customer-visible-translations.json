@@ -3019,5 +3019,9 @@
   "เปิดใช้": "Enable",
   "เลือกชั่วโมงทำงาน RACE": "Select RACE trading hours",
   "เวลาทำงาน RACE": "RACE Trading Hours",
-  "เวลาไทย (UTC+7)": "Thailand Time (UTC+7)"
+  "เวลาไทย (UTC+7)": "Thailand Time (UTC+7)",
+  "รอเวลา RACE": "Waiting for RACE trading hours",
+  "ระบบรับคำสั่ง Start แล้ว · รอชั่วโมงที่เลือก (เวลาไทย UTC+7) โดยไม่เปิดออเดอร์นอกเวลา · กด Stop เพื่อยกเลิกการรอ": "Start accepted. Waiting for selected Thailand hours (UTC+7). No trades outside the window. Press Stop to cancel the wait.",
+  "เปิดระบบรอชั่วโมงที่เลือก · Stop เพื่อยกเลิก": "Armed for selected hours. Press Stop to cancel.",
+  "เปิดระบบรอเวลา RACE แล้ว": "RACE trading schedule armed. Waiting for allowed hours."
 }
