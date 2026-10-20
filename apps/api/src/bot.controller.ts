@@ -16,6 +16,7 @@ import {
 import { randomBytes } from "crypto";
 import { DbService } from "./db.service";
 import { EA_RUNTIME_CONTRACT, FIRST_CONNECT_PRIME_MIN_EA_VERSION, ZERO_GRID_MAX_LEVELS_PER_SIDE, installerDownloadPath, isEaVersionExact, isVersionAtLeast, isVersionExact, isVersionSame, latestEaRelease, latestInstallerVersion } from "./release-version";
+import { isRecoveredCloudUpdate } from "./cloud-update-dashboard-status";
 import { AdminGuard, CryptoService, JwtGuard } from "./security";
 import { MaintenanceService } from "./maintenance.service";
 import { TradingModeControlService, canonicalTradingMode } from "./trading-mode-control.service";
@@ -145,6 +146,41 @@ export class BotController {
   private installerUpdateState(instance: any, mode?: string | null) {
     const latestVersion = latestInstallerVersion();
     const release = latestEaRelease();
+
+    // Cloud does not use the local installer. Read its actual runtime identity
+    // from the running EA heartbeat, never from the intended server release.
+    if (String(mode || instance?.mode || "").toUpperCase() === "CLOUD" && instance) {
+      const currentEaVersion = String(instance.metrics?.eaVersion || "").trim() || null;
+      const currentRuntimeBuildId = String(instance.metrics?.buildId || "").trim() || null;
+      const currentRuntimeContract = String(instance.metrics?.runtimeContract || "").trim() || null;
+      const requiredRuntimeBuildId = String(release.buildId || "").trim() || null;
+      const requiredRuntimeContract = String(release.runtimeContract || EA_RUNTIME_CONTRACT).trim() || EA_RUNTIME_CONTRACT;
+      const eaVersionMatch = isEaVersionExact(currentEaVersion, release.eaVersion);
+      const runtimeBuildMatch = Boolean(requiredRuntimeBuildId && currentRuntimeBuildId === requiredRuntimeBuildId);
+      const runtimeContractMatch = currentRuntimeContract === requiredRuntimeContract;
+      return {
+        required: false,
+        installerRequired: false,
+        installerUpdateAvailable: false,
+        eaUpdateRequired: !eaVersionMatch || !runtimeBuildMatch || !runtimeContractMatch,
+        currentVersion: null,
+        latestVersion,
+        currentEaVersion,
+        latestEaVersion: release.eaVersion,
+        currentEaHash: null,
+        latestEaHash: release.sha256,
+        eaVersionMatch,
+        eaHashMatch: null, // Only the Local Agent reports its EX5 hash.
+        currentRuntimeBuildId,
+        requiredRuntimeBuildId,
+        runtimeBuildMatch,
+        currentRuntimeContract,
+        requiredRuntimeContract,
+        runtimeContractMatch,
+        downloadPath: installerDownloadPath(latestVersion),
+        reason: null
+      };
+    }
 
     if (String(mode || instance?.mode || "") !== "LOCAL" || !instance) {
       return {
@@ -1772,16 +1808,21 @@ export class BotController {
     const cloudUpdate = instance && String(selectedSlot.mode || "").toUpperCase() === "CLOUD"
       ? await this.db.one(
           `SELECT
-             ij.state,ij.target_version,ij.result_code,ij.created_at,ij.delivered_at,
-             ij.applied_at,ij.completed_at,sj.action,sj.runner_id
+             ij.state,ij.target_version,ij.target_build_id,ij.result_code,ij.created_at,ij.delivered_at,
+             ij.applied_at,ij.completed_at,sj.action,sj.runner_id,
+             er.runtime_contract AS target_runtime_contract
            FROM instance_update_jobs ij
            JOIN server_update_jobs sj ON sj.id=ij.server_update_job_id
+           LEFT JOIN ea_releases er ON er.id=sj.release_id
            WHERE ij.bot_instance_id=$1
            ORDER BY ij.created_at DESC
            LIMIT 1`,
           [instance.id]
         )
       : null;
+    // A failed job stays FAILED in the audit history; a newer verified EA
+    // heartbeat can make the old customer-facing failure inapplicable.
+    const activeCloudUpdate = isRecoveredCloudUpdate(cloudUpdate, instance) ? null : cloudUpdate;
     const maintenance = await this.maintenance.current();
     const announcement = await this.db.one("SELECT title,message,published_at FROM system_announcements WHERE id=1 AND active=true");
     const partner = await this.partner.dashboardSummary(userId);
@@ -1797,7 +1838,7 @@ export class BotController {
       entitlement,
       liveStatus,
       softwareUpdate,
-      cloudUpdate,
+      cloudUpdate: activeCloudUpdate,
       startTransition,
       runSummary,
       maintenance,

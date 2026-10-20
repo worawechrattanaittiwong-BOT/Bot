@@ -1451,7 +1451,7 @@ export default function DashboardPage() {
         : cloudUpdateState === "VERIFYING"
           ? "กำลังตรวจสอบ EA Version, Runtime และ Heartbeat ก่อนเปิดให้เริ่มบอทอีกครั้ง"
           : cloudUpdateState === "FAILED"
-            ? "ระบบคงสถานะ Bot เป็น STOPPED เพื่อความปลอดภัย กรุณาตรวจสอบรายละเอียดหรือติดต่อผู้ดูแล"
+            ? "ระบบคงสถานะ Bot เป็น STOPPED เพื่อความปลอดภัย · รหัสข้อผิดพลาด: " + String(cloudUpdate?.result_code || "UNKNOWN") + " · กรุณาติดต่อผู้ดูแล"
             : "ระบบกำลังเตรียมทรัพยากรสำหรับการอัปเดต";
   const cloudUpdateOperation = cloudUpdateVisible
     ? {
@@ -5102,7 +5102,7 @@ export default function DashboardPage() {
                     </button>
                   </div>
                   <div className="cc-v6-version-row">
-                    <span className={"cc-v6-version-chip "+(softwareUpdate.eaVersionMatch && softwareUpdate.eaHashMatch !== false && softwareUpdate.runtimeContractMatch !== false ? "ok" : "warn")} title={softwareUpdate.eaUpdateRequired ? "EA มี Build ใหม่หรือ Runtime ใหม่พร้อมอัปเดต" : "EA Runtime ปัจจุบัน → เวอร์ชันล่าสุดบน Server"}>
+                    <span className={"cc-v6-version-chip "+(softwareUpdate.eaVersionMatch && softwareUpdate.eaHashMatch !== false && softwareUpdate.runtimeBuildMatch !== false && softwareUpdate.runtimeContractMatch !== false ? "ok" : "warn")} title={softwareUpdate.eaUpdateRequired ? "EA มี Build ใหม่หรือ Runtime ใหม่พร้อมอัปเดต" : "EA Runtime ปัจจุบัน → เวอร์ชันล่าสุดบน Server"}>
                       EA {softwareUpdate.currentEaVersion ? "v"+softwareUpdate.currentEaVersion : "—"}<em>→</em>{softwareUpdate.latestEaVersion ? "v"+softwareUpdate.latestEaVersion : "—"}{softwareUpdate.eaVersionMatch && softwareUpdate.eaHashMatch === false ? " · Build ใหม่พร้อมอัปเดต" : softwareUpdate.eaVersionMatch && softwareUpdate.runtimeContractMatch === false ? " · Runtime ใหม่พร้อมอัปเดต" : ""}
                     </span>
                     {data.selectedSlot?.mode === "LOCAL" && (
