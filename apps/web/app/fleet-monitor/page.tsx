@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { api } from "../../lib/api";
 import {
   CustomerMobileNav,
@@ -159,6 +159,9 @@ type StatusFilter = "ALL" | "RUNNING" | "ONLINE" | "STOPPED" | "OFFLINE";
 type AccountTypeFilter = "ALL" | "REAL" | "DEMO";
 type SortMode = "SLOT" | "BALANCE" | "PROFIT" | "WIN_RATE" | "DRAWDOWN";
 type RangeMode = "ALL" | "TODAY" | "7D" | "30D" | "CUSTOM";
+type FleetViewMode = "CARDS" | "TABLE";
+type TableSortKey = "DEFAULT" | "STATUS" | "MT5" | "EA" | "CUSTOMER" |
+  "BROKER" | "BALANCE" | "TODAY" | "PERIOD" | "LAST";
 
 function num(value: unknown) {
   const parsed = Number(value);
@@ -252,6 +255,56 @@ function cardRangeLabel(mode: RangeMode) {
   if (mode === "30D") return "30 วัน";
   if (mode === "CUSTOM") return "กำหนดเอง";
   return "ทั้งหมด";
+}
+
+function reportTime(value?: string | null) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "—";
+  return date.toLocaleString("th-TH", {
+    timeZone: "Asia/Bangkok",
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+}
+
+function tableSortValue(slot: FleetSlot, key: TableSortKey): number | string {
+  switch (key) {
+    case "STATUS": return cardStatus(slot);
+    case "MT5": return String(slot.account?.number || "");
+    case "EA": return String(slot.runtime.engineMode || "");
+    case "CUSTOMER": return String(slot.account?.userCode || slot.assignedUserCode || "");
+    case "BROKER": return String(slot.account?.broker || "");
+    case "BALANCE": return num(slot.money.balance);
+    case "TODAY": return num(slot.money.todayClosedProfit);
+    case "PERIOD": return num(slot.money.netProfit);
+    case "LAST": {
+      const timestamp = slot.runtime.lastSeenAt ? Date.parse(slot.runtime.lastSeenAt) : NaN;
+      return Number.isFinite(timestamp) ? timestamp : 0;
+    }
+    default: return "";
+  }
+}
+
+function SortHead({
+  label, sortKey, current, descending, onSort
+}: {
+  label: string;
+  sortKey: TableSortKey;
+  current: TableSortKey;
+  descending: boolean;
+  onSort: (key: TableSortKey) => void;
+}) {
+  const selected = current === sortKey;
+  return (
+    <th scope="col" aria-sort={!selected ? "none" : descending ? "descending" : "ascending"}>
+      <button type="button" onClick={() => onSort(sortKey)} className={styles.tableSortButton}>
+        {label}<span aria-hidden="true">{selected ? (descending ? " ↓" : " ↑") : " ↕"}</span>
+      </button>
+    </th>
+  );
 }
 
 function expiryLabel(value?: string | null) {
@@ -425,6 +478,10 @@ export default function FleetMonitorPage() {
   const [modeFilter, setModeFilter] = useState("ALL");
   const [brokerFilter, setBrokerFilter] = useState("ALL");
   const [sortMode, setSortMode] = useState<SortMode>("SLOT");
+  const [viewMode, setViewMode] = useState<FleetViewMode>("CARDS");
+  const [tableSort, setTableSort] = useState<TableSortKey>("DEFAULT");
+  const [tableDescending, setTableDescending] = useState(false);
+  const [expandedSlotId, setExpandedSlotId] = useState<string | null>(null);
   const [rangeMode, setRangeMode] = useState<RangeMode>("ALL");
   const [customFrom, setCustomFrom] = useState(() => bangkokStartTodayValue());
   const [customTo, setCustomTo] = useState(() => bangkokLocalNowValue());
@@ -507,6 +564,31 @@ export default function FleetMonitorPage() {
     });
     return rows;
   }, [data, search, statusFilter, modeFilter, brokerFilter, sortMode]);
+
+  // The existing query, time-range filter and sort dropdown remain shared by
+  // Cards and Table. Column sorting only changes the Table presentation.
+  const tableSlots = useMemo(() => {
+    if (tableSort === "DEFAULT") return visibleSlots;
+    return [...visibleSlots].sort((a, b) => {
+      const left = tableSortValue(a, tableSort);
+      const right = tableSortValue(b, tableSort);
+      const result = typeof left === "number" && typeof right === "number"
+        ? left - right
+        : String(left).localeCompare(String(right), "th", { numeric: true });
+      return (tableDescending ? -result : result) ||
+        num(a.slotNumber) - num(b.slotNumber) ||
+        a.slotId.localeCompare(b.slotId);
+    });
+  }, [visibleSlots, tableSort, tableDescending]);
+
+  function sortTableBy(key: TableSortKey) {
+    if (key === tableSort) {
+      setTableDescending(value => !value);
+    } else {
+      setTableSort(key);
+      setTableDescending(["BALANCE", "TODAY", "PERIOD", "LAST"].includes(key));
+    }
+  }
 
   if (!data && loading) {
     return (
@@ -672,7 +754,10 @@ export default function FleetMonitorPage() {
             {brokers.map((broker) => <option key={broker} value={broker}>{broker}</option>)}
           </select>
 
-          <select value={sortMode} onChange={(event) => setSortMode(event.target.value as SortMode)}>
+          <select value={sortMode} onChange={(event) => {
+            setSortMode(event.target.value as SortMode);
+            setTableSort("DEFAULT");
+          }}>
             <option value="SLOT">เรียงตาม Slot</option>
             <option value="BALANCE">Balance สูง → ต่ำ</option>
             <option value="PROFIT">Net Profit สูง → ต่ำ</option>
@@ -683,6 +768,22 @@ export default function FleetMonitorPage() {
           <span className={styles.resultCount}>แสดง {visibleSlots.length} / {data.slots.length} บัญชีที่เชื่อมต่อ</span>
         </section>
 
+        <div className={styles.viewBar}>
+          <div className={styles.viewSwitcher} role="group" aria-label="มุมมองบัญชี">
+            <span>มุมมอง</span>
+            <button type="button" className={viewMode === "CARDS" ? styles.viewActive : ""}
+              aria-pressed={viewMode === "CARDS"} onClick={() => setViewMode("CARDS")}>
+              การ์ด
+            </button>
+            <button type="button" className={viewMode === "TABLE" ? styles.viewActive : ""}
+              aria-pressed={viewMode === "TABLE"} onClick={() => setViewMode("TABLE")}>
+              ตาราง
+            </button>
+          </div>
+          {viewMode === "TABLE" ? <small>เรียงข้อมูลได้จากหัวตาราง · กดดูรายละเอียดเพื่อขยายแต่ละบัญชี</small> : null}
+        </div>
+
+        {viewMode === "CARDS" ? (
         <section className={styles.cards}>
           {visibleSlots.map((slot) => {
             const status = cardStatus(slot);
@@ -755,6 +856,90 @@ export default function FleetMonitorPage() {
             );
           })}
         </section>
+        ) : (
+          <section className={styles.tablePanel} aria-label="ตารางบัญชี MT5">
+            <div className={styles.tableViewport} role="region" aria-label="เลื่อนดูตาราง Trading Fleet Monitor" tabIndex={0}>
+              <table className={styles.fleetTable}>
+                <thead>
+                  <tr>
+                    <SortHead label="สถานะ" sortKey="STATUS" current={tableSort} descending={tableDescending} onSort={sortTableBy}/>
+                    <SortHead label="บัญชี MT5" sortKey="MT5" current={tableSort} descending={tableDescending} onSort={sortTableBy}/>
+                    <SortHead label="EA / โหมด" sortKey="EA" current={tableSort} descending={tableDescending} onSort={sortTableBy}/>
+                    {data.elevated ? <SortHead label="ลูกค้า" sortKey="CUSTOMER" current={tableSort} descending={tableDescending} onSort={sortTableBy}/> : null}
+                    <SortHead label="โบรกเกอร์ / Server" sortKey="BROKER" current={tableSort} descending={tableDescending} onSort={sortTableBy}/>
+                    <SortHead label="Balance / Equity" sortKey="BALANCE" current={tableSort} descending={tableDescending} onSort={sortTableBy}/>
+                    <SortHead label="วันนี้" sortKey="TODAY" current={tableSort} descending={tableDescending} onSort={sortTableBy}/>
+                    <SortHead label={"P/L · " + selectedCardRangeLabel} sortKey="PERIOD" current={tableSort} descending={tableDescending} onSort={sortTableBy}/>
+                    <SortHead label="รายงานล่าสุด" sortKey="LAST" current={tableSort} descending={tableDescending} onSort={sortTableBy}/>
+                    <th scope="col">รายละเอียด</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tableSlots.map(slot => {
+                    const status = cardStatus(slot);
+                    const tone = statusTone(status);
+                    const currency = slot.runtime.currency || "USD";
+                    const open = expandedSlotId === slot.slotId;
+                    return (
+                      <Fragment key={slot.slotId}>
+                        <tr className={styles.tableDataRow}>
+                          <td><span className={styles.status + " " + styles["status_" + tone]}><i/>{status}</span></td>
+                          <td><div className={styles.tablePrimary}>{slot.account?.number || "—"}</div>
+                            <div className={styles.tableSecondary}>Slot {String(slot.slotNumber || 0).padStart(2, "0")} · {slot.slotLabel || "MT5 Account"}</div></td>
+                          <td><div className={styles.tablePrimary}>{String(slot.runtime.engineMode || "—").replace(/_/g, " ")}</div>
+                            <div className={styles.tableSecondary}>{String(slot.account?.mode || slot.slotMode || "—").toUpperCase()}</div></td>
+                          {data.elevated ? <td><div className={styles.tablePrimary}>{slot.account?.userCode || slot.assignedUserCode || "—"}</div>
+                            <div className={styles.tableSecondary}>{slot.account?.email || slot.assignedEmail || "—"}</div></td> : null}
+                          <td><div className={styles.tablePrimary}>{slot.account?.broker || "—"}</div>
+                            <div className={styles.tableSecondary}>{slot.account?.server || "—"}</div></td>
+                          <td className={styles.tableNumeric}><div className={styles.tablePrimary}>{money(slot.money.balance, currency)}</div>
+                            <div className={styles.tableSecondary}>{money(slot.money.equity, currency)}</div></td>
+                          <td className={styles.tableNumeric}><div className={slot.money.todayClosedProfit >= 0 ? styles.good : styles.bad}>
+                            {money(slot.money.todayClosedProfit, currency, true)}</div></td>
+                          <td className={styles.tableNumeric}><div className={slot.money.netProfit >= 0 ? styles.good : styles.bad}>
+                            {money(slot.money.netProfit, currency, true)}</div></td>
+                          <td><div className={styles.tablePrimary}>{reportTime(slot.runtime.lastSeenAt)}</div>
+                            <div className={slot.runtime.heartbeatOnline ? styles.tableSecondary : styles.tableLate}>
+                              {freshness(slot.runtime.heartbeatAgeSeconds)}
+                            </div></td>
+                          <td><button type="button" className={styles.rowDetailsButton} aria-expanded={open}
+                            aria-controls={"fleet-row-" + slot.slotId}
+                            onClick={() => setExpandedSlotId(open ? null : slot.slotId)}>
+                            {open ? "ย่อรายละเอียด" : "ดูรายละเอียด"}
+                          </button></td>
+                        </tr>
+                        {open ? (
+                          <tr className={styles.tableExpandedRow} id={"fleet-row-" + slot.slotId}>
+                            <td colSpan={data.elevated ? 10 : 9}>
+                              <div className={styles.tableExpandedContent}>
+                                <Metric label="Floating · Live" value={money(slot.money.floatingProfit, currency, true)}
+                                  tone={slot.money.floatingProfit >= 0 ? "good" : "bad"}/>
+                                <Metric label="Positions" value={String(slot.runtime.positions)}/>
+                                <Metric label="Pending" value={String(slot.runtime.pendingOrders)}/>
+                                <Metric label={"Win Rate" + rangeMetricSuffix} value={percent(slot.performance.winRate)}/>
+                                <Metric label={"Max DD" + rangeMetricSuffix} value={percent(slot.money.maxDrawdownPercent)}/>
+                                <Metric label={"Baskets" + rangeMetricSuffix} value={slot.performance.closedBaskets.toLocaleString("en-US")}/>
+                                <Metric label={"W / L" + rangeMetricSuffix} value={slot.performance.wins + " / " + slot.performance.losses}/>
+                                <Metric label={"Return" + rangeMetricSuffix} value={percent(slot.money.returnPercent, true)}/>
+                                <Metric label="Total Lots" value={fixed(slot.performance.totalEntryLots, 2)}/>
+                                <Metric label="Spread" value={fixed(slot.runtime.spreadPoints, 1) + " pt"}/>
+                                <Metric label="Ping" value={fixed(slot.runtime.brokerPingMs, 0) + " ms"}/>
+                                <Metric label="Sync" value={freshness(slot.runtime.heartbeatAgeSeconds)}/>
+                                <Metric label="EA / Runtime" value={slot.runtime.executionStatus || slot.runtime.actualState || "—"}/>
+                                <Metric label="Expire" value={expiryLabel(slot.subscription.expiresAt)}/>
+                                <Metric label="Signal" value={fixed(slot.runtime.signalConfidence, 0) + "%"}/>
+                              </div>
+                            </td>
+                          </tr>
+                        ) : null}
+                      </Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
 
         {!visibleSlots.length ? (
           <div className={styles.emptyState}>
