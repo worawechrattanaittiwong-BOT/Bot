@@ -2339,6 +2339,8 @@
   "ระบบกำลังเตรียม EA สำหรับบัญชีนี้ก่อนเริ่มขั้นตอนติดตั้ง": "The system is preparing the EA for this account before starting the installation process.",
   "ระบบกำลังเตรียมทรัพยากรสำหรับการอัปเดต": "The system is preparing resources for the update.",
   "ระบบคงสถานะ Bot เป็น STOPPED เพื่อความปลอดภัย กรุณาตรวจสอบรายละเอียดหรือติดต่อผู้ดูแล": "The system maintains the Bot status as STOPPED for safety. Please check the details or contact the administrator.",
+  "ระบบคงสถานะ Bot เป็น STOPPED เพื่อความปลอดภัย · รหัสข้อผิดพลาด:": "The system keeps the Bot STOPPED for safety · Error code:",
+  "· กรุณาติดต่อผู้ดูแล": "· Please contact the administrator",
   "ระบบควบคุม MT5 BOT EA ผ่านเว็บและมือถือ รองรับ Cloud และ Local": "MT5 BOT EA control system via web and mobile supports Cloud and Local.",
   "ระบบควบคุม MT5 BOT EA ผ่านเว็บและมือถือ รองรับ Cloud และ Local พร้อมระบบจัดการความเสี่ยง": "MT5 BOT EA control system via web and mobile supports Cloud and Local with a risk management system.",
   "ระบบจะคำนวณ TP และ SL ตามสภาพตลาดเมื่อมีออเดอร์": "The system will calculate TP and SL according to market conditions when an order is placed.",
