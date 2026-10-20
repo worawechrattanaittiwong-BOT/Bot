@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { API_URL, api, getToken } from "../../lib/api";
+import { shouldSuppressOldCloudUpdateFailure } from "../../lib/cloud-update-popup";
 import { CustomerMobileNav, CustomerSidebar, OwnerMobileNav, OwnerSidebar } from "../../components/OwnerSidebar";
 import { ScenovaIcon } from "../../components/ScenovaIcon";
 import { ScenovaBrand } from "../../components/ScenovaBrand";
@@ -1425,9 +1426,18 @@ export default function DashboardPage() {
   const cloudUpdateStageKey = cloudUpdate
     ? [String(cloudUpdate.created_at || ""),String(cloudUpdate.target_version || ""),cloudUpdateState].join("|")
     : "";
+  // A failed fleet job is historical once the EA has sent a newer heartbeat
+  // with the target version. Hide only that repetitive modal, not Build/Runtime
+  // warnings, FAILED audit history, or any trading safety restrictions.
+  const staleCloudUpdateFailure = shouldSuppressOldCloudUpdateFailure(cloudUpdate, {
+    connected: isMt5Online,
+    version: data?.instance?.metrics?.eaVersion,
+    heartbeatAt: data?.instance?.last_seen_at
+  });
   const cloudUpdateVisible =
     Boolean(cloudUpdate) &&
     cloudUpdateState !== "COMPLETED" &&
+    !staleCloudUpdateFailure &&
     cloudUpdateStageKey !== dismissedCloudUpdateKey;
   const cloudUpdateLabel =
     cloudUpdateState === "WAITING_SAFE"
@@ -5103,7 +5113,7 @@ export default function DashboardPage() {
                   </div>
                   <div className="cc-v6-version-row">
                     <span className={"cc-v6-version-chip "+(softwareUpdate.eaVersionMatch && softwareUpdate.eaHashMatch !== false && softwareUpdate.runtimeBuildMatch !== false && softwareUpdate.runtimeContractMatch !== false ? "ok" : "warn")} title={softwareUpdate.eaUpdateRequired ? "EA มี Build ใหม่หรือ Runtime ใหม่พร้อมอัปเดต" : "EA Runtime ปัจจุบัน → เวอร์ชันล่าสุดบน Server"}>
-                      EA {softwareUpdate.currentEaVersion ? "v"+softwareUpdate.currentEaVersion : "—"}<em>→</em>{softwareUpdate.latestEaVersion ? "v"+softwareUpdate.latestEaVersion : "—"}{softwareUpdate.eaVersionMatch && softwareUpdate.eaHashMatch === false ? " · Build ใหม่พร้อมอัปเดต" : softwareUpdate.eaVersionMatch && softwareUpdate.runtimeContractMatch === false ? " · Runtime ใหม่พร้อมอัปเดต" : ""}
+                      EA {softwareUpdate.currentEaVersion ? "v"+softwareUpdate.currentEaVersion : "—"}<em>→</em>{softwareUpdate.latestEaVersion ? "v"+softwareUpdate.latestEaVersion : "—"}{softwareUpdate.eaVersionMatch && softwareUpdate.runtimeBuildMatch === false ? " · Build ไม่ตรง" : softwareUpdate.eaVersionMatch && softwareUpdate.eaHashMatch === false ? " · Build ใหม่พร้อมอัปเดต" : softwareUpdate.eaVersionMatch && softwareUpdate.runtimeContractMatch === false ? " · Runtime ใหม่พร้อมอัปเดต" : ""}
                     </span>
                     {data.selectedSlot?.mode === "LOCAL" && (
                       <span className={"cc-v6-version-chip "+(!softwareUpdate.installerRequired ? "ok" : "warn")} title="Windows Agent ปัจจุบัน → เวอร์ชันล่าสุดบน Server">
