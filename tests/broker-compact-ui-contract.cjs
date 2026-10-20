@@ -23,6 +23,15 @@ assert(ui.includes('const [rebateActivated, setRebateActivated] = useState(false
 assert(ui.includes('rebateActivated && <ExnessRebateControl/>'));
 assert(ui.includes('previewActivated && <ExnessSignupCard showWhenInactive />'));
 assert(ui.includes('ดูบัญชีเทรด'));
+// The Exness customer list should show counts, not masked MT5 digits.
+const listStart=ui.indexOf('<div className={styles.clientList}>');
+const detailStart=ui.indexOf('{detailOpenUser === client.userId && (',listStart);
+assert(listStart>=0 && detailStart>listStart,"Exness client list and account details must remain present");
+const clientList=ui.slice(listStart,detailStart);
+assert(clientList.includes('client.exnessAccounts.length + " บัญชี MT5"'),"Customer rows show account count only");
+assert(!clientList.includes('item.accountLast4'),"Customer rows must not disclose masked account suffixes");
+assert(ui.includes('MT5 ••••{item.accountLast4}'),"On-demand account details must remain intact");
+assert(ui.includes('placeholder="User ID / Email / MT5"'),"MT5 search must remain available");
 assert(ui.includes('verifyClient(client)'));
 assert(ui.includes('styles.verifyDisclosure'));
 assert(ui.includes('ตรวจสอบใหม่'));

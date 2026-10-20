@@ -762,9 +762,7 @@ export default function BrokerPage() {
                     <div className={styles.mt5Cell}>
                       <b>
                         {client.exnessAccounts?.length
-                          ? client.exnessAccounts
-                              .map(item => "••••" + item.accountLast4)
-                              .join(", ")
+                          ? client.exnessAccounts.length + " บัญชี MT5"
                           : "ยังไม่เชื่อม"}
                       </b>
                     </div>
