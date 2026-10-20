@@ -1,7 +1,7 @@
 import { ConflictException, Injectable } from "@nestjs/common";
 import { DbService } from "./db.service";
 import { isVersionAtLeast } from "./release-version";
-import { checkTradingScheduleStart, isRaceSchedule } from "./trading-schedule-rules";
+import { checkTradingScheduleStart, isRaceSchedule, tradingHourAllowed, validTradingHours } from "./trading-schedule-rules";
 
 export const TRADE_MODES = ["AUTO", "RACE", "COUNTER", "FLIP_LOCK", "ZERO_GRID", "MANUAL"] as const;
 export type TradingMode = typeof TRADE_MODES[number];
@@ -27,10 +27,10 @@ export class TradingModeControlService {
     }
   }
 
-  async requestStart(instanceId: string, mode: TradingMode, unlockDailyProfit = false, scheduleAuto = false) {
+  async requestStart(instanceId: string, mode: TradingMode, unlockDailyProfit = false, scheduleAuto = false, allowScheduleWait = false) {
     // Use the same advisory lock as OWNER mode toggles: a racing START must
     // never overwrite the SAFE_STOP decided by an administrator.
-    await this.db.transaction(async tx => {
+    return this.db.transaction(async tx => {
       await tx.query("SELECT pg_advisory_xact_lock(740096)");
       // The mode may have changed after the caller first loaded settings.
       // Authorize the persisted mode under the same transaction/lock.
@@ -41,7 +41,18 @@ export class TradingModeControlService {
       const currentSchedule = (await tx.query(
         "SELECT settings FROM bot_settings WHERE bot_instance_id=$1 FOR UPDATE", [instanceId]
       )).rows[0]?.settings || {};
-      checkTradingScheduleStart(currentSchedule, scheduleAuto);
+      // A manual Dashboard Start may arm RACE while outside the selected
+      // Bangkok hours. Automated/recovery starts must still be inside them.
+      // Check under the SAME serialized lock as Stop to avoid race conditions.
+      const waitingForWindow =
+        allowScheduleWait && !scheduleAuto && !unlockDailyProfit &&
+        isRaceSchedule(currentSchedule) &&
+        currentSchedule.tradingScheduleEnabled === true &&
+        !tradingHourAllowed(currentSchedule);
+      if (waitingForWindow && !validTradingHours(currentSchedule.tradingScheduleHours)) {
+        throw new ConflictException("ต้องเลือกชั่วโมง RACE ที่ถูกต้องก่อนเปิดรอเวลา");
+      }
+      if (!waitingForWindow) checkTradingScheduleStart(currentSchedule, scheduleAuto);
       if (unlockDailyProfit && isRaceSchedule(currentSchedule) &&
           currentSchedule.tradingScheduleEnabled === true &&
           currentSchedule.tradingScheduleArmed !== true) {
@@ -54,6 +65,27 @@ export class TradingModeControlService {
       if (!row?.enabled) throw new ConflictException(
         "โหมด " + effectiveMode + " ถูกผู้ดูแลปิดชั่วคราว · ไม่สามารถเริ่มรอบใหม่ได้"
       );
+      if (waitingForWindow) {
+        // Persist intent while staying non-trading. The EA is never sent START.
+        // SAFE_STOP retains its existing drain behavior for open positions.
+        await tx.query(
+          "UPDATE bot_settings SET settings=jsonb_set(jsonb_set(settings,'{tradingScheduleArmed}','true'::jsonb,true),'{tradingScheduleResumePending}','true'::jsonb,true),updated_at=now() WHERE bot_instance_id=$1",
+          [instanceId]
+        );
+        await tx.query(
+          "UPDATE bot_instances SET desired_state='SAFE_STOP' WHERE id=$1",
+          [instanceId]
+        );
+        await tx.query(
+          "UPDATE bot_commands SET status='ACKED',acked_at=now() WHERE bot_instance_id=$1 AND status IN ('PENDING','DELIVERED') AND command IN ('START','SAFE_STOP')",
+          [instanceId]
+        );
+        await tx.query(
+          "INSERT INTO bot_commands(bot_instance_id,command,payload) VALUES($1,'SAFE_STOP',$2::jsonb)",
+          [instanceId,JSON.stringify({source:"TRADING_SCHEDULE_WAIT_FOR_WINDOW",timezone:"Asia/Bangkok"})]
+        );
+        return {waitingForWindow:true};
+      }
       if (effectiveMode === "RACE" && currentSchedule.tradingScheduleEnabled === true) {
         await tx.query(
           `UPDATE bot_settings SET settings=settings ||
@@ -76,6 +108,7 @@ export class TradingModeControlService {
         "INSERT INTO bot_commands(bot_instance_id,command) VALUES($1,'START')",
         [instanceId]
       );
+      return {waitingForWindow:false};
     });
   }
 

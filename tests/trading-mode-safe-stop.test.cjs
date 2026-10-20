@@ -18,16 +18,22 @@ const semver=(v,r)=>{
 new Function("module","exports","require",compiled)(mod,mod.exports,(name)=>{
   if(name==="@nestjs/common")return {Injectable:()=>target=>target,ConflictException};
   if(name==="./release-version")return {isVersionAtLeast:semver};
-  if(name==="./trading-schedule-rules")return {checkTradingScheduleStart:()=>{}};
+  if(name==="./trading-schedule-rules")return {
+    checkTradingScheduleStart:()=>{},
+    isRaceSchedule:s=>String(s?.controlMode||s?.engineMode||"AUTO").toUpperCase()==="RACE",
+    tradingHourAllowed:s=>s?.forceOutside!==true,
+    validTradingHours:s=>Array.isArray(s)&&s.length>0&&s.every(h=>Number.isInteger(h)&&h>=0&&h<=23)
+  };
   throw Error("unexpected import "+name);
 });
 const {TradingModeControlService,canonicalTradingMode,TRADE_MODES}=mod.exports;
-function harness({enabled=true,live=[{id:"i1",ea_version:"1.1.31"}],savedMode=null}={}){
+function harness({enabled=true,live=[{id:"i1",ea_version:"1.1.31"}],savedMode=null,schedule={}}={}){
   const calls=[];let flag=enabled;const affected=[{id:"i1"},{id:"i2"}];
   const query=async(sql,args=[])=>{
     calls.push({sql,args});
     if(sql.includes("FROM trading_mode_controls WHERE mode=$1 FOR UPDATE"))return {rows:[{mode:args[0],enabled:flag}]};
     if(sql.includes("SELECT canonical_mode_key(settings)"))return {rows:savedMode?[{mode:savedMode}]:[]};
+    if(sql.includes("SELECT settings FROM bot_settings"))return {rows:[{settings:schedule}]};
     if(sql.includes("SELECT enabled FROM trading_mode_controls"))return {rows:[{enabled:flag}]};
     if(sql.includes("SELECT bi.id, bi.metrics->>'eaVersion'"))return {rows:live};
     if(sql.includes("UPDATE trading_mode_controls SET")){flag=args[1];return {rows:[]};}
@@ -109,4 +115,59 @@ test("schema defaults preserve all existing customer modes",()=>{
   const admin=fs.readFileSync("apps/api/src/admin.controller.ts","utf8");
   assert.match(admin,/@Post\("trading-modes"\)/);
   assert.match(admin,/req\.user\?\.role/);
+});
+
+test("customer Start outside RACE hours arms safe waiting, never sends START",async()=>{
+  const h=harness({
+    savedMode:"RACE",
+    schedule:{controlMode:"RACE",tradingScheduleEnabled:true,tradingScheduleHours:[10],forceOutside:true}
+  });
+  const result=await h.service.requestStart("i1","RACE",false,false,true);
+  assert.deepEqual(result,{waitingForWindow:true});
+  const sql=h.calls.map(x=>x.sql).join("\n");
+  assert.match(sql,/pg_advisory_xact_lock\(740096\)/);
+  assert.match(sql,/tradingScheduleArmed.*tradingScheduleResumePending/);
+  assert.match(sql,/desired_state='SAFE_STOP'/);
+  assert.ok(h.calls.some(x=>x.args.some(a=>String(a).includes("TRADING_SCHEDULE_WAIT_FOR_WINDOW"))));
+  assert.doesNotMatch(sql,/VALUES\(\$1,'START'\)/);
+  assert.doesNotMatch(sql,/CLOSE_ALL/);
+});
+test("corrupted or empty RACE hours cannot arm a waiting Start",async()=>{
+  const h=harness({savedMode:"RACE",schedule:{
+    controlMode:"RACE",tradingScheduleEnabled:true,tradingScheduleHours:[],forceOutside:true
+  }});
+  await assert.rejects(h.service.requestStart("i1","RACE",false,false,true),/ชั่วโมง RACE/);
+  assert.doesNotMatch(h.calls.map(x=>x.sql).join("\n"),/INSERT INTO bot_commands/);
+});
+test("manual Start within RACE hours remains an ordinary START",async()=>{
+  const h=harness({
+    savedMode:"RACE",
+    schedule:{controlMode:"RACE",tradingScheduleEnabled:true,forceOutside:false}
+  });
+  const result=await h.service.requestStart("i1","RACE",false,false,true);
+  assert.deepEqual(result,{waitingForWindow:false});
+  const sql=h.calls.map(x=>x.sql).join("\n");
+  assert.match(sql,/VALUES\(\$1,'START'\)/);
+  assert.doesNotMatch(sql,/TRADING_SCHEDULE_WAIT_FOR_WINDOW/);
+});
+test("non-RACE never arms waiting, and owner-disabled mode rejects even a waiting RACE Start",async()=>{
+  const other=harness({savedMode:"AUTO",schedule:{controlMode:"AUTO",tradingScheduleEnabled:true,forceOutside:true}});
+  assert.deepEqual(await other.service.requestStart("i1","AUTO",false,false,true),{waitingForWindow:false});
+  const disabled=harness({enabled:false,savedMode:"RACE",schedule:{controlMode:"RACE",tradingScheduleEnabled:true,tradingScheduleHours:[10],forceOutside:true}});
+  await assert.rejects(disabled.service.requestStart("i1","RACE",false,false,true),ConflictException);
+  assert.doesNotMatch(disabled.calls.map(x=>x.sql).join("\n"),/TRADING_SCHEDULE_WAIT_FOR_WINDOW/);
+});
+test("manual Dashboard Start returns waiting state and Stop still disarms it",()=>{
+  const bot=fs.readFileSync("apps/api/src/bot.controller.ts","utf8");
+  const page=fs.readFileSync("apps/web/app/dashboard/page.tsx","utf8");
+  assert.match(bot,/mayWaitForRaceHours/);
+  assert.match(bot,/req\.scheduleAuto === true, req\.scheduleAuto !== true/);
+  assert.match(bot,/waitingForSchedule:startResult\.waitingForWindow/);
+  assert.match(bot,/expires_at=now\(\) \+ \(duration_minutes \|\| ' minutes'\)::interval/);
+  assert.match(bot,/tradingScheduleArmed":false,"tradingScheduleResumePending":false/);
+  assert.match(page,/waitingForSchedule === true/);
+  assert.match(page,/เปิดระบบรอเวลา RACE แล้ว/);
+  assert.match(page,/raceWaitingForWindow/);
+  assert.match(page,/state !== "RUNNING" && !raceWaitingForWindow/);
+  assert.match(page,/Stop เพื่อยกเลิก/);
 });

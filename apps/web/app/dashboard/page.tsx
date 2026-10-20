@@ -1904,14 +1904,23 @@ export default function DashboardPage() {
   const firstConnectPrimeBlocksStart =
     firstConnectPrimePending &&
     !(isCloudRuntime && isCloudControlReady);
-  const safeStopPositionCount = Math.max(0, Number(metrics.positions || 0));
+  const safeStopPositionCount = Math.max(0, Number(metrics.accountScenovaPositions ?? metrics.positions ?? 0));
+  const safeStopPendingCount = Math.max(0, Number(metrics.accountScenovaPendingOrders ?? 0));
+  // A user can cancel a queued Start even though the EA never entered RUNNING.
+  const raceWaitingForWindow =
+    String(data?.settings?.controlMode || data?.settings?.engineMode || "AUTO").toUpperCase() === "RACE" &&
+    data?.settings?.tradingScheduleEnabled === true &&
+    data?.settings?.tradingScheduleArmed === true &&
+    data?.settings?.tradingScheduleResumePending === true &&
+    desired !== "RUNNING";
   const safeStopOperationRunning =
     serverOperation?.kind === "STOP" &&
     serverOperation?.status === "RUNNING";
   const safeStopInProgress =
-    desired === "SAFE_STOP" ||
-    state === "SAFE_STOP" ||
-    safeStopOperationRunning;
+    (!raceWaitingForWindow || safeStopPositionCount > 0 || safeStopPendingCount > 0) &&
+    (desired === "SAFE_STOP" ||
+     state === "SAFE_STOP" ||
+     safeStopOperationRunning);
   const safeStopStatusDetail = safeStopPositionCount > 0
     ? "Safe Stop · เหลือ " + safeStopPositionCount + " Position"
     : "Safe Stop · รอ EA ยืนยัน STOPPED";
@@ -1923,13 +1932,14 @@ export default function DashboardPage() {
     firstConnectPrimeBlocksStart ||
     botStarting ||
     botRunning ||
+    raceWaitingForWindow ||
     safeStopInProgress ||
     maintenanceBlocksStart ||
     !startConnectionReady;
   const stopBlocked =
     busy ||
     botCommandLocked ||
-    (desired !== "RUNNING" && state !== "RUNNING");
+    (desired !== "RUNNING" && state !== "RUNNING" && !raceWaitingForWindow);
   const selectedBroker = brokerCatalog.find((item)=>item.code === brokerCode);
   const selectedBrokerName = brokerCode === "OTHER"
     ? customBrokerName.trim()
@@ -3990,15 +4000,18 @@ export default function DashboardPage() {
       const suffix = selectedSlotIdRef.current
         ? (path.includes("?") ? "&" : "?") + "slotId=" + encodeURIComponent(selectedSlotIdRef.current)
         : "";
-      await api(path + suffix, { method: "POST" });
+      const commandResult = await api(path + suffix, { method: "POST" });
       if (operationKind === "START") {
+        const awaitingRaceHours=commandResult?.waitingForSchedule === true;
         setServerOperation((current:any) =>
           current?.id === operationId
             ? {
                 ...current,
                 status:"SUCCESS",
-                title:"เริ่มบอทสำเร็จ",
-                message:"บอททำงานสำเร็จ",
+                title:awaitingRaceHours ? "เปิดระบบรอเวลา RACE แล้ว" : "เริ่มบอทสำเร็จ",
+                message:awaitingRaceHours
+                  ? "ระบบรับคำสั่ง Start แล้ว · รอชั่วโมงที่เลือก (เวลาไทย UTC+7) โดยไม่เปิดออเดอร์นอกเวลา · กด Stop เพื่อยกเลิกการรอ"
+                  : "บอททำงานสำเร็จ",
                 updatedAt:Date.now()
               }
             : current
@@ -5168,8 +5181,8 @@ export default function DashboardPage() {
                 >
                   <i/>
                   <span className="cc-status-trigger-copy">
-                    <b>{minimizedOperationInStatus ? String(minimizedOperationInStatus.title || "กำลังดำเนินการ") : safeStopInProgress ? "กำลังหยุดบอท" : !isMt5ConnectionOnline ? "Waiting for MT5" : marketSessionClosed ? "Waiting Session" : isHeartbeatDelayed ? "MT5 Connected" : state === "RUNNING" ? "Live Execution" : "Ready"}</b>
-                    <small>{minimizedOperationInStatus ? String(minimizedOperationInStatus.message || "กำลังทำงานเบื้องหลัง") : safeStopInProgress ? safeStopStatusDetail : isHeartbeatDelayed ? "EA Heartbeat ขาดช่วง · MT5 ยังออนไลน์" : "สถานะและอัปเดต"}</small>
+                    <b>{minimizedOperationInStatus ? String(minimizedOperationInStatus.title || "กำลังดำเนินการ") : raceWaitingForWindow && safeStopPositionCount === 0 && safeStopPendingCount === 0 ? "รอเวลา RACE" : safeStopInProgress ? "กำลังหยุดบอท" : !isMt5ConnectionOnline ? "Waiting for MT5" : marketSessionClosed ? "Waiting Session" : isHeartbeatDelayed ? "MT5 Connected" : state === "RUNNING" ? "Live Execution" : "Ready"}</b>
+                    <small>{minimizedOperationInStatus ? String(minimizedOperationInStatus.message || "กำลังทำงานเบื้องหลัง") : raceWaitingForWindow && safeStopPositionCount === 0 && safeStopPendingCount === 0 ? "เปิดระบบรอชั่วโมงที่เลือก · Stop เพื่อยกเลิก" : safeStopInProgress ? safeStopStatusDetail : isHeartbeatDelayed ? "EA Heartbeat ขาดช่วง · MT5 ยังออนไลน์" : "สถานะและอัปเดต"}</small>
                   </span>
                   <span className="cc-status-trigger-bell"><ScenovaIcon name="bell" size={16}/>{statusNoticeCount > 0 && <em>{statusNoticeCount}</em>}</span>
                 </button>
@@ -5489,7 +5502,7 @@ export default function DashboardPage() {
                   aria-live="polite"
                 >
                   <span>{botStarting ? <i className="cc-start-spinner" aria-hidden="true"/> : botRunning ? <i className="cc-start-pulse" aria-hidden="true"/> : "▶"}</span>
-                  <b>{botStarting ? "กำลังเริ่ม" : botRunning ? "กำลังทำงาน" : "เริ่มบอท"}</b>
+                  <b>{botStarting ? "กำลังเริ่ม" : botRunning ? "กำลังทำงาน" : raceWaitingForWindow ? "รอเวลา RACE" : "เริ่มบอท"}</b>
                 </button>
                 <button className="cc-mobile-command stop" disabled={stopBlocked} onClick={()=>void confirmSafeStop()}>
                   <span>■</span><b>หยุดบอท</b>

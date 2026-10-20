@@ -128,7 +128,8 @@ export class TradingScheduleService implements OnApplicationBootstrap, OnModuleD
         AND command IN ('START','SAFE_STOP','CLOSE_ALL')
       ORDER BY id DESC LIMIT 1`,[row.id]);
     if (latest?.command !== "SAFE_STOP" ||
-        latest?.payload?.source !== "TRADING_SCHEDULE_WINDOW_END") return;
+        !["TRADING_SCHEDULE_WINDOW_END","TRADING_SCHEDULE_WAIT_FOR_WINDOW"]
+          .includes(String(latest?.payload?.source || ""))) return;
     this.retryAt.set(row.id,Date.now()+30_000);
     // Re-use all the existing entitlement, maintenance, account, runtime and
     // strategy checks of the ordinary customer Start endpoint.
