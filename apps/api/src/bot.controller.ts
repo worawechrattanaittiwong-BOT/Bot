@@ -3596,7 +3596,7 @@ export class BotController {
     );
     if (!startResult.waitingForWindow && access.source === "TRIAL_READY") {
       await this.db.query(
-        "UPDATE trial_grants SET status='ACTIVE',started_at=now(),expires_at=now() + (duration_minutes || ' minutes') WHERE id=$1 AND status='APPROVED'",
+        "UPDATE trial_grants SET status='ACTIVE',started_at=now(),expires_at=now() + (duration_minutes || ' minutes')::interval WHERE id=$1 AND status='APPROVED'",
         [access.trialId]
       );
     }

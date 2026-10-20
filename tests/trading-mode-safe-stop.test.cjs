@@ -163,6 +163,7 @@ test("manual Dashboard Start returns waiting state and Stop still disarms it",()
   assert.match(bot,/mayWaitForRaceHours/);
   assert.match(bot,/req\.scheduleAuto === true, req\.scheduleAuto !== true/);
   assert.match(bot,/waitingForSchedule:startResult\.waitingForWindow/);
+  assert.match(bot,/expires_at=now\(\) \+ \(duration_minutes \|\| ' minutes'\)::interval/);
   assert.match(bot,/tradingScheduleArmed":false,"tradingScheduleResumePending":false/);
   assert.match(page,/waitingForSchedule === true/);
   assert.match(page,/เปิดระบบรอเวลา RACE แล้ว/);
