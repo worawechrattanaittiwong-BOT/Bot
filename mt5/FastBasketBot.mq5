@@ -223,7 +223,8 @@ input double          InpCounterPerPositionProfitMoney = 0.50;
 #define RACE_AUTO_STOP_ATR_BASE 1.50
 #define RACE_AUTO_STOP_ATR_WIDE 1.60
 #define RACE_AUTO_STOP_ATR_FLOOR 1.00
-#define RACE_AUTO_STOP_ATR_CAP 1.80
+// Keep the RACE hard stop bounded without shrinking its ATR noise floor.
+#define RACE_AUTO_STOP_ATR_CAP 1.65
 #define RACE_PROFIT_ARM_MIN_LOCK_RATIO 0.70
 #define RACE_VOLUME_HISTORY_SECONDS 60
 #define RACE_EXIT_CYCLE_GRACE_SECONDS 15
@@ -4043,15 +4044,14 @@ bool RaceAntiChaseBlocked(int direction,string &reasonOut)
    bool terminalEdge=nearM5Terminal || nearM15Terminal;
 
    // Protect the still-forming impulse too. Waiting only for the M5 candle to
-   // close is too late for RACE because it can fill while the long candle is
-   // still extending. Measure live displacement from the latest completed M5
-   // close and hard-WAIT once that displacement reaches 0.35 ATR at the edge.
+   // close can be too late on a strong live candle. Check only a large 0.65
+   // ATR extension at a real M5/M15 edge; do not reject routine momentum.
    double liveTravel=direction>0
       ? price-m5[0].close
       : m5[0].close-price;
    bool liveImpulseExtension=
       terminalEdge &&
-      liveTravel>=atrM5Price*0.35;
+      liveTravel>=atrM5Price*0.65;
 
    if(liveImpulseExtension)
    {
@@ -4061,7 +4061,9 @@ bool RaceAntiChaseBlocked(int direction,string &reasonOut)
       return true;
    }
 
-   bool chaseRisk=largeExpansion || (terminalEdge && stretchedRun);
+   // Only wait at a genuine edge. A normal continuation or breakout away
+   // from the terminal extreme must NOT acquire AUTO-like confirmation gates.
+   bool chaseRisk=terminalEdge && (largeExpansion || stretchedRun);
    if(!chaseRisk)
       return false;
 
@@ -4913,7 +4915,7 @@ double RaceInitialStopPrice(int direction, double entryPrice)
    // - M5 structure defines the preferred invalidation distance,
    // - M5 ATR + spread define the anti-noise floor,
    // - the fallback breathes automatically around 1.50-1.60 ATR,
-   // - 1.80 ATR is a real hard safety cap. If broker/spread constraints need
+   // - 1.65 ATR is a real hard safety cap. If broker/spread constraints need
    //   more room than that, RACE skips the entry instead of silently widening.
    double fallbackDistancePoints=RaceAtrStopPoints();
    if(fallbackDistancePoints<=0.0)
@@ -5209,6 +5211,51 @@ bool RaceCloseCycle(string reason)
    return closed;
 }
 
+// RACE-only preflight for the first fill. OrderCalcMargin is an estimate and
+// can overstate hedged additions, so additions defer to the broker's actual
+// answer (TRADE_RETCODE_NO_MONEY) instead of adding a false extra gate.
+void RacePrintMarginWarning(double requiredMargin,double availableMargin)
+{
+   static datetime lastLogged=0;
+   datetime now=TimeCurrent();
+   if(lastLogged>0 && now>=lastLogged && now-lastLogged<60)
+      return;
+   lastLogged=now;
+   Print(
+      "RACE MARGIN INSUFFICIENT: requested Lot=",
+      DoubleToString(g_adaptiveLot,2),
+      " estimated margin=",DoubleToString(requiredMargin,2),
+      " free margin=",DoubleToString(availableMargin,2),
+      " account currency=",AccountInfoString(ACCOUNT_CURRENCY),
+      " (RACE entry held by preflight or declined by broker)"
+   );
+}
+
+bool RaceFirstFillMarginReady(int direction,double volume)
+{
+   if(BasketPositionCount()>0)
+      return true;
+
+   MqlTick tick;
+   if(!SymbolInfoTick(_Symbol,tick))
+      return true; // SendMarketOrder already handles missing ticks safely.
+
+   double estimatedMargin=0.0;
+   ENUM_ORDER_TYPE side=direction>0 ? ORDER_TYPE_BUY : ORDER_TYPE_SELL;
+   double price=direction>0 ? tick.ask : tick.bid;
+   if(!OrderCalcMargin(side,_Symbol,volume,price,estimatedMargin) ||
+      estimatedMargin<=0.0)
+      return true; // No fabricated estimate; broker rejection is authoritative.
+
+   double availableMargin=AccountInfoDouble(ACCOUNT_MARGIN_FREE);
+   if(availableMargin>=estimatedMargin)
+      return true;
+
+   g_executionStatus="RACE_MARGIN_INSUFFICIENT";
+   RacePrintMarginWarning(estimatedMargin,availableMargin);
+   return false;
+}
+
 bool ProcessRaceFill(int direction)
 {
    if(direction == 0)
@@ -5292,6 +5339,37 @@ bool ProcessRaceFill(int direction)
       return false;
    }
 
+   // Warn without placing a doomed first order if the estimated required
+   // margin exceeds Free Margin. Do not gate hedged additions on this estimate.
+   if(!RaceFirstFillMarginReady(direction,g_adaptiveLot))
+      return false;
+
+   // The RACE news guard runs at most once every 30 seconds. No M15/H4
+   // alignment or multi-indicator entry score is required for RACE.
+   static datetime lastNewsCheck=0;
+   static bool newsBlocked=false;
+   static string newsReason="NONE";
+   datetime newsNow=TimeCurrent();
+   if(lastNewsCheck==0 || newsNow<lastNewsCheck || newsNow-lastNewsCheck>=30)
+   {
+      newsBlocked=RaceNewsPauseActive(newsReason);
+      lastNewsCheck=newsNow;
+   }
+   if(newsBlocked)
+   {
+      g_executionStatus=newsReason;
+      return false;
+   }
+
+   // Do not chase a true terminal-edge surge. A normal M5 setup still enters
+   // immediately; the guard auto-releases once price/pullback normalizes.
+   string chaseReason="NONE";
+   if(RaceAntiChaseBlocked(direction,chaseReason))
+   {
+      g_executionStatus=chaseReason;
+      return false;
+   }
+
    // Phase 2: recalculate total/projected exposure before every fill. This is
    // advisory/risk telemetry only; it never changes the user's configured Lot.
    RaceV1UpdateExposureTelemetry(direction,g_adaptiveLot);
@@ -5337,6 +5415,12 @@ bool ProcessRaceFill(int direction)
       return true;
    }
 
+   if(g_lastOrderRetcode==TRADE_RETCODE_NO_MONEY ||
+      g_executionStatus=="NO_MONEY")
+   {
+      g_executionStatus="RACE_MARGIN_INSUFFICIENT";
+      RacePrintMarginWarning(0.0,AccountInfoDouble(ACCOUNT_MARGIN_FREE));
+   }
    g_raceState = "FILL_RETRY";
    return false;
 }

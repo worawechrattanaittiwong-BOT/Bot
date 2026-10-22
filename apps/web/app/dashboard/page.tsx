@@ -5478,6 +5478,13 @@ export default function DashboardPage() {
                     <div><time>MARKET</time><span><b>Economic Calendar Feed</b><small>ยังไม่ได้เชื่อมแหล่งข่าวเข้ากับ Dashboard นี้</small></span><em>—</em></div>
                     <div><time>SPREAD</time><span><b>Spread Status</b><small>{spreadStatusLabel[spreadStatus]||spreadStatus}</small></span><em className={spreadStatus==="NORMAL"?"good":"warn"}>{spreadValueLabel}</em></div>
                     <div><time>SESSION</time><span><b>Execution Status</b><small>{controlStateLabel}</small></span><em>{String(metrics.executionStatus||state||"—")}</em></div>
+                    {isMt5Online && String(metrics.executionStatus || "").toUpperCase() === "RACE_MARGIN_INSUFFICIENT" ? (
+                      <div role="alert" style={{color:"#ffb6ae"}}>
+                        <time>RACE</time>
+                        <span><b>มาร์จิ้นไม่พอเปิดออเดอร์</b><small>ตรวจ Free Margin, Lot และ Leverage ของบัญชี MT5 · บอทไม่ได้เพิ่ม Lot หรือข้ามข้อจำกัด</small></span>
+                        <em>NO MONEY</em>
+                      </div>
+                    ) : null}
                   </div>
                   <div className="cc-v42-news-note"><ScenovaIcon name="info" size={13}/>ส่วนนี้แสดงเฉพาะข้อมูลที่ระบบมีจริง และไม่สร้างข่าวจำลอง</div>
                 </section>
