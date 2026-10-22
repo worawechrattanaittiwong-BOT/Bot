@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.1.31"
-#define SCENOVA_EA_VERSION "1.1.31"
-#define SCENOVA_PRODUCT_VERSION "1.1.31"
+#property version   "1.1.32"
+#define SCENOVA_EA_VERSION "1.1.32"
+#define SCENOVA_PRODUCT_VERSION "1.1.32"
 #define SCENOVA_BUILD_ID "SOURCE"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_CONFIGURED_LOSS_ONLY_V1"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
@@ -8484,6 +8484,28 @@ bool PostTradeJournalDeal(ulong dealTicket)
          auditSide.confidence,auditSide.winProbability,auditSide.winSamples,auditSide.averageNet
       );
       payload=StringSubstr(payload,0,StringLen(payload)-1)+audit;
+   }
+
+   // AUTO EXIT EVIDENCE ONLY: record the broker's immutable close-deal
+   // reason and the SL/TP associated with that deal. An EXIT deal's SL/TP
+   // are a snapshot, NOT a complete modification history. A zero value
+   // means the broker did not report a level; never invent a close reason.
+   // This block does not alter AUTO fills, TP, SL or exit decisions.
+   if(isExit && journalControlMode=="AUTO" && StringLen(payload)>=1)
+   {
+      long closeReasonCode=HistoryDealGetInteger(dealTicket,DEAL_REASON);
+      string closeReasonName=EnumToString((ENUM_DEAL_REASON)closeReasonCode);
+      double closeDealSl=HistoryDealGetDouble(dealTicket,DEAL_SL);
+      double closeDealTp=HistoryDealGetDouble(dealTicket,DEAL_TP);
+      long closeOrderTicket=HistoryDealGetInteger(dealTicket,DEAL_ORDER);
+      string closeEvidence=StringFormat(
+         ",\"autoExitDealReason\":\"%s\",\"autoExitDealReasonCode\":%I64d,\"autoExitBrokerSlPrice\":%s,\"autoExitBrokerTpPrice\":%s,\"autoExitOrderTicket\":\"%I64d\"}",
+         closeReasonName,closeReasonCode,
+         DoubleToString(closeDealSl,SymbolDigitsNow()),
+         DoubleToString(closeDealTp,SymbolDigitsNow()),
+         closeOrderTicket
+      );
+      payload=StringSubstr(payload,0,StringLen(payload)-1)+closeEvidence;
    }
 
    // Phase 5: persist RACE decision/loss/exposure context with the actual deal.

@@ -1,4 +1,5 @@
 {
+  "พบ EA Build ใหม่ แต่คิวติดตั้งเดิมถูกยกเลิกแล้ว · ยังไม่มีคิวอัปเดตที่อนุมัติสำหรับบัญชีนี้ กรุณาติดต่อ Admin": "A new EA build is available, but the previous installation queue was cancelled. No update is currently approved for this account. Please contact Admin.",
   "มาร์จิ้นไม่พอเปิดออเดอร์": "Insufficient margin to open an order",
   "ตรวจ Free Margin, Lot และ Leverage ของบัญชี MT5 · บอทไม่ได้เพิ่ม Lot หรือข้ามข้อจำกัด": "Check MT5 Free Margin, Lot and Leverage · The bot does not increase Lot or bypass safety limits",
   "EA / โหมด": "EA / Mode",

@@ -26,3 +26,9 @@ export function shouldSuppressOldCloudUpdateFailure(job: UpdateJob, ea: LiveEa):
   const target = version(job.target_version);
   return Boolean(target && target === version(ea.version));
 }
+
+// Only actionable/in-flight updates and failures should own the blocking
+// update progress surface. A CANCELLED job is audit history, not a queue.
+export function shouldShowCloudUpdateOperation(job: Pick<NonNullable<UpdateJob>, "state"> | null): boolean {
+  return ["WAITING_SAFE", "DELIVERED", "VERIFYING", "FAILED"].includes(String(job?.state || ""));
+}

@@ -1239,6 +1239,11 @@ export class EaController {
     autoExpectedProfitMoney?: number;
     autoExpectedLossMoney?: number;
     autoAggregateRiskMoney?: number;
+    autoExitDealReason?: string;
+    autoExitDealReasonCode?: number;
+    autoExitBrokerSlPrice?: number;
+    autoExitBrokerTpPrice?: number;
+    autoExitOrderTicket?: string;
     modelConfidence?: number;
     winProbability?: number;
     winSamples?: number;
@@ -1347,7 +1352,12 @@ export class EaController {
              'brokerUtcOffsetSeconds',EXCLUDED.metadata->'brokerUtcOffsetSeconds',
              'executedByBot',EXCLUDED.metadata->'executedByBot',
              'controlMode',EXCLUDED.metadata->'controlMode',
-             'controlModeSource',EXCLUDED.metadata->'controlModeSource'
+             'controlModeSource',EXCLUDED.metadata->'controlModeSource',
+             'autoExitDealReason',EXCLUDED.metadata->'autoExitDealReason',
+             'autoExitDealReasonCode',EXCLUDED.metadata->'autoExitDealReasonCode',
+             'autoExitBrokerSlPrice',EXCLUDED.metadata->'autoExitBrokerSlPrice',
+             'autoExitBrokerTpPrice',EXCLUDED.metadata->'autoExitBrokerTpPrice',
+             'autoExitOrderTicket',EXCLUDED.metadata->'autoExitOrderTicket'
            )
          )`,
       [
@@ -1442,6 +1452,18 @@ export class EaController {
           autoExpectedProfitMoney: Math.max(0, n(body.autoExpectedProfitMoney)),
           autoExpectedLossMoney: Math.max(0, n(body.autoExpectedLossMoney)),
           autoAggregateRiskMoney: Math.max(0, n(body.autoAggregateRiskMoney)),
+          // Broker-reported AUTO close-deal evidence; no inferred reason.
+          ...(journalControlMode === "AUTO" && eventType === "EXIT" ? {
+            autoExitDealReason: text(body.autoExitDealReason, 64),
+            autoExitDealReasonCode: body.autoExitDealReasonCode === undefined
+              ? null : Math.max(0, Math.trunc(n(body.autoExitDealReasonCode))),
+            autoExitBrokerSlPrice: body.autoExitBrokerSlPrice === undefined
+              ? null : Math.max(0, n(body.autoExitBrokerSlPrice)),
+            autoExitBrokerTpPrice: body.autoExitBrokerTpPrice === undefined
+              ? null : Math.max(0, n(body.autoExitBrokerTpPrice)),
+            autoExitOrderTicket: /^\d+$/.test(String(body.autoExitOrderTicket || ""))
+              ? String(body.autoExitOrderTicket) : null
+          } : {}),
           modelConfidence: Math.max(0, Math.min(100, n(body.modelConfidence))),
           winProbability: Math.max(0, Math.min(100, n(body.winProbability))),
           winSamples: Math.max(0, Math.trunc(n(body.winSamples))),
