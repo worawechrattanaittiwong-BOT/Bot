@@ -35,6 +35,7 @@ $zoneHold = Block $ea 'int RaceHeldZoneReversalDirection()'
 $dual = Block $ea 'bool RacePerPositionDualDirectionEnabled()'
 $counter = Block $ea 'int CounterSignalDirection()'
 $raceStop = Block $ea 'double RaceInitialStopPrice(int direction, double entryPrice)'
+$antiChase = Block $ea 'bool RaceAntiChaseBlocked(int direction,string &reasonOut)'
 
 # RACE brain: ~20 completed M5 candles, not 2-second Bid or 30-second volume.
 Need $ea '#define RACE_M5_LOOKBACK_BARS 20' 'RACE must inspect about 20 M5 candles'
@@ -79,7 +80,14 @@ Need $fill 'RaceFillPacingReady(direction)' 'Every RACE add must pass dedicated 
 Need $fill 'SendMarketOrder(direction)' 'RACE must continue using immediate market orders'
 Forbid $fill 'ORDER_TYPE_BUY_STOP' 'RACE must not place BUY STOP trap orders'
 Forbid $fill 'ORDER_TYPE_SELL_STOP' 'RACE must not place SELL STOP trap orders'
-Forbid $fill 'RaceAntiChaseBlocked(' 'RACE fill path must not add an anti-chase trap gate'
+# RACE may now wait on a *terminal extreme only*. A broad anti-chase gate
+# would starve ordinary momentum entries, so verify both the scope and release.
+Need $fill 'RaceAntiChaseBlocked(direction,chaseReason)' 'RACE must check terminal-edge chase before entry'
+Need $antiChase 'bool chaseRisk=terminalEdge && (largeExpansion || stretchedRun);' 'Anti-chase must only wait near actual M5/M15 terminal extremes'
+Need $antiChase 'if(!chaseRisk)' 'Ordinary RACE momentum must remain eligible'
+Need $antiChase 'RaceAntiChasePullbackContinuationReady(direction,atrM5Price)' 'Confirmed pullback continuation must resume RACE'
+Need $fill 'RaceNewsPauseActive(newsReason)' 'RACE high-impact news pause must guard new fills'
+Need $fill 'RaceFirstFillMarginReady(direction,g_adaptiveLot)' 'RACE first fill must warn before insufficient-margin orders'
 Need $fill 'g_entryModel = "RACE_M5_20_STRUCTURE";' 'RACE telemetry must identify the new M5 brain'
 
 # One structural RACE side at a time; reverse by closing old exposure first.
