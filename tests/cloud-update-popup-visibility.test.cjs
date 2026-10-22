@@ -10,7 +10,16 @@ const js = ts.transpileModule(source, {
 }).outputText;
 const module_ = { exports: {} };
 vm.runInNewContext(js, { module: module_, exports: module_.exports });
-const { shouldSuppressOldCloudUpdateFailure: suppress } = module_.exports;
+const {
+  shouldSuppressOldCloudUpdateFailure: suppress,
+  shouldShowCloudUpdateOperation
+} = module_.exports;
+for (const state of ["WAITING_SAFE", "DELIVERED", "VERIFYING", "FAILED"])
+  assert.equal(shouldShowCloudUpdateOperation({state}), true, state + " must be visible");
+for (const state of ["CANCELLED", "COMPLETED", "SUPERSEDED_BY_NEW_RELEASE", ""])
+  assert.equal(shouldShowCloudUpdateOperation({state}), false, state + " must not masquerade as active update");
+assert.equal(shouldShowCloudUpdateOperation(null), false);
+
 
 const job = {
   state: "FAILED",
@@ -46,5 +55,8 @@ assert.match(dashboard, /shouldSuppressOldCloudUpdateFailure\(cloudUpdate,/);
 assert.match(dashboard, /connected: isMt5Online/);
 assert.match(dashboard, /version: data\?\.instance\?\.metrics\?\.eaVersion/);
 assert.match(dashboard, /!staleCloudUpdateFailure/);
+assert.match(dashboard, /shouldShowCloudUpdateOperation\(cloudUpdate\)/);
+assert.match(dashboard, /cloudUpdateState === "CANCELLED" && softwareUpdate.eaUpdateRequired/);
+assert.match(dashboard, /คิวติดตั้งเดิมถูกยกเลิกแล้ว/);
 assert.match(dashboard, /softwareUpdate\.runtimeBuildMatch === false \? " · Build ไม่ตรง"/);
 console.log("cloud-update-popup-visibility: PASS (historic failure popup / live version / risk isolation)");

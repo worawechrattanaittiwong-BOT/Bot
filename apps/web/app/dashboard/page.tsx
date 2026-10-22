@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { API_URL, api, getToken } from "../../lib/api";
-import { shouldSuppressOldCloudUpdateFailure } from "../../lib/cloud-update-popup";
+import { shouldShowCloudUpdateOperation, shouldSuppressOldCloudUpdateFailure } from "../../lib/cloud-update-popup";
 import { CustomerMobileNav, CustomerSidebar, OwnerMobileNav, OwnerSidebar } from "../../components/OwnerSidebar";
 import { ScenovaIcon } from "../../components/ScenovaIcon";
 import { ScenovaBrand } from "../../components/ScenovaBrand";
@@ -1435,8 +1435,7 @@ export default function DashboardPage() {
     heartbeatAt: data?.instance?.last_seen_at
   });
   const cloudUpdateVisible =
-    Boolean(cloudUpdate) &&
-    cloudUpdateState !== "COMPLETED" &&
+    shouldShowCloudUpdateOperation(cloudUpdate) &&
     !staleCloudUpdateFailure &&
     cloudUpdateStageKey !== dismissedCloudUpdateKey;
   const cloudUpdateLabel =
@@ -5124,6 +5123,11 @@ export default function DashboardPage() {
                   {softwareUpdate.runtimeContractMatch === false && (
                     <div className="cc-runtime-contract-warning" role="status">
                       EA ใน MT5 ยังไม่ได้โหลด Runtime ล่าสุด
+                    </div>
+                  )}
+                  {cloudUpdateState === "CANCELLED" && softwareUpdate.eaUpdateRequired && (
+                    <div className="cc-runtime-contract-warning" role="status">
+                      พบ EA Build ใหม่ แต่คิวติดตั้งเดิมถูกยกเลิกแล้ว · ยังไม่มีคิวอัปเดตที่อนุมัติสำหรับบัญชีนี้ กรุณาติดต่อ Admin
                     </div>
                   )}
                   <div id="scenova-status-update-mount" className="cc-status-update-slot"/>
