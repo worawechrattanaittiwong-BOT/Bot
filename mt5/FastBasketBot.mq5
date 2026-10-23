@@ -1,7 +1,7 @@
 #property strict
-#property version   "1.1.32"
-#define SCENOVA_EA_VERSION "1.1.32"
-#define SCENOVA_PRODUCT_VERSION "1.1.32"
+#property version   "1.1.33"
+#define SCENOVA_EA_VERSION "1.1.33"
+#define SCENOVA_PRODUCT_VERSION "1.1.33"
 #define SCENOVA_BUILD_ID "SOURCE"
 #define SCENOVA_RUNTIME_CONTRACT "RACE_CONFIGURED_LOSS_ONLY_V1"
 #property description "MT5 SaaS Fast Basket Engine - Cloud/Local"
@@ -16200,6 +16200,8 @@ int AutoPrecisionDirection(double momentum)
    AutoResetSide(selected,0);
    int direction=0;
    bool sharedZoneFirst=false;
+   string firstStrategyModel="NONE";
+   string firstStrategyReason="NONE";
 
    if(count>0)
    {
@@ -16216,6 +16218,30 @@ int AutoPrecisionDirection(double momentum)
    {
       direction=SharedAutoManualBrainDirection(momentum);
       sharedZoneFirst=StringFind(g_entryModel,"ZONE_FIRST_")==0;
+      // Three AUTO opportunity types: Swing Breakout, Swing Reversal,
+      // Adaptive Reversal. A fresh closed-M5 setup can rescue a flat
+      // shared brain; it does not override an opposing active signal.
+      if(direction==0)
+      {
+         string buyModel="NONE",buyReason="NONE";
+         string sellModel="NONE",sellReason="NONE";
+         bool buyReady=AutoFreshM5Strategy(1,buyModel,buyReason);
+         bool sellReady=AutoFreshM5Strategy(-1,sellModel,sellReason);
+         if(buyReady!=sellReady)
+         {
+            int freshDirection=buyReady ? 1 : -1;
+            direction=EnforceUserDirectionLock(freshDirection);
+            if(direction!=0)
+            {
+               firstStrategyModel=buyReady ? buyModel : sellModel;
+               firstStrategyReason=buyReady ? buyReason : sellReason;
+            }
+         }
+      }
+      else if(AutoFreshM5Strategy(direction,firstStrategyModel,firstStrategyReason))
+      {
+         // Same-direction strong structure corroborates the existing signal.
+      }
       if(direction==0)
       {
          g_autoRejectReason="SHARED_BRAIN_WAIT";
@@ -16260,14 +16286,24 @@ int AutoPrecisionDirection(double momentum)
       selected.rankScore=MathMax(selected.rankScore,MathMin(100.0,zoneQuality));
    }
 
+   if(count<=0 && firstStrategyModel!="NONE")
+   {
+      // Closed price-action confirmation replaces duplicated votes from
+      // indicators; the financial risk and RR checks below remain mandatory.
+      selected.model=firstStrategyModel;
+      selected.reason=firstStrategyReason;
+      selected.confidence=MathMin(100.0,selected.confidence+8.0);
+      selected.rankScore=MathMin(100.0,selected.rankScore+8.0);
+   }
+
    // The first AUTO order is deliberately the most selective. Run this after
    // Zone-First can contribute its real location quality.
    if(count<=0)
    {
       // Keep the first AUTO entry selective without starving execution.
       // HTF/location/confirmation filters still protect the trade later.
-      double firstMinimumConfidence=54.0;
-      double firstMinimumRank=56.0;
+      double firstMinimumConfidence=firstStrategyModel!="NONE" ? 48.0 : 54.0;
+      double firstMinimumRank=firstStrategyModel!="NONE" ? 50.0 : 56.0;
       if(g_marketRegime=="HIGH_VOLATILITY")
       {
          firstMinimumConfidence+=2.0;
@@ -16297,7 +16333,7 @@ int AutoPrecisionDirection(double momentum)
       string swingReason="NONE";
       if(!AutoSwingEntryAllowed(
             direction,false,sharedZoneFirst,firstPb,
-            g_autoLevels,momentum,swingReason))
+            g_autoLevels,momentum,firstStrategyModel,swingReason))
       {
          g_autoRejectReason=swingReason;
          g_adaptiveBlockReason=swingReason;
@@ -16309,7 +16345,8 @@ int AutoPrecisionDirection(double momentum)
       // fallback BUY/SELL from old chart context.
       double confidenceEdge=MathAbs(g_autoBuy.confidence-g_autoSell.confidence);
       double rankEdge=MathAbs(g_autoBuy.rankScore-g_autoSell.rankScore);
-      if(!sharedZoneFirst && g_macroTrendDirection==0 &&
+      if(!sharedZoneFirst && firstStrategyModel=="NONE" &&
+         g_macroTrendDirection==0 &&
          confidenceEdge<2.5 && rankEdge<3.0)
       {
          g_autoRejectReason="AUTO_FIRST_DIRECTION_AMBIGUOUS";
@@ -16391,7 +16428,7 @@ int AutoPrecisionDirection(double momentum)
 
       string addSwingReason="NONE";
       if(!AutoSwingEntryAllowed(
-            direction,true,false,pb,g_autoLevels,momentum,addSwingReason))
+            direction,true,false,pb,g_autoLevels,momentum,"NONE",addSwingReason))
       {
          g_autoRejectReason=addSwingReason;
          g_autoAddReason="WAIT_SWING_QUALITY";
@@ -16756,6 +16793,13 @@ void AutoOnOrderSent(int direction)
       g_autoLotCeiling=g_autoLotCeiling<=0.0 ? selected.plannedLot : MathMin(g_autoLotCeiling,selected.plannedLot);
    }
    g_autoLastFillAt=now;
+   if(StringFind(selected.model,"AUTO_SWING_")==0 ||
+      selected.model=="AUTO_ADAPTIVE_REVERSAL")
+   {
+      datetime signalBar=iTime(_Symbol,PERIOD_M5,1);
+      if(signalBar>0)
+         GlobalVariableSet(AutoStrategyConsumedKey(),(double)signalBar);
+   }
    AutoResetExitCandidate();
 }
 
@@ -20852,11 +20896,12 @@ bool SendMarketOrder(int direction) /* V9_RETRY */
       double minimumStopDistance=(double)SymbolInfoInteger(
          _Symbol,SYMBOL_TRADE_STOPS_LEVEL
       )*_Point+2.0*_Point;
-      bool protectedOrder=direction>0
+      bool protectedOrder=request.sl>0.0 && request.tp>0.0 &&
+         (direction>0
          ? request.sl<tick.bid-minimumStopDistance &&
            request.tp>tick.bid+minimumStopDistance
          : request.sl>tick.ask+minimumStopDistance &&
-           request.tp<tick.ask-minimumStopDistance;
+           request.tp<tick.ask-minimumStopDistance);
       if(!protectedOrder)
       {
          g_executionStatus="AUTO_BROKER_PROTECTION_INVALID";
@@ -20909,6 +20954,22 @@ bool SendMarketOrder(int direction) /* V9_RETRY */
    if(request.tp>0.0)
       request.tp=NormalizeTargetPriceToTick(request.tp,direction);
 
+   // AUTO never sends an order unless BOTH final, tick-normalized broker
+   // protection prices are present and remain legal at the live Bid/Ask.
+   if(auto)
+   {
+      double stopFloor=((double)SymbolInfoInteger(_Symbol,SYMBOL_TRADE_STOPS_LEVEL)+2.0)*_Point;
+      bool protectedFinal=request.sl>0.0 && request.tp>0.0 &&
+         (direction>0
+            ? request.sl<tick.bid-stopFloor && request.tp>tick.bid+stopFloor
+            : request.sl>tick.ask+stopFloor && request.tp<tick.ask-stopFloor);
+      if(!protectedFinal)
+      {
+         g_executionStatus="AUTO_BROKER_PROTECTION_INVALID";
+         return false;
+      }
+   }
+
    g_dynamicStopPrice = request.sl;
    g_dynamicTakeProfitPrice = (raceOrder || flipLockOrder)
       ? 0.0
@@ -20917,6 +20978,13 @@ bool SendMarketOrder(int direction) /* V9_RETRY */
          : DynamicTakeProfitPrice(direction, entryPrice, request.sl));
 
    g_adaptiveLot = request.volume;
+   if(auto)
+      Print("AUTO protected order plan: side=",direction>0 ? "BUY" : "SELL",
+         " lot=",DoubleToString(request.volume,2),
+         " entry=",DoubleToString(request.price,SymbolDigitsNow()),
+         " SL=",DoubleToString(request.sl,SymbolDigitsNow()),
+         " TP=",DoubleToString(request.tp,SymbolDigitsNow()),
+         " setup=",autoPlan.model);
 
    ResetLastError();
    // An AUTO plan binds price, SL and TP together. Retrying only the price would
