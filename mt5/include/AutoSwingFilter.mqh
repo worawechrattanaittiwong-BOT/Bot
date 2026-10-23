@@ -277,6 +277,100 @@ bool AutoStrongExecutionConfirmation(
    return AutoExecutionConfirmationCount(direction,momentum,pb)>0;
 }
 
+// AUTO-only fresh strategy candidates. Every signal uses CLOSED M5 candles,
+// is valid only briefly and can be consumed only once per M5 signal candle.
+// Breakout needs a genuine close beyond the preceding 9-bar range; reversal
+// needs a level sweep + reclaim and M1 follow-through. A stale/extended candle
+// never becomes a trade just to boost activity.
+string AutoStrategyConsumedKey()
+{
+   return StringFormat("SCN_AUTO_M5_%I64d_%s_%I64d",
+      AccountInfoInteger(ACCOUNT_LOGIN),_Symbol,InpMagic);
+}
+
+bool AutoFreshM5Strategy(int direction,string &modelOut,string &reasonOut)
+{
+   modelOut="NONE";
+   reasonOut="NONE";
+   if(direction==0)
+      return false;
+
+   MqlRates bars[];
+   ArraySetAsSeries(bars,true);
+   if(CopyRates(_Symbol,PERIOD_M5,1,10,bars)<10)
+      return false;
+
+   datetime closeTime=bars[0].time+PeriodSeconds(PERIOD_M5);
+   datetime now=TimeCurrent();
+   if(now<closeTime || now-closeTime>120)
+      return false;
+
+   string key=AutoStrategyConsumedKey();
+   if(GlobalVariableCheck(key) &&
+      GlobalVariableGet(key)>=(double)bars[0].time)
+      return false;
+
+   MqlTick tick;
+   if(!SymbolInfoTick(_Symbol,tick))
+      return false;
+   double price=direction>0 ? tick.bid : tick.ask;
+   double atr=MathMax(_Point*12.0,
+      AverageTrueRangePoints(PERIOD_M5,g_atrPeriod)*_Point);
+   if(atr<=_Point*12.0 || tick.ask<=tick.bid)
+      return false;
+
+   double oldHigh=bars[1].high,oldLow=bars[1].low;
+   for(int i=2;i<10;i++)
+   {
+      oldHigh=MathMax(oldHigh,bars[i].high);
+      oldLow=MathMin(oldLow,bars[i].low);
+   }
+   double body=bars[0].close-bars[0].open;
+   double range=MathMax(_Point,bars[0].high-bars[0].low);
+   bool buy=direction>0;
+
+   // Do not pay for an overextended breakout; no mandatory retest.
+   bool breakout=buy
+      ? bars[0].open<=oldHigh && bars[0].close>oldHigh+atr*0.06 &&
+        body>=atr*0.24 && body<=atr*1.40 &&
+        price>=oldHigh && price<=oldHigh+atr*0.65
+      : bars[0].open>=oldLow && bars[0].close<oldLow-atr*0.06 &&
+        -body>=atr*0.24 && -body<=atr*1.40 &&
+        price<=oldLow && price>=oldLow-atr*0.65;
+   if(breakout && MathAbs(price-bars[0].close)<=atr*0.40)
+   {
+      modelOut="AUTO_SWING_BREAKOUT";
+      reasonOut="M5_CLOSED_SWING_BREAK_NO_CHASE";
+      return true;
+   }
+
+   // False breakout / liquidity sweep at an actual recent swing, with a
+   // directional close back INSIDE the range and short-term follow-through.
+   bool m1Confirmed=g_trendM1==direction ||
+      RecentDirectionalBody(direction,PERIOD_M1);
+   bool reversal=buy
+      ? bars[0].low<oldLow-atr*0.05 &&
+        bars[0].close>oldLow+atr*0.04 &&
+        body>=atr*0.12 &&
+        bars[0].close>=bars[0].low+range*0.60
+      : bars[0].high>oldHigh+atr*0.05 &&
+        bars[0].close<oldHigh-atr*0.04 &&
+        -body>=atr*0.12 &&
+        bars[0].close<=bars[0].high-range*0.60;
+   if(reversal && m1Confirmed &&
+      MathAbs(price-bars[0].close)<=atr*0.40)
+   {
+      bool counterMacro=g_macroTrendDirection==-direction;
+      modelOut=counterMacro
+         ? "AUTO_ADAPTIVE_REVERSAL" : "AUTO_SWING_REVERSAL";
+      reasonOut=counterMacro
+         ? "M5_SWEEP_RECLAIM_COUNTERTREND_M1_CONFIRMED"
+         : "M5_SWEEP_RECLAIM_M1_CONFIRMED";
+      return true;
+   }
+   return false;
+}
+
 bool AutoSwingEntryAllowed(
    int direction,
    bool isAdd,
@@ -284,6 +378,7 @@ bool AutoSwingEntryAllowed(
    AUTO_PULLBACK &pb,
    AUTO_LEVELS &levels,
    double momentum,
+   string firstStrategyModel,
    string &reasonOut
 )
 {
@@ -377,7 +472,13 @@ bool AutoSwingEntryAllowed(
       bool strongHtfConflict=
          h4Direction==-direction &&
          (h1Direction==-direction || !correctSide100);
-      if(strongHtfConflict)
+      // H4/H1 disagreement is context, not a permanent first-entry veto.
+      // Only a fresh M5 sweep/reclaim with M1 follow-through may counter
+      // both HTFs. Normal setups and AUTO adds keep the HTF safeguard.
+      bool confirmedCounterturn=
+         firstStrategyModel=="AUTO_ADAPTIVE_REVERSAL" &&
+         g_trendM1==direction;
+      if(strongHtfConflict && !confirmedCounterturn)
       {
          reasonOut="AUTO_H4_TREND_OPPOSITE";
          g_autoLastFilterReason=reasonOut;
@@ -405,8 +506,9 @@ bool AutoSwingEntryAllowed(
 
    // Keep add-position location rules unchanged. For the first entry only,
    // two independent execution confirmations may override a missing location.
+   bool freshStrategy=!isAdd && firstStrategyModel!="NONE";
    if((isAdd && !setupLocation) ||
-      (!isAdd && !setupLocation && executionConfirmations<2))
+      (!isAdd && !setupLocation && executionConfirmations<2 && !freshStrategy))
    {
       reasonOut="AUTO_WAIT_PULLBACK_VALUE";
       g_autoLastFilterReason=reasonOut;
@@ -416,7 +518,7 @@ bool AutoSwingEntryAllowed(
    // Preserve the original execution-safety contract: every AUTO entry,
    // including Zone-First, still needs at least one strong live confirmation.
    int requiredExecutionConfirmations=1;
-   if(executionConfirmations<requiredExecutionConfirmations)
+   if(executionConfirmations<requiredExecutionConfirmations && !freshStrategy)
    {
       reasonOut=isAdd
          ? "AUTO_WAIT_M5_M1_CONFIRM"

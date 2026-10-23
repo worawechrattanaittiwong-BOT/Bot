@@ -5482,6 +5482,14 @@ export default function DashboardPage() {
                     <div><time>MARKET</time><span><b>Economic Calendar Feed</b><small>ยังไม่ได้เชื่อมแหล่งข่าวเข้ากับ Dashboard นี้</small></span><em>—</em></div>
                     <div><time>SPREAD</time><span><b>Spread Status</b><small>{spreadStatusLabel[spreadStatus]||spreadStatus}</small></span><em className={spreadStatus==="NORMAL"?"good":"warn"}>{spreadValueLabel}</em></div>
                     <div><time>SESSION</time><span><b>Execution Status</b><small>{controlStateLabel}</small></span><em>{String(metrics.executionStatus||state||"—")}</em></div>
+                    {String(settings.controlMode || metrics.controlMode || "").toUpperCase() === "AUTO" &&
+                      Number(metrics.autoSlPrice) > 0 && Number(metrics.autoTpPrice) > 0 ? (
+                      <div>
+                        <time>AUTO</time>
+                        <span><b>แผน Stop Loss / Take Profit ล่าสุด</b><small>เป็นราคาที่ EA คำนวณ · ตรวจราคาที่โบรกเกอร์ยืนยันใน MT5</small></span>
+                        <em>SL {Number(metrics.autoSlPrice).toFixed(Number(metrics.symbolDigits ?? 2))} / TP {Number(metrics.autoTpPrice).toFixed(Number(metrics.symbolDigits ?? 2))}</em>
+                      </div>
+                    ) : null}
                     {isMt5Online && String(metrics.executionStatus || "").toUpperCase() === "RACE_MARGIN_INSUFFICIENT" ? (
                       <div role="alert" style={{color:"#ffb6ae"}}>
                         <time>RACE</time>

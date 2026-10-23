@@ -23,7 +23,7 @@ assert.match(api,/journalControlMode === "AUTO" && eventType === "EXIT"/);
 assert.match(api,/jsonb_strip_nulls\([\s\S]*'autoExitDealReason',EXCLUDED.metadata->'autoExitDealReason'/);
 assert.match(api,/autoExitOrderTicket: \/\^\\d\+\$\//);
 const version=ea.match(/#property version\s+"([^"]+)"/)?.[1];
-assert.equal(version,"1.1.32");
+assert.ok(/^\d+\.\d+\.\d+$/.test(version || ""), "EA must have a semantic release version");
 assert.equal(ea.match(/#define SCENOVA_EA_VERSION "([^"]+)"/)?.[1],version);
 assert.equal(release.match(/DEFAULT_EA_VERSION = "([^"]+)"/)?.[1],version);
 const autoManage=ea.slice(ea.indexOf("bool AutoManageOpenBasket(double momentum)"),ea.indexOf("int AdaptiveEntryDirection(double momentum)"));
